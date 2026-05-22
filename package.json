@@ -1,0 +1,26 @@
+{
+  "name": "expo98",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone expo-ios local evidence CLI for Expo React Native iOS work.",
+  "type": "module",
+  "bin": {
+    "expo-ios": "./cli/expo-ios.mjs"
+  },
+  "scripts": {
+    "doctor": "node cli/expo-ios.mjs --json doctor",
+    "test": "node --test tests/*.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "cli/",
+    "dist/",
+    "skills/",
+    "src/",
+    "SPEC.md",
+    "README.md",
+    "LICENSE"
+  ]
+}
