@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "runId": "20260523T064856-99deb6",
+  "command": "revalidate",
+  "args": [
+    "revalidate",
+    "--all",
+    "--json"
+  ],
+  "rootPath": "/Users/pedroproenca/Documents/Projects/expo98",
+  "headSha": "5799e052eb05d3c4b9c7f0fa15c5ba656dec8e5c",
+  "startedAt": "2026-05-23T06:48:56.917Z",
+  "finishedAt": "2026-05-23T06:48:56.917Z",
+  "status": "completed",
+  "claimedFeatureIds": [],
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "errors": []
+}

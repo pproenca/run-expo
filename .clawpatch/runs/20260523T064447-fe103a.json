@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "runId": "20260523T064447-fe103a",
+  "command": "review",
+  "args": [
+    "review",
+    "--limit",
+    "4"
+  ],
+  "rootPath": "/Users/pedroproenca/Documents/Projects/expo98",
+  "headSha": "5799e052eb05d3c4b9c7f0fa15c5ba656dec8e5c",
+  "startedAt": "2026-05-23T06:44:47.882Z",
+  "finishedAt": "2026-05-23T06:45:38.590Z",
+  "status": "completed",
+  "claimedFeatureIds": [
+    "feat_cli-command_7210a5ec6b",
+    "feat_config_0902ad7be8",
+    "feat_config_7528cb5b98",
+    "feat_test-suite_84ae84a25a"
+  ],
+  "findingIds": [
+    "fnd_sig-feat-config-0902ad7be8-14428_a1bc8171a1"
+  ],
+  "patchAttemptIds": [],
+  "errors": []
+}

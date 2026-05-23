@@ -1,6 +1,7 @@
 PREFIX ?= $(HOME)/.local
 BIN_DIR := $(PREFIX)/bin
-CLI := $(abspath cli/expo-ios.mjs)
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+CLI := $(MAKEFILE_DIR)cli/expo-ios.mjs
 
 .PHONY: install-local test doctor
 install-local:

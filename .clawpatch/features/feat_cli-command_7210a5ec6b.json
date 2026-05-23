@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_cli-command_7210a5ec6b",
+  "title": "CLI command expo-ios",
+  "summary": "Package bin 'expo-ios' at ./cli/expo-ios.mjs.",
+  "kind": "cli-command",
+  "source": "package-json-bin",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "cli/expo-ios.mjs",
+      "symbol": null,
+      "route": null,
+      "command": "expo-ios"
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "cli/expo-ios.mjs",
+      "reason": "entrypoint"
+    }
+  ],
+  "contextFiles": [],
+  "tests": [],
+  "tags": [
+    "node",
+    "cli"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "filesystem",
+    "process-exec"
+  ],
+  "status": "reviewed",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260523T064447-fe103a",
+      "kind": "review",
+      "summary": "0 finding(s)",
+      "provider": "codex",
+      "model": null,
+      "createdAt": "2026-05-23T06:45:38.589Z"
+    }
+  ],
+  "createdAt": "2026-05-23T06:44:24.759Z",
+  "updatedAt": "2026-05-23T06:50:17.260Z"
+}
