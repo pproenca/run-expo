@@ -1,3 +1,5 @@
+import { execFile as nodeExecFile } from "node:child_process";
+
 export type DeviceListingPlatform = "all" | "ios" | "android";
 
 export interface ListDevicesArgs {
@@ -111,7 +113,7 @@ export async function listIosPhysicalDevices(
 
 export async function listDevices(
   args: ListDevicesArgs = {},
-  dependencies: DeviceListingDependencies,
+  dependencies: DeviceListingDependencies = defaultDeviceListingDependencies,
 ): Promise<ToolTextResult> {
   const platform = args.platform ?? "all";
   const limit = clampNumber(args.limit ?? 40, 1, 200);
@@ -127,6 +129,22 @@ export async function listDevices(
 
   return toolJson(payload);
 }
+
+const defaultDeviceListingDependencies: DeviceListingDependencies = {
+  execFile: (file, args, options = {}) => new Promise((resolve, reject) => {
+    nodeExecFile(file, args, {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+    }, (error, stdout, stderr) => {
+      if (error) {
+        Object.assign(error, { stdout, stderr });
+        reject(error);
+        return;
+      }
+      resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+    });
+  }),
+};
 
 async function listAndroidDevices(limit: number, dependencies: DeviceListingDependencies): Promise<AndroidDevice[]> {
   const { stdout } = await dependencies.execFile("adb", ["devices", "-l"], { timeout: 20_000 });

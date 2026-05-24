@@ -24,6 +24,7 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
     devClientUrl: args.devClientUrl,
     restartDevClient: args.restartDevClient,
     crashCheckMs: args.crashCheckMs,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
   };
   switch (command) {
     case "doctor":
@@ -117,7 +118,7 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         stateDir: globals.stateDir,
       });
     case "boot-simulator":
-      return pickDefined({ device: args.device, openSimulator: args.openSimulator });
+      return pickDefined({ device: args.device, openSimulator: args.openSimulator, actionPolicy: args.actionPolicy ?? globals.actionPolicy });
     case "open-url":
       return pickDefined({ platform: args.platform, device: args.device, url: args.url ?? args._[0] });
     case "launch-app":
@@ -213,6 +214,7 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         x: args.x,
         y: args.y,
         ref: args.ref ?? args._[0],
+        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
         dryRun: args.dryRun,
         cwd,
         root: globals.root,
@@ -233,6 +235,7 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         holdMs: args.holdMs,
         repeat: args.repeat,
         intervalMs: args.intervalMs,
+        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
         dryRun: args.dryRun,
         captureBeforeAfter: args.captureBeforeAfter,
         outputDir: args.outputDir,

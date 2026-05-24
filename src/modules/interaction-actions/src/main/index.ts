@@ -1,4 +1,9 @@
-import { basename } from "node:path";
+import { execFile as nodeExecFile, spawn as nodeSpawn } from "node:child_process";
+import * as fs from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join as joinPath } from "node:path";
+import { traceInteraction } from "../../../interaction-trace-expression/src/main/index.ts";
+import { automationTakeScreenshot } from "../../../screenshot-capture/src/main/index.ts";
 
 export const MAX_OUTPUT = 40_000;
 
@@ -111,7 +116,28 @@ export type RefActionModule = {
 export type InteractionArgs = Record<string, unknown>;
 export type InteractionPayload = Record<string, unknown>;
 
-export async function automationTap(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+const defaultInteractionDependencies: InteractionDependencies = {
+  commandPath: defaultCommandPath,
+  execFile: defaultExecFile,
+  resolveIosDevice: defaultResolveIosDevice,
+  planRefAction: async () => ({ available: false, reason: "Ref actions require a current snapshot." }),
+  readRefRecord: async () => ({ available: false, reason: "No snapshot exists for the current session." }),
+  refPoint: async () => ({ available: false, reason: "Ref point lookup requires a current snapshot." }),
+  scrollPlan: async () => ({ available: false, reason: "Scroll planning requires a current snapshot." }),
+  policyDecision: defaultPolicyDecision,
+  captureScreenshot: (args) => automationTakeScreenshot(args),
+  traceInteraction: (args) => traceInteraction(args),
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now: () => new Date(),
+  tmpdir: osTmpdir,
+  mkdir: (path, options) => fs.mkdir(path, options),
+  joinPath,
+};
+
+export async function automationTap(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   return automationTapInternal(args, deps, false);
 }
 
@@ -175,7 +201,10 @@ async function automationTapInternal(
   return { platform, device, tool: tool.tool, x: Number(x), y: Number(y), stdout: truncate(result.stdout), stderr: truncate(result.stderr) };
 }
 
-export async function refActionCommand(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function refActionCommand(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   const command = requireString(args.command, "command");
   if (command === "scroll-into-view") {
     const record = await deps.readRefRecord(args.ref, args);
@@ -249,7 +278,10 @@ export async function refActionCommand(args: InteractionArgs, deps: InteractionD
   throw new Error(`Unknown ref action command: ${command}`);
 }
 
-export async function clipboardCommand(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function clipboardCommand(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   const action = requireString(args.action ?? "read", "action");
   if (!["read", "write", "paste"].includes(action)) throw new Error(`Unknown clipboard action: ${action}`);
   if (action !== "read") {
@@ -278,7 +310,10 @@ export async function clipboardCommand(args: InteractionArgs, deps: InteractionD
   return { available: !result.error, action, device, tool: "axe", stdout: truncate(result.stdout), stderr: truncate(result.stderr), error: result.error ?? null };
 }
 
-export async function keyboardCommand(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function keyboardCommand(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   const action = requireString(args.action ?? "type", "action");
   if (!["type", "press"].includes(action)) throw new Error(`Unknown keyboard action: ${action}`);
   const policyDenied = await policyGate(args, `keyboard.${action}`, "keyboard", deps);
@@ -354,7 +389,10 @@ export function setEnvironmentPlan(domain: string, args: InteractionArgs, device
   throw new Error(`Unknown set domain: ${domain}`);
 }
 
-export async function setEnvironmentCommand(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function setEnvironmentCommand(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   const domain = requireString(args.domain, "domain");
   const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
   const policy = await deps.policyDecision(args, `set.${domain}`, "device");
@@ -380,7 +418,10 @@ export async function setEnvironmentCommand(args: InteractionArgs, deps: Interac
   };
 }
 
-export async function automationGesture(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function automationGesture(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   return automationGestureInternal(args, deps, false);
 }
 
@@ -532,7 +573,10 @@ export function gestureCommandPlan(args: InteractionArgs): GesturePlan {
   };
 }
 
-export async function executeGesturePlan(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function executeGesturePlan(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   return executeGesturePlanInternal(args, deps, false);
 }
 
@@ -606,7 +650,7 @@ export async function executeRepeatedCommand(
   command: string,
   args: string[],
   options: InteractionArgs,
-  deps: InteractionDependencies,
+  deps: InteractionDependencies = defaultInteractionDependencies,
 ): Promise<InteractionPayload> {
   const policyDenied = await policyGate(
     options,
@@ -652,6 +696,149 @@ export async function captureGestureScreenshot(args: InteractionArgs, deps: Inte
   await deps.mkdir(root, { recursive: true });
   const outputPath = deps.joinPath(root, `${requireString(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`);
   return unwrapToolPayload(await deps.captureScreenshot({ platform: args.platform, device: args.device, outputPath }));
+}
+
+async function defaultCommandPath(command: string): Promise<string | null> {
+  const result = await defaultExecFile("which", [command], { timeout: 5_000, rejectOnError: false });
+  return result.error ? null : optionalString(result.stdout);
+}
+
+function defaultExecFile(file: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
+  if (options.input !== undefined) {
+    return defaultSpawnFile(file, args, options);
+  }
+  return new Promise((resolve, reject) => {
+    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+      if (error && options.rejectOnError !== false) {
+        Object.assign(error, { stdout, stderr });
+        reject(error);
+        return;
+      }
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
+      });
+    });
+  });
+}
+
+function defaultSpawnFile(file: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
+  return new Promise((resolve, reject) => {
+    const child = nodeSpawn(file, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timeout = options.timeout ? setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      const error = { message: `${file} timed out after ${options.timeout}ms`, code: "ETIMEDOUT", signal: null };
+      if (options.rejectOnError !== false) {
+        reject(Object.assign(new Error(error.message), { stdout, stderr, code: error.code }));
+      } else {
+        resolve({ stdout, stderr, error });
+      }
+    }, options.timeout) : null;
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      if (options.rejectOnError !== false) {
+        reject(Object.assign(error, { stdout, stderr }));
+      } else {
+        resolve({ stdout, stderr, error: { message: error.message, code: null, signal: null } });
+      }
+    });
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      const error = code === 0 ? null : { message: `${file} exited with code ${code}`, code, signal };
+      if (error && options.rejectOnError !== false) {
+        reject(Object.assign(new Error(error.message), { stdout, stderr, code, signal }));
+      } else {
+        resolve({ stdout, stderr, error });
+      }
+    });
+    child.stdin.end(options.input);
+  });
+}
+
+async function defaultResolveIosDevice(requested: string | undefined): Promise<IosDevice> {
+  if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
+    return { udid: requested, name: requested, state: "unknown" };
+  }
+  const { stdout } = await defaultExecFile("xcrun", ["simctl", "list", "devices", "available", "--json"], {
+    timeout: 20_000,
+  });
+  const parsed = JSON.parse(String(stdout ?? "{}")) as { devices?: Record<string, unknown[]> };
+  const devices = Object.entries(parsed.devices ?? {}).flatMap(([runtime, runtimeDevices]) =>
+    (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
+      const record = asRecord(device);
+      return {
+        udid: String(record.udid ?? ""),
+        name: String(record.name ?? ""),
+        state: optionalString(record.state) ?? undefined,
+        runtime,
+        isAvailable: record.isAvailable === undefined ? undefined : Boolean(record.isAvailable),
+      };
+    }),
+  ).filter((device) => device.udid && device.name);
+
+  if (requested) {
+    const exact = devices.find((device) => device.udid === requested || device.name === requested);
+    if (exact) return exact;
+    const partial = devices.find((device) => device.name.toLowerCase().includes(requested.toLowerCase()));
+    if (partial) return partial;
+    throw new Error(`No available iOS simulator matched: ${requested}`);
+  }
+
+  const booted = devices.find((device) => device.state === "Booted");
+  if (booted) return booted;
+  const iphone = [...devices].reverse().find((device) => /iPhone/.test(device.name));
+  if (iphone) return iphone;
+  if (devices[0]) return devices[0];
+  throw new Error("No available iOS simulators found.");
+}
+
+async function defaultPolicyDecision(
+  args: Record<string, unknown>,
+  action: string,
+  sideEffect: "device",
+): Promise<ActionPolicyDecision> {
+  const policyPath = optionalString(args.actionPolicy);
+  if (!policyPath) {
+    return {
+      checked: true,
+      action,
+      sideEffect,
+      allowed: false,
+      source: null,
+      reason: "No action policy allowed this state-changing operation.",
+    };
+  }
+
+  const policy = JSON.parse(await fs.readFile(policyPath, "utf8")) as {
+    allow?: unknown;
+    actions?: Record<string, unknown>;
+  };
+  const allowed = (Array.isArray(policy.allow) && policy.allow.includes(action))
+    || policy.actions?.[action] === true
+    || policy.actions?.[action] === "allow";
+  return {
+    checked: true,
+    action,
+    sideEffect,
+    allowed,
+    source: policyPath,
+    reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation.",
+  };
 }
 
 export function requireString(value: unknown, field: string): string {

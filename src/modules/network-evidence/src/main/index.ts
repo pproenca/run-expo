@@ -156,7 +156,7 @@ export function clampNumber(value: unknown, min: number, max: number): number {
 
 export async function networkCommand(
   args: NetworkCommandArgs = {},
-  deps: NetworkCommandDependencies = {},
+  deps: NetworkCommandDependencies = defaultNetworkDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "status", "action");
   if (!["status", "requests", "request", "clear", "har"].includes(action)) {
@@ -170,8 +170,6 @@ export async function networkCommand(
 
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const limit = clampNumber(args.limit ?? 100, 1, 1000);
-  if (!deps.metroTargets) throw new Error("networkCommand requires a metroTargets adapter.");
-
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -244,6 +242,65 @@ export async function networkCommand(
     evidenceSource: redacted.source ?? "unknown",
     limitations: networkLimitations(redacted),
     captureTiming: networkCaptureTiming(redacted, clock),
+  });
+}
+
+const defaultNetworkDependencies: NetworkCommandDependencies = {
+  metroTargets: defaultMetroTargets,
+  evaluateHermesExpression: defaultEvaluateHermesExpression,
+};
+
+async function defaultMetroTargets(metroPort: number): Promise<NetworkTarget[]> {
+  const response = await fetch(`http://localhost:${metroPort}/json/list`);
+  if (!response.ok) return [];
+  const parsed = await response.json() as unknown;
+  return Array.isArray(parsed) ? parsed.map((target) => target as NetworkTarget) : [];
+}
+
+async function defaultEvaluateHermesExpression(
+  webSocketDebuggerUrl: string,
+  expression: string,
+  options: { timeoutMs: number },
+): Promise<HermesEvaluationResult> {
+  if (typeof WebSocket !== "function") {
+    return { error: "WebSocket is not available in this Node runtime." };
+  }
+
+  return new Promise((resolve) => {
+    const ws = new WebSocket(webSocketDebuggerUrl);
+    const timer = setTimeout(() => {
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors during timeout cleanup
+      }
+      resolve({ error: `Hermes evaluation timed out after ${options.timeoutMs}ms.` });
+    }, options.timeoutMs);
+
+    ws.addEventListener("open", () => {
+      ws.send(JSON.stringify({
+        id: 1,
+        method: "Runtime.evaluate",
+        params: { expression, returnByValue: true, awaitPromise: true },
+      }));
+    });
+    ws.addEventListener("message", (event) => {
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors after a response
+      }
+      try {
+        resolve({ result: JSON.parse(String(event.data)) });
+      } catch (error) {
+        resolve({ error: formatError(error) });
+      }
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      resolve({ error: "Hermes websocket connection failed." });
+    });
   });
 }
 

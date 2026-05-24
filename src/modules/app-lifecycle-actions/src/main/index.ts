@@ -1,4 +1,7 @@
-import { resolve as resolvePath } from "node:path";
+import { execFile as nodeExecFile } from "node:child_process";
+import * as fs from "node:fs/promises";
+import { homedir } from "node:os";
+import { join as joinPath, resolve as resolvePath } from "node:path";
 
 const MAX_OUTPUT = 40_000;
 
@@ -74,7 +77,20 @@ export type AppLifecycleDependencies = {
 export type AppActionArgs = Record<string, unknown>;
 export type AppActionPayload = Record<string, unknown>;
 
-export async function bootSimulator(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+const defaultAppLifecycleDependencies: AppLifecycleDependencies = {
+  execFile: defaultExecFile,
+  resolveIosDevice: defaultResolveIosDevice,
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now: () => Date.now(),
+  policyDecision: defaultPolicyDecision,
+  runtimeSummary: defaultRuntimeSummary,
+  listDiagnosticReports: defaultListDiagnosticReports,
+};
+
+export async function bootSimulator(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const policy = await deps.policyDecision(args, "boot-simulator", "device");
   if (!policy.allowed) return policyDeniedPayload("boot-simulator", policy);
   const requestedDevice = optionalString(args.device) ?? undefined;
@@ -97,7 +113,10 @@ export async function bootSimulator(args: AppActionArgs, deps: AppLifecycleDepen
   };
 }
 
-export async function launchApp(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function launchApp(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const platform = platformArg(args.platform);
   const policy = await deps.policyDecision(args, "launch-app", "device");
   if (!policy.allowed) return policyDeniedPayload("launch-app", policy);
@@ -151,7 +170,10 @@ export async function launchApp(args: AppActionArgs, deps: AppLifecycleDependenc
   );
 }
 
-export async function terminateApp(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function terminateApp(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const platform = platformArg(args.platform);
   const policy = await deps.policyDecision(args, "terminate-app", "device");
   if (!policy.allowed) return policyDeniedPayload("terminate-app", policy);
@@ -193,7 +215,10 @@ export async function terminateApp(args: AppActionArgs, deps: AppLifecycleDepend
   };
 }
 
-export async function reloadApp(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function reloadApp(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const policy = await deps.policyDecision(args, "reload-app", "device");
   if (!policy.allowed) return policyDeniedPayload("reload-app", policy);
   const bundleId = await resolveBundleId(args, deps);
@@ -252,7 +277,10 @@ export async function iosCrashEvidence(args: AppActionArgs, deps: AppLifecycleDe
   };
 }
 
-export async function matchingIosCrashReports(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload[]> {
+export async function matchingIosCrashReports(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload[]> {
   const bundleId = optionalString(args.bundleId);
   const processName = optionalString(args.processName);
   if (!bundleId && !processName) return [];
@@ -289,12 +317,18 @@ export async function matchingIosCrashReports(args: AppActionArgs, deps: AppLife
   return matches.sort((left, right) => String(left.path).localeCompare(String(right.path)));
 }
 
-export async function readCrashReportMetadata(reportPath: string, deps: AppLifecycleDependencies): Promise<Record<string, unknown> | null> {
+export async function readCrashReportMetadata(
+  reportPath: string,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<Record<string, unknown> | null> {
   const report = (await deps.listDiagnosticReports()).find((entry) => entry.path === reportPath);
   return report ? parseCrashReportMetadata(report.content) : null;
 }
 
-export async function installApp(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function installApp(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const platform = platformArg(args.platform);
   const appPath = resolvePath(requireString(args.appPath, "appPath"));
   const policy = await deps.policyDecision(args, "install-app", "device");
@@ -338,7 +372,10 @@ export async function installApp(args: AppActionArgs, deps: AppLifecycleDependen
   };
 }
 
-export async function uninstallApp(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function uninstallApp(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const platform = platformArg(args.platform);
   const policy = await deps.policyDecision(args, "uninstall-app", "device");
   if (!policy.allowed) return policyDeniedPayload("uninstall-app", policy);
@@ -382,7 +419,10 @@ export async function uninstallApp(args: AppActionArgs, deps: AppLifecycleDepend
   };
 }
 
-export async function resolveBundleId(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<string> {
+export async function resolveBundleId(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<string> {
   const explicit = optionalString(args.bundleId ?? args.packageName);
   if (explicit) return explicit;
 
@@ -393,7 +433,10 @@ export async function resolveBundleId(args: AppActionArgs, deps: AppLifecycleDep
   return inferred;
 }
 
-export async function collectAppLogs(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function collectAppLogs(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const platform = platformArg(args.platform);
   if (platform === "android") {
     const device = optionalString(args.device);
@@ -440,6 +483,135 @@ export function iosLogPredicate(args: AppActionArgs): string | null {
   const bundleId = optionalString(args.bundleId);
   const inferredProcess = bundleId?.split(".").filter(Boolean).at(-1);
   return inferredProcess ? `process CONTAINS "${escapePredicateValue(inferredProcess)}"` : null;
+}
+
+function defaultExecFile(file: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
+  return new Promise((resolve, reject) => {
+    nodeExecFile(file, args, {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer ?? MAX_OUTPUT,
+    }, (error, stdout, stderr) => {
+      if (error && options.rejectOnError !== false) {
+        Object.assign(error, { stdout, stderr });
+        reject(error);
+        return;
+      }
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
+      });
+    });
+  });
+}
+
+async function defaultResolveIosDevice(requested: string | undefined): Promise<IosDevice> {
+  if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
+    return { udid: requested, name: requested, state: "unknown" };
+  }
+
+  const { stdout } = await defaultExecFile("xcrun", ["simctl", "list", "devices", "available", "--json"], {
+    timeout: 20_000,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const parsed = JSON.parse(String(stdout ?? "{}")) as { devices?: Record<string, unknown[]> };
+  const devices = Object.entries(parsed.devices ?? {}).flatMap(([runtime, runtimeDevices]) =>
+    (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
+      const record = isRecord(device) ? device : {};
+      return {
+        udid: String(record.udid ?? ""),
+        name: String(record.name ?? ""),
+        state: stringFrom(record.state) ?? undefined,
+        runtime,
+        isAvailable: record.isAvailable === undefined ? undefined : Boolean(record.isAvailable),
+      };
+    }),
+  ).filter((device) => device.udid && device.name);
+
+  if (requested) {
+    const exact = devices.find((device) => device.udid === requested || device.name === requested);
+    if (exact) return exact;
+    const partial = devices.find((device) => device.name.toLowerCase().includes(requested.toLowerCase()));
+    if (partial) return partial;
+    throw new Error(`No available iOS simulator matched: ${requested}`);
+  }
+
+  const booted = devices.find((device) => device.state === "Booted");
+  if (booted) return booted;
+  const iphone = [...devices].reverse().find((device) => /iPhone/.test(device.name));
+  if (iphone) return iphone;
+  if (devices[0]) return devices[0];
+  throw new Error("No available iOS simulators found.");
+}
+
+async function defaultPolicyDecision(
+  args: Record<string, unknown>,
+  action: string,
+  sideEffect: "device",
+): Promise<ActionPolicyDecision> {
+  const policyPath = optionalString(args.actionPolicy);
+  if (!policyPath) {
+    return {
+      checked: true,
+      action,
+      sideEffect,
+      allowed: false,
+      source: null,
+      reason: "No action policy allowed this state-changing operation.",
+    };
+  }
+
+  const policy = JSON.parse(await fs.readFile(resolvePath(policyPath), "utf8")) as {
+    allow?: unknown;
+    actions?: Record<string, unknown>;
+  };
+  const allowed = (Array.isArray(policy.allow) && policy.allow.includes(action))
+    || policy.actions?.[action] === true
+    || policy.actions?.[action] === "allow";
+  return {
+    checked: true,
+    action,
+    sideEffect,
+    allowed,
+    source: resolvePath(policyPath),
+    reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation.",
+  };
+}
+
+async function defaultRuntimeSummary(cwd: string): Promise<RuntimeSummary | null> {
+  const appJsonPath = resolvePath(cwd, "app.json");
+  const text = await fs.readFile(appJsonPath, "utf8").catch(() => null);
+  if (!text) return null;
+  const parsed = JSON.parse(text) as Record<string, unknown>;
+  const expo = isRecord(parsed.expo) ? parsed.expo : parsed;
+  const ios = isRecord(expo.ios) ? expo.ios : {};
+  const android = isRecord(expo.android) ? expo.android : {};
+  return {
+    appConfig: {
+      iosBundleIdentifier: stringFrom(ios.bundleIdentifier) ?? stringFrom(expo.bundleIdentifier),
+      androidPackage: stringFrom(android.package) ?? stringFrom(expo.package),
+    },
+  };
+}
+
+async function defaultListDiagnosticReports(): Promise<DiagnosticReportEntry[]> {
+  const directory = joinPath(homedir(), "Library", "Logs", "DiagnosticReports");
+  const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+  const reports = await Promise.all(entries
+    .filter((entry) => entry.isFile() && /\.(ips|crash)$/.test(entry.name))
+    .map(async (entry) => {
+      const file = joinPath(directory, entry.name);
+      const stat = await fs.stat(file);
+      return {
+        name: entry.name,
+        path: file,
+        isFile: true,
+        mtimeMs: stat.mtimeMs,
+        mtimeIso: stat.mtime.toISOString(),
+        content: await fs.readFile(file, "utf8").catch(() => ""),
+      };
+    }));
+  return reports;
 }
 
 export function truncateSubprocessOutput(value: unknown, limit = MAX_OUTPUT): string {

@@ -1,5 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
+import { execFile as nodeExecFile } from "node:child_process";
 import { basename, join, resolve } from "node:path";
+import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
 
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
@@ -39,7 +41,7 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function accessibilityCommand(
   args: Record<string, unknown> = {},
-  deps: AccessibilityDependencies = {},
+  deps: AccessibilityDependencies = defaultAccessibilityDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "tree", "action");
@@ -71,6 +73,39 @@ export async function accessibilityCommand(
     return toolJson({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
   }
   return toolJson(await accessibilityTreePayload(args, deps));
+}
+
+const defaultAccessibilityDependencies: AccessibilityDependencies = {
+  commandPath: defaultCommandPath,
+  resolveIosDevice: (device, options) => resolveIosDevice(typeof device === "string" ? device : null, options),
+  execFile: defaultExecFile,
+};
+
+function defaultCommandPath(command: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    nodeExecFile("which", [command], { timeout: 5000 }, (error, stdout) => {
+      resolve(error ? null : String(stdout ?? "").trim() || null);
+    });
+  });
+}
+
+function defaultExecFile(
+  file: string,
+  argv: string[],
+  options: { timeout: number; maxBuffer: number; rejectOnError: false },
+): Promise<{ stdout: string; stderr: string; error?: unknown }> {
+  return new Promise((resolve) => {
+    nodeExecFile(file, argv, {
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+    }, (error, stdout, stderr) => {
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : undefined,
+      });
+    });
+  });
 }
 
 export async function accessibilityTreePayload(
