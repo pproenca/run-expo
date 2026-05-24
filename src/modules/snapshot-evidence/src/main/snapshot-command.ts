@@ -169,16 +169,19 @@ async function captureSemanticBridge(args: SnapshotArgs, context: { filters: Sna
 }
 
 function semanticBridgeExpression(filters: SnapshotFilters): string {
-  return `(async () => {
+  return `(() => {
     const filters = ${JSON.stringify(filters)};
-    const callBridge = async (candidate, source) => {
+    const callBridge = (candidate, source) => {
       if (!candidate) return null;
       let payload = candidate;
-      if (typeof candidate === 'function') payload = await candidate({ filters });
-      else if (candidate.snapshot && typeof candidate.snapshot === 'function') payload = await candidate.snapshot({ filters });
-      else if (candidate.tree && typeof candidate.tree === 'function') payload = await candidate.tree({ filters });
-      else if (candidate.refs && typeof candidate.refs === 'function') payload = await candidate.refs({ filters });
+      if (typeof candidate === 'function') payload = candidate({ filters });
+      else if (candidate.snapshot && typeof candidate.snapshot === 'function') payload = candidate.snapshot({ filters });
+      else if (candidate.tree && typeof candidate.tree === 'function') payload = candidate.tree({ filters });
+      else if (candidate.refs && typeof candidate.refs === 'function') payload = candidate.refs({ filters });
       if (!payload) return null;
+      if (typeof payload === 'object' && typeof payload.then === 'function') {
+        return { available: false, source, reason: 'Bridge probe returned an async value; expose a synchronous snapshot/tree method for CLI capture.' };
+      }
       if (Array.isArray(payload)) return { available: true, source, refs: payload };
       if (typeof payload === 'object') return { available: payload.available !== false, source: payload.source || source, ...payload };
       return null;
@@ -193,7 +196,7 @@ function semanticBridgeExpression(filters: SnapshotFilters): string {
     const failures = [];
     for (const [source, candidate] of probes) {
       try {
-        const payload = await callBridge(candidate, source);
+        const payload = callBridge(candidate, source);
         if (payload && payload.available !== false) return payload;
         if (payload && payload.available === false) failures.push({ source, reason: payload.reason || 'Bridge probe returned unavailable.' });
       } catch (error) {
