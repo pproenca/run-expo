@@ -1,19 +1,28 @@
+# --- workspace build / cache ---
 node_modules/
-.npm/
+dist/
+coverage/
+*.tsbuildinfo
 .tmp/
 .cache/
-.artifacts/
+.npm/
 .pnpm-store/
+
+# --- local evidence / agent-tool state (never committed) ---
 .scratch/
+.artifacts/
 .clawpatch/
 .desloppify/
-coverage/
-dist/
 *.tgz
 pnpm-debug.log*
 .DS_Store
 .env
 .env.*
+
+# Local evidence produced by --record and manual CLI runs
+expo98.policy.json
+*.har
+*.memgraph
 
 # Local project-agent skill installs. Only repo-owned skills are visible by
 # default; promoting a new repo skill should require an intentional `git add -f`.
@@ -28,8 +37,3 @@ pnpm-debug.log*
 !.agents/skills/expo98-docs/**
 !.agents/skills/crabbox/
 !.agents/skills/crabbox/**
-
-# Local evidence produced by --record and manual CLI runs
-expo98.policy.json
-*.har
-*.memgraph

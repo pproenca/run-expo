@@ -1,0 +1,73 @@
+%% expo98 — Data lineage (graph LR): programs → data stores, read/write marked
+%% Source of truth: analysis/expo98/topology.json (dataGraph.edges), aggregated to domain.
+%% Edge label: read | write | rw.  Physical join is runtime convention (no descriptor):
+%%   state-dir = resolveExpoStateRoot() → <root>/.scratch/expo98/… ; Metro port via
+%%   --metro-port (default 8081); Hermes WS URL discovered from Metro /json/list.
+graph LR
+  classDef prog fill:#2a2a2a,stroke:#888,color:#d4d4d4;
+  classDef proto fill:#26333a,stroke:#5fa8c7,color:#cfe6f0;
+  classDef state fill:#2a3326,stroke:#8cc77a,color:#dff0d4;
+  classDef fsstore fill:#3a2f2a,stroke:#cc785c,color:#f0d9cf;
+  classDef extstore fill:#332a3a,stroke:#b07acc,color:#e8d4f0;
+
+  %% --- programs (left) ---
+  D5["D5 Discovery/Doctor"]:::prog
+  D6["D6 App &amp; Sim Lifecycle"]:::prog
+  D7["D7 Interaction/Gestures"]:::prog
+  D8["D8 Snapshot &amp; A11y"]:::prog
+  D9["D9 Bridge"]:::prog
+  D10["D10 Runtime &amp; DevTools"]:::prog
+  D11["D11 Network &amp; Perf"]:::prog
+  D12["D12 Artifacts/Review/Obs"]:::prog
+  METROC["D4 metro-probes"]:::proto
+  HERMESC["D4 hermes-cdp-client"]:::proto
+  RUNREC["D3 session-run-records"]:::state
+  TARGET["D3 target-management"]:::state
+
+  %% --- data stores (right) ---
+  SIM[("EXT · iOS simulator / device<br/>xcrun · simctl · adb")]:::extstore
+  HERMES[("EXT · Hermes runtime<br/>CDP over WebSocket")]:::extstore
+  METRO[("EXT · Metro bundler<br/>HTTP /json/list · symbolicate")]:::extstore
+  OVERLAY[("EXT · overlay HTTP server<br/>127.0.0.1")]:::extstore
+  SDIR[("FS · state-dir<br/>.scratch/expo98: run-records,<br/>sessions, targets, snapshots")]:::fsstore
+  EVID[("FS · evidence artifacts<br/>HAR · PNG · memgraph · diffs")]:::fsstore
+  PROJ[("FS · project source<br/>app.json · package.json · routes")]:::fsstore
+
+  %% --- iOS simulator: written/read by 18 modules (every device-touching domain) ---
+  D5 -->|rw| SIM
+  D6 -->|rw| SIM
+  D7 -->|rw| SIM
+  D8 -->|rw| SIM
+  D10 -->|rw| SIM
+  D11 -->|rw| SIM
+  D12 -->|rw| SIM
+  TARGET -->|rw| SIM
+
+  %% --- Hermes runtime: ONLY through the D4 client (chokepoint) ---
+  HERMESC -->|rw| HERMES
+
+  %% --- Metro: direct HTTP readers ---
+  METROC -->|read| METRO
+  TARGET -->|read| METRO
+  D11 -->|read| METRO
+  D12 -->|read| METRO
+
+  %% --- state-dir: owned by D3; D8 writes snapshot refs directly ---
+  RUNREC -->|rw| SDIR
+  TARGET -->|rw| SDIR
+  D8 -->|write| SDIR
+
+  %% --- evidence artifacts ---
+  D7 -->|write| EVID
+  D8 -->|write| EVID
+  D10 -->|write| EVID
+  D11 -->|write| EVID
+  D12 -->|write| EVID
+
+  %% --- project source (read-only introspection) ---
+  D5 -->|read| PROJ
+  D9 -->|read| PROJ
+  D12 -->|read| PROJ
+
+  %% --- local overlay server ---
+  D12 -->|rw| OVERLAY

@@ -1,0 +1,130 @@
+%% expo98 — Module call graph (graph TD)
+%% Source of truth: analysis/expo98/topology.json (HEAD 77fc1a6)
+%% Projection rules (documented, faithful to topology.json):
+%%   - 4 leaf-utility core modules collapsed into KERNEL
+%%     (tool-json-envelope, cli-identity, cli-error-classification, real-validation)
+%%   - 30 feature command modules collapsed into their domains D5–D12
+%%   - core composition, D2 policy, D3 state, D4 protocol shown individually
+%%   - solid edge = static import dependency; dotted edge = composition/dynamic dispatch
+%%   - dispatcher → handlers is a DYNAMIC edge resolved via COMMAND_SURFACE (route table)
+graph TD
+  classDef entry fill:#cc785c,stroke:#cc785c,color:#1e1e1e,font-weight:bold;
+  classDef hub fill:#3a2f2a,stroke:#cc785c,color:#f0d9cf;
+  classDef proto fill:#26333a,stroke:#5fa8c7,color:#cfe6f0;
+  classDef state fill:#2a3326,stroke:#8cc77a,color:#dff0d4;
+  classDef feat fill:#2a2a2a,stroke:#888,color:#d4d4d4;
+
+  BCLI["bundled-cli.ts<br/>composition root → cli/expo98.mjs"]:::entry
+
+  subgraph CORE["D1 · Core — composition &amp; dispatch"]
+    EXEC["cli-executable-wrapper"]
+    RT["cli-runtime-composition"]
+    FACADE["cli-facade-entrypoint"]
+    ARGV["cli-argv-parser"]
+    ARGPROJ["command-arg-projection"]
+    HELP["cli-help-surface"]
+    DISPATCH["command-dispatch-envelope<br/>(dispatchCommand)"]
+    SURFACE["command-surface<br/>(COMMAND_SURFACE route table)"]
+    REGISTRY["tool-handler-registry<br/>(bindHandlers)"]
+  end
+
+  KERNEL["KERNEL — shared leaf utils<br/>tool-json-envelope · cli-identity<br/>cli-error-classification · real-validation"]:::hub
+  POLICY["D2 · policy-redaction<br/>(gate + redactor)"]:::hub
+
+  subgraph PROTO["D4 · Device protocol"]
+    HERMES["platform/hermes-cdp-client<br/>(CDP / WebSocket)"]:::proto
+    METRO["commands/metro-probes<br/>(Metro HTTP)"]:::proto
+  end
+
+  subgraph STATE["D3 · State (JSON files)"]
+    RUNREC["session-run-records"]:::state
+    TARGET["target-management"]:::state
+  end
+
+  subgraph FEAT["Feature domains D5–D12 · 37 handler modules"]
+    D5["D5 Discovery/Doctor"]:::feat
+    D6["D6 App &amp; Sim Lifecycle"]:::feat
+    D7["D7 Interaction/Gestures"]:::feat
+    D8["D8 Snapshot &amp; A11y"]:::feat
+    D9["D9 Bridge"]:::feat
+    D10["D10 Runtime &amp; DevTools"]:::feat
+    D11["D11 Network &amp; Perf"]:::feat
+    D12["D12 Artifacts/Review/Obs"]:::feat
+  end
+
+  %% --- composition (DI) wiring: bundled-cli statically imports everything ---
+  BCLI -.->|DI wiring| EXEC
+  BCLI -.->|DI wiring| RT
+  BCLI -.->|DI wiring| FACADE
+  BCLI -.->|DI wiring| ARGV
+  BCLI -.->|DI wiring| ARGPROJ
+  BCLI -.->|DI wiring| HELP
+  BCLI -.->|DI wiring| DISPATCH
+  BCLI -.->|DI wiring| REGISTRY
+  BCLI -.->|imports 37 handlers| FEAT
+
+  %% --- dispatch internals (static imports) ---
+  EXEC --> RT
+  RT --> FACADE
+  FACADE --> DISPATCH
+  RT --> ARGV
+  RT --> ARGPROJ
+  DISPATCH --> SURFACE
+  DISPATCH --> POLICY
+  DISPATCH --> KERNEL
+  REGISTRY --> SURFACE
+  HELP --> SURFACE
+  ARGV --> KERNEL
+  POLICY --> KERNEL
+
+  %% --- dynamic dispatch: dispatcher reaches handlers via the route table ---
+  DISPATCH -.->|"route table → 79 cmds / 37 handlers"| FEAT
+
+  %% --- feature domains → shared foundation (static imports) ---
+  D5 --> KERNEL
+  D6 --> KERNEL
+  D7 --> KERNEL
+  D8 --> KERNEL
+  D9 --> KERNEL
+  D10 --> KERNEL
+  D11 --> KERNEL
+  D12 --> KERNEL
+  D5 --> POLICY
+  D6 --> POLICY
+  D7 --> POLICY
+  D8 --> POLICY
+  D9 --> POLICY
+  D10 --> POLICY
+  D12 --> POLICY
+  D7 --> METRO
+  D8 --> METRO
+  D9 --> METRO
+  D10 --> METRO
+  D11 --> METRO
+  D12 --> METRO
+  D7 --> HERMES
+  D8 --> HERMES
+  D9 --> HERMES
+  D10 --> HERMES
+  D11 --> HERMES
+  D7 --> RUNREC
+  D8 --> RUNREC
+  D10 --> RUNREC
+  D10 --> TARGET
+
+  %% --- protocol / state internal ---
+  METRO --> HERMES
+  METRO --> KERNEL
+  RUNREC --> POLICY
+  RUNREC --> KERNEL
+  TARGET --> RUNREC
+
+  %% --- inter-domain coupling ---
+  D12 --> D5
+  D12 --> D6
+  D12 --> D7
+  D10 --> D6
+  D10 --> D8
+  D10 --> D9
+  D8 --> D6
+  D5 --> D9

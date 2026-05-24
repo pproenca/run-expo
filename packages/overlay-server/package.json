@@ -1,0 +1,23 @@
+{
+  "name": "@expo98/overlay-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "expo98 reimagined — hardened loopback review-overlay ingest server (token + Origin + body-cap + comments[] schema) and the running->stale->stopped sidecar lifecycle. Ingest-only, no in-app HTML scaffold.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform": "^0.96.1",
+    "@effect/platform-node": "^0.106.0",
+    "@expo98/core": "workspace:*",
+    "@expo98/domain": "workspace:*",
+    "effect": "^3.21.2"
+  }
+}

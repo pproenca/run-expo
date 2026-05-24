@@ -1,0 +1,55 @@
+%% expo98 — Critical path (flowchart TD): one end-to-end business flow.
+%% Flow: `expo98 --json snapshot` — capture semantic UI refs (the tool's core
+%% evidence-capture loop). Traced in execution order through every module and
+%% data store it touches. Grounded in topology.json + read of dispatchCommand,
+%% bundled-cli, command-surface, snapshot-evidence.
+%% No production telemetry available (interactive local CLI) — steps are annotated
+%% with STATIC tail-latency risk instead of p50/p99 (per ASSESSMENT Step 4).
+flowchart TD
+  classDef store fill:#3a2f2a,stroke:#cc785c,color:#f0d9cf;
+  classDef ext fill:#332a3a,stroke:#b07acc,color:#e8d4f0;
+  classDef risk fill:#4a2a2a,stroke:#e06c6c,color:#f0d4d4;
+  classDef step fill:#2a2a2a,stroke:#888,color:#d4d4d4;
+
+  A["① bin cli/expo98.mjs<br/>(esbuild bundle of bundled-cli.ts)"]:::step
+  B["② cli-executable-wrapper.run<br/>→ cli-runtime-composition.run"]:::step
+  C["③ cli-argv-parser.parseCliArgs<br/>argv → {command: snapshot}"]:::step
+  D["④ command-dispatch-envelope.dispatchCommand"]:::step
+  E{"⑤ command-surface<br/>COMMAND_ALIASES[snapshot]<br/>→ tool 'snapshot', mutatesRuntime:false"}:::step
+  F["⑥ command-arg-projection.projectArgs<br/>→ effectiveArgs"]:::step
+  G["⑦ session-run-records.startRunRecord<br/>open run record"]:::step
+  SDIR1[("FS · state-dir<br/>write: runs/*.json (open)")]:::store
+  H["⑧ handlers['snapshot'] = snapshot-evidence.snapshotCommand<br/>(bound via tool-handler-registry ← route table)"]:::step
+  I["⑨ metro-probes.discover<br/>resolve Hermes WS target"]:::step
+  METRO[("EXT · Metro<br/>GET /json/list")]:::ext
+  J["⑩ hermes-cdp-client connect WS<br/>Runtime.evaluate(getSemanticRefs)"]:::risk
+  HERMES[("EXT · Hermes runtime<br/>CDP over WebSocket")]:::ext
+  K["⑪ execFile xcrun simctl<br/>(a11y tree / screenshot leaf)"]:::risk
+  SIM[("EXT · iOS simulator")]:::ext
+  L["⑫ snapshot persistence<br/>(session-run-records ids/paths)"]:::step
+  SDIR2[("FS · state-dir<br/>write: snapshot refs")]:::store
+  M["⑬ policy-redaction.redactValue<br/>strip secrets from payload"]:::step
+  N["⑭ formatCliPayload → stdout<br/>{ ok:true, data }"]:::step
+  O["⑮ recorder.finish(completed)<br/>session-run-records"]:::step
+  SDIR3[("FS · state-dir<br/>write: runs/*.json (close)")]:::store
+
+  A --> B --> C --> D --> E --> F --> G
+  G --> SDIR1
+  G --> H --> I
+  I --> METRO
+  I --> J
+  J --> HERMES
+  J --> K
+  K --> SIM
+  K --> L
+  L --> SDIR2
+  L --> M --> N --> O
+  O --> SDIR3
+
+  %% risk annotations (no telemetry; static hotspots)
+  RISK1["⚠ tail-latency hotspot: CDP WebSocket round-trip<br/>depends on live Hermes/Metro state; highest CCN"]:::risk
+  RISK2["⚠ tail-latency hotspot: subprocess spawn<br/>scattered magic timeouts, per-command error shape"]:::risk
+  RISK3["⚠ safety gap: generic redactor misses keys (CWE-532)<br/>secrets can persist to run-records — see modernize-harden"]:::risk
+  J -.-> RISK1
+  K -.-> RISK2
+  M -.-> RISK3

@@ -1,0 +1,11 @@
+{
+  "$comment": "Expo SDK major -> expected React Native major.minor compatibility map (AC-020 / brief Q#10). This is a DATA FILE, not code: a new Expo SDK row can be appended here (or in a fetched manifest replacing it) WITHOUT a code release. `version` is the manifest revision; bump it when editing. Source of truth: Expo SDK release notes.",
+  "version": 1,
+  "expoToReactNative": {
+    "54": "0.81",
+    "53": "0.79",
+    "52": "0.76",
+    "51": "0.74",
+    "50": "0.73"
+  }
+}

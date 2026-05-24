@@ -1,0 +1,23 @@
+{
+  "$comment": "Shared strict TS config for the Effect-TS rebuild. moduleResolution=bundler so workspace packages resolve to their TS source via the exports 'types' condition; noEmit because vitest/esbuild runs the source and the publishable bundle is produced separately.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "noEmit": true
+  }
+}

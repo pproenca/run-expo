@@ -1,0 +1,15 @@
+{
+  "name": "@expo98/expo-integration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "expo98 reimagined — D9 bridge + D5 Expo/RN introspection: bridge install-state/health/domains (storage/state/controls gated), Expo<->RN compat classification (data-file map), Expo Router sitemap normalization. Official Expo SDK kept as a documented seam.",
+  "exports": { ".": { "types": "./src/index.ts", "import": "./src/index.ts" } },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@expo98/core": "workspace:*",
+    "@expo98/domain": "workspace:*",
+    "@expo98/protocols": "workspace:*",
+    "effect": "^3.21.2"
+  }
+}

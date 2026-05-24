@@ -1,57 +1,66 @@
 # expo98
 
-`expo98` is a modernized local evidence CLI for Expo and React Native iOS work. It ships as one bundled Node executable so the normal entrypoint is:
+`expo98` is a local-first **evidence CLI for Expo / React Native iOS work**. It
+inspects a running app over the Hermes Chrome DevTools Protocol, drives the iOS
+simulator via `xcrun`/`simctl`, probes Metro, and captures **redacted,
+reproducible evidence** — with every state-changing action behind an explicit,
+**fail-closed** policy gate.
+
+This repository is a from-scratch **Effect-TS** rebuild (reimagined from the
+extracted behavior spec of the original CLI). Its defining property is that the
+two load-bearing promises — *fail closed* and *redact* — are **structural**: a
+command handler cannot reach a device, a runtime-eval, or a source-write
+capability except through the dispatcher, which provides that capability into the
+handler's effect environment **only after the policy gate passes**. A misrouted
+handler is a compile error, not a runtime accident.
+
+## Workspace
+
+pnpm workspace. The publishable CLI is `packages/app`.
+
+| Package | Responsibility |
+|---|---|
+| `@expo98/core` | Safety spine: 4-tier policy classifier, single redactor, **capability-injection dispatch**, subprocess, path confinement, clock/id |
+| `@expo98/domain` | Effect `Schema` model + persistence (sessions/targets/snapshots/refs/run-records) + lenient-read/strict-write migration |
+| `@expo98/protocols` | Loopback-only Metro probe + Hermes CDP client (loopback + connect-time Origin + bounded open) |
+| `@expo98/app` | CLI shell (`@effect/cli`) + composition root: global flags, POSIX exit codes, `--json\|--plain\|--ndjson`, all commands wired |
+| `@expo98/handlers-devtools` | trace / inspector / console / errors / navigation (runtime-eval gated) |
+| `@expo98/handlers-interaction` | app+sim lifecycle + interaction/gestures + wait (device gated) |
+| `@expo98/handlers-snapshot` | snapshot capture + accessibility + RN introspection |
+| `@expo98/handlers-net-perf` | network evidence + performance |
+| `@expo98/expo-integration` | dev bridge + Expo↔RN compat + Expo Router sitemap |
+| `@expo98/handlers-artifacts` | diff / ux-context / review / dashboard / live-backlog |
+| `@expo98/overlay-server` | hardened loopback review-overlay ingest server |
+
+## Develop
 
 ```bash
-npx expo98 --version
-npx expo98 --json doctor
-npx expo98 --json project-info --cwd /path/to/expo-app
+pnpm install
+pnpm test            # full vitest acceptance suite
+pnpm -r run typecheck
+pnpm lint            # oxlint
+pnpm format          # oxfmt --write
+pnpm run check       # format:check + lint + typecheck + test
 ```
 
-The npm package exposes `expo98` as the primary binary and keeps `expo-ios` as a compatibility alias.
+## Status
 
-## Requirements
+The reimagined surface is **scaffold-complete and green** (all acceptance tests
+pass; safety gating proven end-to-end). Remaining productionization: the esbuild
+step that bundles `packages/app` into the publishable `expo98`/`expo-ios` bins +
+a source↔bundle parity check, and live UAT on a real simulator/Hermes for the
+hardware-only paths.
 
-- Node.js 20 or newer
-- npm
-- Optional local tools for device-specific commands: `xcrun`, iOS Simulator, Android tooling, Metro, and Expo project dependencies
+## Docs
 
-## Common Commands
+- `CLAUDE.md` — agent & engineer context (architecture, the one inviolable design
+  rule, how to run tests, the legacy→modern traceability map).
+- `AGENTS.md` — agent harness policy & routing; skills live in `.agents/skills/`.
+- `docs/modernization/` — the design provenance: `AI_NATIVE_SPEC.md`,
+  `REIMAGINED_ARCHITECTURE.md` (with the architecture-critic review),
+  `ASSESSMENT.md`, `BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `MODERNIZATION_BRIEF.md`,
+  `reimagine/` (the 58 acceptance criteria), and the dependency/flow diagrams.
 
-```bash
-npx expo98 --help
-npx expo98 --json doctor
-npx expo98 --json project-info --cwd /path/to/expo-app
-npx expo98 --json routes --cwd /path/to/expo-app
-npx expo98 --json devices
-npx expo98 --json policy show
-```
+## License
 
-State-changing commands are policy-gated. Provide `--action-policy <path>` for commands that mutate app, device, bridge, storage, or simulator state.
-
-## Development
-
-```bash
-pnpm install --frozen-lockfile
-pnpm expo98 --version
-pnpm test
-pnpm run build
-pnpm pack --dry-run --json
-```
-
-`pnpm expo98 ...` runs the checked-in CLI directly for local development without going through `npx` or a packed install.
-
-`pnpm run build` regenerates `cli/expo98.mjs` from `src/bundled-cli.ts`. The checked-in bundle is required so `npx expo98 ...` works from the packed package without rebuilding source.
-
-## Repository Shape
-
-- `src/bundled-cli.ts` contains the source entrypoint for the bundled CLI.
-- `src/commands/` contains internal runtime source modules used only to build the bundle.
-- `cli/expo98.mjs` is the generated executable used by `npx expo98`.
-- `cli/expo-ios.mjs` is a compatibility wrapper.
-- `tests/` verifies package entrypoints, direct CLI use, and packed npm contents.
-- `docs/` contains curated modernization context carried forward from the rewrite.
-
-## Publishing Check
-
-`pnpm pack --dry-run --json` should include only the package files needed by users: license, README, package metadata, `cli/expo98.mjs`, and `cli/expo-ios.mjs`.
+MIT — see `LICENSE`.
