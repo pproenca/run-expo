@@ -13,7 +13,9 @@
     "expo98": "node cli/expo98.mjs",
     "pack:check": "pnpm pack --dry-run --json",
     "prepack": "pnpm run build",
-    "test": "node --test tests/*.mjs"
+    "pretest": "pnpm run build && pnpm run typecheck",
+    "test": "node --test tests/*.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "engines": {
     "node": ">=20",
@@ -28,6 +30,9 @@
   },
   "packageManager": "pnpm@10.33.4",
   "devDependencies": {
-    "esbuild": "^0.25.12"
+    "@types/node": "^25.9.1",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.12",
+    "typescript": "^6.0.3"
   }
 }

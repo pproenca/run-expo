@@ -1,12 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { bridgeDomainCommand } from "../../../bridge-domain-actions/src/main/index.ts";
-import { realValidation } from "../../../../core/real-validation/src/main/index.ts";
 
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { bridgeDomainCommand } from "../../../bridge-domain-actions/src/main/index.ts";
+import { realValidation, type RealValidation } from "../../../../core/real-validation/src/main/index.ts";
 
 export interface RefCache {
   snapshotId?: string | null;
@@ -37,10 +34,6 @@ export interface RnBridgeRequest {
 export interface RnIntrospectionDependencies {
   readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
   bridgeDomainCommand?: (request: RnBridgeRequest) => Promise<Record<string, any>> | Record<string, any>;
-}
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
 }
 
 export async function rnCommand(
@@ -295,7 +288,7 @@ export function rnExpression({ action, ref, depth, limit }: { action: string; re
   })()`;
 }
 
-export function rnRealValidation(payload: Record<string, any>, action: string, subaction: string | null) {
+export function rnRealValidation(payload: Record<string, any>, action: string, subaction: string | null): RealValidation {
   if (payload.available === false) {
     return realValidation({
       state: "unvalidated",

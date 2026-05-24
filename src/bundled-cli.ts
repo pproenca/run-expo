@@ -154,7 +154,7 @@ const runtime = createCliRuntime({
   },
   exitCodeForError,
   handlerImplementations,
-  startRunRecord,
+  startRunRecord: (entry) => startRunRecord(entry as unknown as Parameters<typeof startRunRecord>[0]),
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
   printHelp: () => cliHelpText(CLI_VERSION),

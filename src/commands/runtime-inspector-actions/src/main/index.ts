@@ -4,15 +4,10 @@ import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../.
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
-import { toolJson, unwrapToolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export const INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"] as const;
 export type InspectorAction = (typeof INSPECTOR_ACTIONS)[number];
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface RuntimeInspectorArgs {
   action?: unknown;
@@ -370,10 +365,6 @@ export function truncate(value: unknown, limit = 40_000): string {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}\n[truncated ${text.length - limit} characters]`;
-}
-
-function targetListFirst(targets: unknown): unknown {
-  return Array.isArray(targets) ? targets[0] : null;
 }
 
 function getPath(value: unknown, path: string[]): unknown {

@@ -4,14 +4,10 @@ import path from "node:path";
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { CURRENT_CLI_NAME } from "../../../../core/cli-identity/src/main/index.ts";
 import { realValidation } from "../../../../core/real-validation/src/main/index.ts";
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface NetworkCommandArgs {
   action?: unknown;
@@ -466,7 +462,7 @@ export function normalizeNetworkEvidence(value: unknown, action: string): Networ
       requests: [],
     };
   }
-  if (Array.isArray(normalized.requests)) normalized.requests = normalized.requests.map(normalizeNetworkRequest);
+  if (Array.isArray(normalized.requests)) normalized.requests = normalized.requests.map(normalizeNetworkRequest) as NetworkRequest[];
   if (normalized.request) normalized.request = normalizeNetworkRequest(normalized.request) as NetworkRequest;
   if ((action === "requests" || action === "waterfall" || action === "har-stop") && normalized.available !== false && Array.isArray(normalized.requests) && normalized.requests.length === 0) {
     return {
@@ -715,10 +711,6 @@ export function targetSummary(target: NetworkTarget | null | undefined): Network
       reactNative: Boolean(target.reactNative),
     },
   };
-}
-
-function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
 }
 
 function requireString(value: unknown, field: string): string {

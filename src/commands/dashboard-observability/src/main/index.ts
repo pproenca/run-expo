@@ -1,10 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface StateRootArgs extends Record<string, unknown> {
   stateDir?: string | null;
@@ -22,10 +19,6 @@ export interface DashboardSession {
 }
 
 const DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function dashboardCommand(args: Record<string, unknown> = {}): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];

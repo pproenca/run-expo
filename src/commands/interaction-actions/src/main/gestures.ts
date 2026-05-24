@@ -12,7 +12,6 @@ import {
   requireString,
   reviewQuestions,
   resolveIosInteractionTool,
-  toolJson,
   truncate,
   unwrapToolPayload,
 } from "./shared.js";

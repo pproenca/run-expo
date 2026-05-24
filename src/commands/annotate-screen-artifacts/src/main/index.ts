@@ -1,9 +1,5 @@
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { reviewOverlay } from "../../../review-overlay-workflow/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface AnnotateScreenArgs extends Record<string, unknown> {
   action?: unknown;
@@ -25,10 +21,6 @@ export interface AnnotateScreenDependencies {
 
 const ANNOTATE_ACTIONS = new Set(["prepare", "read", "clear", "scaffold", "server"]);
 const SCAFFOLD_CONFIRMATION = "annotate-overlay-scaffold";
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function annotateScreen(
   args: AnnotateScreenArgs = {},

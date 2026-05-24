@@ -1,3 +1,7 @@
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
+export type { ToolTextResult };
+
 export interface RefBox {
   x: number;
   y: number;
@@ -26,11 +30,6 @@ export interface RefCache {
   snapshotId?: string | null;
   targetId?: string | null;
   refs: RefRecord[];
-}
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
 }
 
 export interface RefActionDependencies {

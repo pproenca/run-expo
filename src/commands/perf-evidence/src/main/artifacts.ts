@@ -14,7 +14,7 @@ export async function writePerfArtifact(args: Record<string, any>, action: strin
   return withArtifact;
 }
 
-export async function parseNativeSampleArtifact(file: string, deps: Pick<PerfDependencies, "readJsonFile"> = {}): Promise<Record<string, any>> {
+export async function parseNativeSampleArtifact(file: string): Promise<Record<string, any>> {
   const text = await readFile(file, "utf8").catch(() => null);
   if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
   const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);

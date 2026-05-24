@@ -2,17 +2,13 @@ import { execFile as nodeExecFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { collectAppLogs } from "../../../app-lifecycle-actions/src/main/index.ts";
 import { metroStatusPayload } from "../../../metro-probes/src/main/index.ts";
 import { projectInfo } from "../../../project-info-doctor/src/main/index.ts";
 import { expoRouteContext } from "../../../router-sitemap/src/main/index.ts";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
 import { automationTakeScreenshot } from "../../../screenshot-capture/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface UxContextDependencies {
   normalizeProjectCwd: (cwd: unknown, options: { allowMissingPackageJson: true }) => Promise<string>;
@@ -59,10 +55,6 @@ export const REVIEW_CONTEXT_QUESTIONS = [
   "Does the app expose a usable simulator hierarchy, or is screenshot/coordinate review the only reliable UI surface?",
   "Are recent native logs showing failed requests, reloads, exceptions, or slow local calls during the reviewed state?",
 ];
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function captureUxContext(
   args: CaptureUxContextArgs = {},
@@ -197,7 +189,7 @@ const defaultUxContextDependencies: UxContextDependencies = {
   captureIosScreenshot: async (udid, outputPath) => unwrapToolJson(await automationTakeScreenshot({
     platform: "ios",
     device: udid,
-    outputPath,
+    outputPath: String(outputPath),
   })) as Record<string, any>,
   analyzePngScreenshot: async (outputPath) => {
     const details = await stat(outputPath).catch(() => null);
@@ -278,16 +270,6 @@ function now(deps: UxContextDependencies): Date {
 
 function nowMs(deps: UxContextDependencies): number {
   return deps.nowMs?.() ?? Date.now();
-}
-
-function unwrapToolJson(result: unknown): unknown {
-  const text = (result as ToolTextResult | null | undefined)?.content?.[0]?.text;
-  if (typeof text !== "string") return result;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
 }
 
 async function defaultNormalizeProjectCwd(cwd: unknown): Promise<string> {

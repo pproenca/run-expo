@@ -3,12 +3,9 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, type StdioOptions } from "node:child_process";
 
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface ReviewOverlayArgs extends Record<string, unknown> {
   action?: unknown;
@@ -36,17 +33,13 @@ export interface ReviewOverlayDependencies {
   writeFile: (file: string, data: string, encoding: "utf8") => Promise<unknown>;
   pathExists: (file: string) => Promise<boolean>;
   findAvailablePort: (start: number) => Promise<number>;
-  openLogFile: (file: string, flags: "a") => Promise<unknown> | unknown;
-  spawnDetached: (command: string, argv: string[], options: { detached: true; stdio: unknown[] }) => Promise<{ pid?: number; unref?: () => void }> | { pid?: number; unref?: () => void };
+  openLogFile: (file: string, flags: "a") => Promise<number> | number;
+  spawnDetached: (command: string, argv: string[], options: { detached: true; stdio: StdioOptions }) => Promise<{ pid?: number; unref?: () => void }> | { pid?: number; unref?: () => void };
   execPath: string;
   scriptPath: string;
 }
 
 const REVIEW_OVERLAY_ACTIONS = new Set(["prepare", "scaffold", "server", "read", "clear"]);
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function reviewOverlay(
   args: ReviewOverlayArgs = {},
@@ -206,7 +199,13 @@ export function codexReviewOverlayComponentSource(): string {
   return `import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }) {
+type CodexReviewOverlayProps = {
+  endpoint?: string;
+  screenName?: string;
+  inspectedViewRef?: React.RefObject<unknown>;
+};
+
+export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }: CodexReviewOverlayProps): React.ReactElement {
   const [active, setActive] = useState(false);
   const [events, setEvents] = useState([]);
   const sequence = useRef(0);

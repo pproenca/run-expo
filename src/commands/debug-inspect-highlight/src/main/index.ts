@@ -1,16 +1,10 @@
 import { mkdir as fsMkdir, readdir, readFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
-
-export interface RefCache {
-  snapshotId?: string | null;
-  targetId?: string | null;
-  refs?: Array<Record<string, any>>;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import type { RefCache, RefRecord } from "../../../snapshot-evidence/src/main/index.ts";
+import type { SessionRecord } from "../../../../state/session-run-records/src/main/index.ts";
+import type { TargetRecord } from "../../../../state/target-management/src/main/index.ts";
 
 export interface StateRootArgs extends Record<string, unknown> {
   stateDir?: string | null;
@@ -20,17 +14,17 @@ export interface StateRootArgs extends Record<string, unknown> {
 
 export interface DebugInspectDependencies {
   readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
-  readLatestSession?: (stateRoot: string) => Promise<Record<string, any> | null> | Record<string, any> | null;
-  readSelectedTarget?: (stateRoot: string, session: Record<string, any>) => Promise<Record<string, any> | null> | Record<string, any> | null;
+  readLatestSession?: (stateRoot: string) => Promise<SessionRecord | null> | SessionRecord | null;
+  readSelectedTarget?: (stateRoot: string, session: SessionRecord) => Promise<TargetRecord | null> | TargetRecord | null;
   metroStatusPayload?: (args: { metroPort: number }) => Promise<Record<string, any>> | Record<string, any>;
   mkdir?: (path: string, options: { recursive: true }) => Promise<void> | void;
   writeFile?: (path: string, data: string, encoding: "utf8") => Promise<void> | void;
   now?: () => Date;
 }
 
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
+export type RefRecordLookup =
+  | { available: false; reason: string; ref: string }
+  | { available: true; record: RefRecord; cache: RefCache };
 
 export async function debugInspectCommand(
   args: Record<string, unknown> = {},
@@ -83,7 +77,7 @@ export async function debugInspectPayload(
       box: record.box ?? null,
       source: record.source ?? null,
       component: record.component ?? null,
-      props: record.props ?? null,
+      props: asRecord(record)?.props ?? null,
       actions: record.actions ?? [],
       stale: record.stale === true,
     },
@@ -146,7 +140,7 @@ export async function highlightCommand(
 
 export function highlightSvg({ ref, record, durationMs }: {
   ref: string;
-  record: Record<string, any>;
+  record: RefRecord;
   durationMs?: unknown;
 }): string {
   const box = asBox(record.box);
@@ -166,7 +160,7 @@ export async function readRefRecord(
   ref: string,
   args: Record<string, unknown> = {},
   deps: Pick<DebugInspectDependencies, "readLatestRefCache"> = {},
-): Promise<Record<string, any>> {
+): Promise<RefRecordLookup> {
   const cache = await readLatestRefCache(args, deps);
   if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
   const record = (cache.refs ?? []).find((item) => item.ref === ref);
@@ -183,24 +177,27 @@ export async function readLatestRefCache(
   const stateRoot = resolveExpoStateRoot(args);
   const session = await readLatestSession(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null) as Promise<RefCache | null>;
+  const parsed = await readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return asRefCache(parsed);
 }
 
-export async function readLatestSession(stateRoot: string): Promise<Record<string, any> | null> {
+export async function readLatestSession(stateRoot: string): Promise<SessionRecord | null> {
   const sessionsRoot = join(stateRoot, "sessions");
   const entries = await readdir(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
-    if (record) sessions.push(record);
+    const session = asSessionRecord(record);
+    if (session) sessions.push(session);
   }
-  sessions.sort((a, b) => String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt)));
-  return asRecord(sessions[0]);
+  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
+  return sessions[0] ?? null;
 }
 
-export async function readSelectedTarget(stateRoot: string, session: Record<string, any>): Promise<Record<string, any> | null> {
-  return readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "target.json")).then(asRecord).catch(() => null);
+export async function readSelectedTarget(stateRoot: string, session: SessionRecord): Promise<TargetRecord | null> {
+  const parsed = await readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "target.json")).catch(() => null);
+  return asTargetRecord(parsed);
 }
 
 export function resolveExpoStateRoot(args: StateRootArgs = {}): string {
@@ -241,15 +238,15 @@ export function escapeHtml(value: unknown): string {
 async function latestSession(
   stateRoot: string,
   deps: Pick<DebugInspectDependencies, "readLatestSession">,
-): Promise<Record<string, any> | null> {
+): Promise<SessionRecord | null> {
   return deps.readLatestSession ? deps.readLatestSession(stateRoot) : readLatestSession(stateRoot);
 }
 
 async function selectedTarget(
   stateRoot: string,
-  session: Record<string, any>,
+  session: SessionRecord,
   deps: Pick<DebugInspectDependencies, "readSelectedTarget">,
-): Promise<Record<string, any> | null> {
+): Promise<TargetRecord | null> {
   return deps.readSelectedTarget ? deps.readSelectedTarget(stateRoot, session) : readSelectedTarget(stateRoot, session);
 }
 
@@ -276,4 +273,20 @@ function firstPositional(args: Record<string, unknown>): unknown {
 
 function asRecord(value: unknown): Record<string, any> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+}
+
+function asRefCache(value: unknown): RefCache | null {
+  const record = asRecord(value);
+  if (!record || !Array.isArray(record.refs)) return null;
+  return record as RefCache;
+}
+
+function asSessionRecord(value: unknown): SessionRecord | null {
+  const record = asRecord(value);
+  return typeof record?.sessionId === "string" ? record as SessionRecord : null;
+}
+
+function asTargetRecord(value: unknown): TargetRecord | null {
+  const record = asRecord(value);
+  return typeof record?.targetId === "string" ? record as TargetRecord : null;
 }

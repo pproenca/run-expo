@@ -1,4 +1,7 @@
 import { CURRENT_CLI_NAME, CLI_VERSION } from "../../../../core/cli-identity/src/main/index.ts";
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
+export type { ToolTextResult };
 
 export const CLI_NAME = CURRENT_CLI_NAME;
 export { CLI_VERSION };
@@ -87,8 +90,3 @@ export type RunRecorder = {
 
 export type Clock = () => Date;
 export type RandomSuffix = () => string;
-
-export type ToolTextResult = {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};

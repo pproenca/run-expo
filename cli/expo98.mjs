@@ -1239,7 +1239,7 @@ function boundOutput(text, globals = { maxOutput: null }) {
   if (globals.maxOutput === null || globals.maxOutput === void 0) {
     return text;
   }
-  const max = clampNumber2(globals.maxOutput, 1, 1e7);
+  const max = clampNumber(globals.maxOutput, 1, 1e7);
   if (text.length <= max) {
     return text;
   }
@@ -1317,7 +1317,7 @@ function errorCodeForExitCode(exitCode) {
   if (exitCode === EXIT_RUNTIME_FAILURE) return "runtime_failure";
   return "error";
 }
-function clampNumber2(value, min, max) {
+function clampNumber(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -2110,7 +2110,7 @@ async function defaultReadFile(filePath, encoding) {
 // src/commands/device-listing/src/main/index.ts
 import { execFile as nodeExecFile } from "node:child_process";
 var MAX_OUTPUT2 = 4e4;
-function clampNumber3(value, min, max) {
+function clampNumber2(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
@@ -2142,7 +2142,7 @@ async function listIosPhysicalDevices(limit, dependencies) {
 }
 async function listDevices(args = {}, dependencies = defaultDeviceListingDependencies) {
   const platform = args.platform ?? "all";
-  const limit = clampNumber3(args.limit ?? 40, 1, 200);
+  const limit = clampNumber2(args.limit ?? 40, 1, 200);
   const payload = {};
   if (platform === "ios" || platform === "all") {
     payload.ios = await safeToolSection2(async () => listIosSimulators(limit, dependencies));
@@ -2490,7 +2490,7 @@ function requireString2(value, field) {
   }
   return value.trim();
 }
-function clampNumber4(value, min, max) {
+function clampNumber3(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -2522,7 +2522,7 @@ function processNameFromBundleId(bundleId) {
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") || null : null;
 }
 function clampMetroPort(value) {
-  return clampNumber4(value ?? 8081, 1, 65535);
+  return clampNumber3(value ?? 8081, 1, 65535);
 }
 function targetRecord(input) {
   const bundleId = input.metroTarget?.appId ?? null;
@@ -2751,12 +2751,12 @@ function buildSnapshotFilters(args = {}) {
   return {
     interactiveOnly: args.interactive === true,
     compact: args.compact === true,
-    depth: args.depth === void 0 ? null : clampNumber5(args.depth, 1, 100),
+    depth: args.depth === void 0 ? null : clampNumber4(args.depth, 1, 100),
     includeSource: args.source === true,
     includeBounds: args.bounds === true
   };
 }
-function clampNumber5(value, min, max) {
+function clampNumber4(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -3260,7 +3260,7 @@ var MAX_OUTPUT4 = 16384;
 function toolJson6(value) {
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
 }
-function clampNumber6(value, min, max) {
+function clampNumber5(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
@@ -3306,7 +3306,7 @@ async function metroCommand(args = {}, deps = {}) {
   return toolJson6(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
 }
 async function metroStatusPayload(args = {}, deps = {}) {
-  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
   return new MetroInspectorClient(metroPort, deps).statusPayload();
 }
 async function metroTargets(metroPort, deps = {}) {
@@ -3507,7 +3507,7 @@ function asRecord2(value) {
   return value && typeof value === "object" ? value : null;
 }
 async function metroReloadPayload(args, deps = {}) {
-  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
   const targets = await metroTargets(metroPort, deps);
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
@@ -3534,7 +3534,7 @@ async function metroSymbolicatePayload(args, deps = {}) {
   const readTextFile = deps.readTextFile ?? fs3.readFile;
   const resolvedStackFile = resolvePath2(stackFile);
   const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
-  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
   const result = await postMetroSymbolicate(metroPort, stack, deps);
   return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
 }
@@ -3677,7 +3677,9 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
 var defaultSnapshotDependencies = {
   now: () => /* @__PURE__ */ new Date(),
   randomSuffix: randomBase36Suffix,
-  ensureDirectory: (path12) => mkdir6(path12, { recursive: true }),
+  ensureDirectory: async (path12) => {
+    await mkdir6(path12, { recursive: true });
+  },
   writeJsonFile: writeJson2,
   updateSessionRecord: async (stateRoot, record) => {
     await mkdir6(sessionDirectory(stateRoot, record.sessionId), { recursive: true });
@@ -3704,7 +3706,7 @@ var defaultSnapshotDependencies = {
   describeNativeUi: (axePath, deviceId) => execFile3(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12e3 })
 };
 async function captureSemanticBridge(args, context) {
-  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
   const targets = await metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -3877,7 +3879,7 @@ function normalizeBox(value) {
   const height = numberOrNull(record.height ?? record.h);
   return x == null || y == null || width == null || height == null ? null : { x, y, width, height };
 }
-function clampNumber7(value, min, max) {
+function clampNumber6(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -3942,7 +3944,7 @@ function requireString5(value, field) {
   }
   return value.trim();
 }
-function clampNumber8(value, min, max) {
+function clampNumber7(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -4016,7 +4018,7 @@ async function scrollPlanWithDeps(args, deps) {
     maybeRef ? args.targetRef ?? args.direction : args.direction ?? args.ref,
     "direction"
   ).toLowerCase();
-  const amount = clampNumber8(args.amount ?? args.text ?? 600, 1, 5e3);
+  const amount = clampNumber7(args.amount ?? args.text ?? 600, 1, 5e3);
   const origin = maybeRef ? await readRefPoint(maybeRef, args, deps) : { available: true, point: { x: 200, y: 700 } };
   if (origin.available === false) {
     return origin;
@@ -4156,7 +4158,7 @@ function findMatches(refs, kind, value, name) {
     return match ? [match] : [];
   }
   if (kind === "nth") {
-    const index = clampNumber8(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
+    const index = clampNumber7(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
     const needle = requireString5(name, "name");
     const matches = refs.filter(
       (record) => refMatches(record, "source", needle) || refMatches(record, "text", needle) || refMatches(record, "label", needle)
@@ -4202,11 +4204,11 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
   const now4 = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
   const started = now4();
-  const timeoutMs = clampNumber8(args.timeoutMs ?? 5e3, 0, 6e4);
+  const timeoutMs = clampNumber7(args.timeoutMs ?? 5e3, 0, 6e4);
   const intervalMs = Math.min(Math.max(Math.floor(timeoutMs / 10), 25), 250);
   const predicate = waitPredicate(args);
   if (!predicate) {
-    const ms = clampNumber8(args.ms ?? 0, 0, 6e4);
+    const ms = clampNumber7(args.ms ?? 0, 0, 6e4);
     if (ms > 0) await sleep(ms);
     return toolJson({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now4() - started });
   }
@@ -4786,7 +4788,7 @@ async function attachIosCrashEvidence(payload, options, deps) {
 }
 async function iosCrashEvidence(args, deps = defaultAppLifecycleDependencies) {
   const sinceMs = finiteNumber(args.sinceMs ?? deps.now());
-  const delay = clampNumber9(args.waitMs ?? 0, 0, 3e4);
+  const delay = clampNumber8(args.waitMs ?? 0, 0, 3e4);
   if (delay > 0) await deps.wait(delay);
   const bundleId = optionalString3(args.bundleId);
   const processName = optionalString3(args.processName);
@@ -4927,7 +4929,7 @@ async function collectAppLogs(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   if (platform === "android") {
     const device2 = optionalString3(args.device);
-    const lines = String(clampNumber9(args.lines ?? 500, 1, 5e3));
+    const lines = String(clampNumber8(args.lines ?? 500, 1, 5e3));
     const result2 = await deps.execFile("adb", androidDeviceArgs(device2, ["logcat", "-d", "-t", lines]), {
       timeout: 3e4,
       maxBuffer: 4 * 1024 * 1024,
@@ -5086,7 +5088,7 @@ function androidDeviceArgs(device, args) {
   const requested = optionalString3(device);
   return requested ? ["-s", requested, ...args] : args;
 }
-function clampNumber9(value, min, max) {
+function clampNumber8(value, min, max) {
   const number = finiteNumber(value);
   return Math.min(max, Math.max(min, number));
 }
@@ -5383,9 +5385,9 @@ function realValidation(input) {
 
 // src/commands/interaction-trace-expression/src/main/index.ts
 async function traceInteraction(args = {}, deps = defaultTraceInteractionDependencies) {
-  const metroPort = clampNumber10(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber9(args.metroPort ?? 8081, 1, 65535);
   const action = args.action;
-  const maxEvents = clampNumber10(args.maxEvents ?? 300, 1, 2e3);
+  const maxEvents = clampNumber9(args.maxEvents ?? 300, 1, 2e3);
   const includeEvents = args.includeEvents === true;
   const componentFilter = requireOptionalString3(args.componentFilter);
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
@@ -5937,7 +5939,7 @@ function traceRealValidation(trace, action) {
 function requireOptionalString3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber10(value, min, max) {
+function clampNumber9(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -6005,7 +6007,7 @@ async function captureFullScreenshot(args, deps = {}) {
   const outputPath = path5.resolve(
     args.outputPath ?? path5.join(os.tmpdir(), "expo98-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`)
   );
-  const segmentCount = clampNumber11(args.fullSegments ?? args.segments ?? 3, 1, 12);
+  const segmentCount = clampNumber10(args.fullSegments ?? args.segments ?? 3, 1, 12);
   const segmentDir = path5.join(path5.dirname(outputPath), `${path5.basename(outputPath, path5.extname(outputPath))}-segments`);
   await mkdir8(segmentDir, deps);
   const segments = [];
@@ -6278,7 +6280,7 @@ function screenshotOverlaySize(labels) {
 function escapeHtml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber11(value, min, max) {
+function clampNumber10(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -6462,7 +6464,7 @@ function requireString8(value, field) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber12(value, min, max) {
+function clampNumber11(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${value}.`);
   return Math.min(Math.max(number, min), max);
@@ -6723,12 +6725,12 @@ async function automationGestureInternal(args, deps, policyChecked) {
   const gesture = normalizeGesture(args.gesture);
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber12(args.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber12(args.intervalMs ?? 250, 0, 1e4);
-  const durationMs = clampNumber12(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
-  const holdMs = args.holdMs === void 0 ? null : clampNumber12(args.holdMs, 0, 3e4);
-  const metroPort = clampNumber12(args.metroPort ?? 8081, 1, 65535);
-  const maxEvents = clampNumber12(args.maxEvents ?? 200, 1, 2e3);
+  const repeat = clampNumber11(args.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber11(args.intervalMs ?? 250, 0, 1e4);
+  const durationMs = clampNumber11(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
+  const holdMs = args.holdMs === void 0 ? null : clampNumber11(args.holdMs, 0, 3e4);
+  const metroPort = clampNumber11(args.metroPort ?? 8081, 1, 65535);
+  const maxEvents = clampNumber11(args.maxEvents ?? 200, 1, 2e3);
   const componentFilter = optionalString4(args.componentFilter);
   const cwd = optionalString4(args.cwd) ?? ".";
   const coordinates = normalizeGestureCoordinates(gesture, args);
@@ -6804,15 +6806,15 @@ function defaultGestureDurationMs(gesture) {
 function normalizeGestureCoordinates(gesture, args) {
   if (gesture === "tap" || gesture === "long-press") {
     return {
-      x: clampNumber12(args.x, 0, Number.MAX_SAFE_INTEGER),
-      y: clampNumber12(args.y, 0, Number.MAX_SAFE_INTEGER)
+      x: clampNumber11(args.x, 0, Number.MAX_SAFE_INTEGER),
+      y: clampNumber11(args.y, 0, Number.MAX_SAFE_INTEGER)
     };
   }
   return {
-    startX: clampNumber12(args.startX, 0, Number.MAX_SAFE_INTEGER),
-    startY: clampNumber12(args.startY, 0, Number.MAX_SAFE_INTEGER),
-    endX: clampNumber12(args.endX, 0, Number.MAX_SAFE_INTEGER),
-    endY: clampNumber12(args.endY, 0, Number.MAX_SAFE_INTEGER)
+    startX: clampNumber11(args.startX, 0, Number.MAX_SAFE_INTEGER),
+    startY: clampNumber11(args.startY, 0, Number.MAX_SAFE_INTEGER),
+    endX: clampNumber11(args.endX, 0, Number.MAX_SAFE_INTEGER),
+    endY: clampNumber11(args.endY, 0, Number.MAX_SAFE_INTEGER)
   };
 }
 function gestureCommandPlan(args) {
@@ -6852,8 +6854,8 @@ async function executeGesturePlanInternal(args, deps, policyChecked) {
   const gesture = optionalString4(args.gesture) ?? "unknown";
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber12(args.repeat ?? plan.repeat, 1, 20);
-  const intervalMs = clampNumber12(args.intervalMs ?? plan.intervalMs, 0, 1e4);
+  const repeat = clampNumber11(args.repeat ?? plan.repeat, 1, 20);
+  const intervalMs = clampNumber11(args.intervalMs ?? plan.intervalMs, 0, 1e4);
   if (platform === "android") {
     const adb = await deps.commandPath("adb");
     if (!adb) return { available: false, reason: "Android gestures require adb, which is not installed or not on PATH.", plan };
@@ -6906,8 +6908,8 @@ function axeGestureCommandFromPlan(args) {
   return axeCommand;
 }
 async function executeRepeatedCommandInternal(command, args, options, deps) {
-  const repeat = clampNumber12(options.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber12(options.intervalMs ?? 0, 0, 1e4);
+  const repeat = clampNumber11(options.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber11(options.intervalMs ?? 0, 0, 1e4);
   const runs = [];
   for (let index = 0; index < repeat; index += 1) {
     const result = await deps.execFile(command, args, { timeout: 35e3, rejectOnError: false });
@@ -6998,7 +7000,7 @@ function keyCodeFor(key) {
     esc: 41
   };
   if (known[normalized]) return known[normalized];
-  if (/^\d+$/.test(normalized)) return clampNumber(Number(normalized), 0, 255);
+  if (/^\d+$/.test(normalized)) return clampNumber11(Number(normalized), 0, 255);
   if (/^[a-z]$/.test(normalized)) return normalized.charCodeAt(0) - 93;
   throw new Error(`Unknown key: ${key}`);
 }
@@ -7020,8 +7022,8 @@ async function automationTapInternal(args, deps, policyChecked) {
     return automationTapInternal({ ...args, ref: void 0, x: point.x, y: point.y }, deps, true);
   }
   const platform = platformArg2(args.platform);
-  const x = String(clampNumber12(args.x, 0, Number.MAX_SAFE_INTEGER));
-  const y = String(clampNumber12(args.y, 0, Number.MAX_SAFE_INTEGER));
+  const x = String(clampNumber11(args.x, 0, Number.MAX_SAFE_INTEGER));
+  const y = String(clampNumber11(args.y, 0, Number.MAX_SAFE_INTEGER));
   if (args.dryRun === true) {
     const iosTool = platform === "ios" ? await resolveIosInteractionTool(deps) : null;
     const iosCommand = iosTool?.tool === "axe" ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString4(args.device) ?? "<booted-device>"] : ["idb", "ui", "tap", x, y, "--udid", optionalString4(args.device) ?? "<booted-device>"];
@@ -7209,7 +7211,7 @@ async function captureUxContext(args = {}, deps = defaultUxContextDependencies) 
   const startedAt = nowMs(deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
-  const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber12(args.metroPort ?? 8081, 1, 65535);
   const context = {
     capturedAt: now(deps).toISOString(),
     cwd,
@@ -7314,7 +7316,7 @@ var defaultUxContextDependencies = {
   captureIosScreenshot: async (udid, outputPath) => unwrapToolJson3(await automationTakeScreenshot({
     platform: "ios",
     device: udid,
-    outputPath
+    outputPath: String(outputPath)
   })),
   analyzePngScreenshot: async (outputPath) => {
     const details = await stat4(outputPath).catch(() => null);
@@ -7359,7 +7361,7 @@ function processNameFromBundleId2(bundleId) {
   const last = String(bundleId).split(".").filter(Boolean).at(-1);
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") : null;
 }
-function clampNumber13(value, min, max) {
+function clampNumber12(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7457,7 +7459,7 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
   const data = await deps.createEventsFile({ outputDir, title, reset: false });
   let server = null;
   if (args.serve === true) {
-    const port = args.port ? clampNumber14(args.port, 1, 65535) : await deps.findAvailablePort(17655);
+    const port = args.port ? clampNumber13(args.port, 1, 65535) : await deps.findAvailablePort(17655);
     const endpointPath = normalizeEndpointPath(args.endpointPath);
     const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
     const logFd = await deps.openLogFile(logPath, "a");
@@ -7561,7 +7563,7 @@ function normalizeEndpointPath(value) {
 function requireOptionalString5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber14(value, min, max) {
+function clampNumber13(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7572,7 +7574,13 @@ function codexReviewOverlayComponentSource() {
   return `import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }) {
+type CodexReviewOverlayProps = {
+  endpoint?: string;
+  screenName?: string;
+  inspectedViewRef?: React.RefObject<unknown>;
+};
+
+export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }: CodexReviewOverlayProps): React.ReactElement {
   const [active, setActive] = useState(false);
   const [events, setEvents] = useState([]);
   const sequence = useRef(0);
@@ -7681,7 +7689,7 @@ async function readEvents(eventsPath, options = {}) {
 }
 async function reviewOverlayServer(args) {
   const dir = path7.resolve(args.dir);
-  const port = args.port ? clampNumber14(args.port, 1, 65535) : await findAvailablePort(17655);
+  const port = args.port ? clampNumber13(args.port, 1, 65535) : await findAvailablePort(17655);
   const endpointPath = normalizeEndpointPath(args.endpointPath);
   await mkdir10(dir, { recursive: true });
   await createEventsFile({ outputDir: dir, reset: false });
@@ -7811,10 +7819,10 @@ function isRecord7(value) {
 import { execFile as nodeExecFile9 } from "node:child_process";
 var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"];
 async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
   const commentTitle = requireOptionalString7(args.commentTitle) ?? "Codex: Add UI comment";
-  const maxComments = clampNumber15(args.maxComments ?? 50, 1, 500);
+  const maxComments = clampNumber14(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
     return toolJson(await deps.openIosDevMenu({ ...args, metroPort }));
   }
@@ -7859,7 +7867,7 @@ function normalizeRuntimeInspectorAction(value) {
   return action;
 }
 async function openIosDevMenu(args, deps) {
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
   let messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
   if (messageSocket.available) {
     return {
@@ -8053,7 +8061,7 @@ function targetSummary3(target) {
     description: record.description
   };
 }
-function clampNumber15(value, min, max) {
+function clampNumber14(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -8150,7 +8158,7 @@ async function reviewNextStep(args = {}) {
   const stage = args.stage ?? "intake";
   const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
   const cwd = requireOptionalString8(args.cwd) ?? ".";
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const componentFilter = requireOptionalString8(args.componentFilter);
   const verifierRule = requireOptionalString8(args.verifierRule);
   const flags = reviewFlags(args);
@@ -8397,7 +8405,7 @@ function requireOptionalString8(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : void 0;
 }
-function clampNumber16(value, min, max) {
+function clampNumber15(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return min;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
@@ -8451,7 +8459,7 @@ function requireString10(value, name) {
   }
   return value.trim();
 }
-function clampNumber17(value, min, max) {
+function clampNumber16(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
@@ -8763,8 +8771,8 @@ async function errorsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDepende
 }
 async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   const action = args.action ?? "read";
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber16(args.limit ?? 100, 1, 1e3);
   const targetDiscovery = await metroTargetDiscovery(metroPort, deps);
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
@@ -8782,8 +8790,9 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtools
   }
   if (action === "clear") {
     const result2 = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
+    const value2 = valueFromHermes(result2);
     return toolJson15({
-      ...valueFromHermes(result2) ?? { available: false, reason: result2?.error ?? "Runtime diagnostics did not return a value." },
+      ...value2 && typeof value2 === "object" && !Array.isArray(value2) ? value2 : { available: false, reason: result2?.error ?? "Runtime diagnostics did not return a value." },
       kind,
       action,
       metroPort,
@@ -8897,7 +8906,7 @@ function frontendUrlForTarget(target, metroPort) {
 }
 async function metroStatusPayload2(args, deps) {
   if (deps.metroStatusPayload) return deps.metroStatusPayload(args);
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
   const baseUrl = `http://127.0.0.1:${metroPort}`;
   const status = await fetchText(deps, `${baseUrl}/status`, 1500);
   if (!status.available) {
@@ -9171,7 +9180,7 @@ var NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
   "Use open-route or navigation deep-link when only URL navigation is available."
 ];
-function clampNumber18(value, min, max) {
+function clampNumber17(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9259,7 +9268,7 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
     throw new Error(`Unknown navigation action: ${action}`);
   }
   if (action === "deep-link") return toolJson16(await navigationDeepLink(args, deps));
-  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
   const policy = await navigationPolicyDecision(args, action, deps);
   if (!policy.allowed) {
     return toolJson16({
@@ -9524,7 +9533,7 @@ var UNAVAILABLE_LIMITATIONS = [
   "Network evidence requires dev-only app instrumentation that patches fetch/XHR or an equivalent app network adapter.",
   "Native networking stacks are unavailable unless the app exposes them through the bridge."
 ];
-function clampNumber19(value, min, max) {
+function clampNumber18(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9539,8 +9548,8 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   if (harAction && !["start", "stop"].includes(harAction)) {
     throw new Error(`Unknown network HAR action: ${harAction}`);
   }
-  const metroPort = clampNumber19(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber19(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber18(args.limit ?? 100, 1, 1e3);
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -10208,7 +10217,7 @@ async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies)
       action,
       key,
       value,
-      limit: clampNumber20(args.limit ?? 100, 1, 1e3)
+      limit: clampNumber19(args.limit ?? 100, 1, 1e3)
     }),
     policy
   }, deps));
@@ -10250,7 +10259,7 @@ var defaultBridgeDomainDependencies = {
   resolvePath: (file) => path9.resolve(file)
 };
 async function bridgeDomainCommand(input, deps = defaultBridgeDomainDependencies) {
-  const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber19(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
   if (sideEffect !== "read" && input.policy?.allowed !== true) {
     return policyDeniedPayload({ domain: input.domain, action: input.action, policy: input.policy ?? {
@@ -10520,7 +10529,7 @@ function targetSummary7(target) {
     }
   });
 }
-function clampNumber20(value, min, max) {
+function clampNumber19(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -10771,7 +10780,11 @@ function bridgeSource() {
 export const expo98DevtoolsBridgeMetadata = ${JSON.stringify(bridgeMetadata(), null, 2)} as const;
 export const expoIosDevtoolsBridgeMetadata = expo98DevtoolsBridgeMetadata;
 
-export function registerExpoIosDevtoolsBridge() {
+type Expo98DevtoolsBridgeRegistration =
+  | { registered: false; reason: "development-mode-required" | "production-build" }
+  | { registered: true; metadata: typeof expo98DevtoolsBridgeMetadata };
+
+export function registerExpoIosDevtoolsBridge(): Expo98DevtoolsBridgeRegistration {
   if (typeof __DEV__ === "undefined") return { registered: false, reason: "development-mode-required" };
   if (!__DEV__) return { registered: false, reason: "production-build" };
   const bridge = {
@@ -10983,9 +10996,10 @@ function auditAccessibilityRefs(cache) {
 async function readLatestRefCache4(args = {}, deps = {}) {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot5(args);
-  const session = asRecord12(await readLatestSession4(stateRoot));
+  const session = await readLatestSession4(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile7(join10(sessionDirectory2(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  const parsed = await readJsonFile7(join10(sessionDirectory2(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return asRefCache(parsed);
 }
 async function semanticBridgeTree(args, deps = {}) {
   if (!deps.semanticBridgeSnapshot) return null;
@@ -11006,9 +11020,10 @@ async function readLatestSession4(stateRoot) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const record = await readJsonFile7(join10(sessionsRoot, entry.name, "session.json")).catch(() => null);
-    if (record) sessions.push(record);
+    const session = asSessionRecord(record);
+    if (session) sessions.push(session);
   }
-  sessions.sort((a, b) => String(asRecord12(b)?.updatedAt ?? asRecord12(b)?.createdAt).localeCompare(String(asRecord12(a)?.updatedAt ?? asRecord12(a)?.createdAt)));
+  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
   return sessions[0] ?? null;
 }
 function resolveExpoStateRoot5(args = {}) {
@@ -11040,6 +11055,15 @@ function formatError12(error) {
 }
 function asRecord12(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function asRefCache(value) {
+  const record = asRecord12(value);
+  if (!record || !Array.isArray(record.refs)) return null;
+  return record;
+}
+function asSessionRecord(value) {
+  const record = asRecord12(value);
+  return typeof record?.sessionId === "string" ? record : null;
 }
 
 // src/commands/modal-blocker-actions/src/main/index.ts
@@ -11083,7 +11107,7 @@ async function modalBridgeCommand(input, deps) {
   }, deps));
 }
 async function bridgeDomainCommand2(input, deps) {
-  const metroPort = clampNumber21(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
   const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -11191,7 +11215,7 @@ function targetSummary8(target) {
     }
   });
 }
-function clampNumber21(value, min, max) {
+function clampNumber20(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -11672,7 +11696,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
       sessionId: session?.sessionId ?? null
     };
   }
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber21(args.metroPort ?? 8081, 1, 65535);
   const metro = await metroStatus({ metroPort }, deps);
   const target = session ? await selectedTarget(stateRoot, session, deps) : null;
   const record = found.record;
@@ -11700,7 +11724,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
       box: record.box ?? null,
       source: record.source ?? null,
       component: record.component ?? null,
-      props: record.props ?? null,
+      props: asRecord16(record)?.props ?? null,
       actions: record.actions ?? [],
       stale: record.stale === true
     },
@@ -11780,7 +11804,8 @@ async function readLatestRefCache6(args = {}, deps = {}) {
   const stateRoot = resolveExpoStateRoot8(args);
   const session = await readLatestSession7(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  const parsed = await readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return asRefCache2(parsed);
 }
 async function readLatestSession7(stateRoot) {
   const sessionsRoot = join13(stateRoot, "sessions");
@@ -11789,13 +11814,15 @@ async function readLatestSession7(stateRoot) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const record = await readJsonFile10(join13(sessionsRoot, entry.name, "session.json")).catch(() => null);
-    if (record) sessions.push(record);
+    const session = asSessionRecord2(record);
+    if (session) sessions.push(session);
   }
-  sessions.sort((a, b) => String(asRecord16(b)?.updatedAt ?? asRecord16(b)?.createdAt).localeCompare(String(asRecord16(a)?.updatedAt ?? asRecord16(a)?.createdAt)));
-  return asRecord16(sessions[0]);
+  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
+  return sessions[0] ?? null;
 }
 async function readSelectedTarget(stateRoot, session) {
-  return readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "target.json")).then(asRecord16).catch(() => null);
+  const parsed = await readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "target.json")).catch(() => null);
+  return asTargetRecord(parsed);
 }
 function resolveExpoStateRoot8(args = {}) {
   if (args.stateDir) {
@@ -11815,7 +11842,7 @@ function requireString19(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber22(value, min, max) {
+function clampNumber21(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -11846,6 +11873,19 @@ function firstPositional(args) {
 }
 function asRecord16(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function asRefCache2(value) {
+  const record = asRecord16(value);
+  if (!record || !Array.isArray(record.refs)) return null;
+  return record;
+}
+function asSessionRecord2(value) {
+  const record = asRecord16(value);
+  return typeof record?.sessionId === "string" ? record : null;
+}
+function asTargetRecord(value) {
+  const record = asRecord16(value);
+  return typeof record?.targetId === "string" ? record : null;
 }
 
 // src/commands/expo-introspection-actions/src/main/index.ts
@@ -12700,7 +12740,7 @@ function requireString22(value, name) {
 function requireOptionalString9(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-function clampNumber23(value, min, max) {
+function clampNumber22(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -13054,7 +13094,7 @@ var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure",
 
 // src/commands/perf-evidence/src/main/runtime-bridge.ts
 async function collectRuntimeBridgeEvidence(args, deps, expression) {
-  const metroPort = clampNumber23(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
   const targets = await listMetroTargets(metroPort, deps);
   const target = targets[0] ?? null;
   const projectRoot = await projectCwd(args.cwd, deps);
@@ -13337,7 +13377,7 @@ function perfActionDispatchSection() {
 async function perfSummaryPayload(args = {}, deps = {}) {
   const cwd = await projectCwd(args.cwd, deps);
   const summary = await projectSummary(cwd, deps);
-  const metroPort = clampNumber23(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
   const metro = await metroStatus2({ metroPort }, deps);
   const metrics = [];
   const unavailableSources = [];
@@ -13505,7 +13545,7 @@ async function perfBudgetPayload(args = {}, deps = {}) {
   }, deps);
 }
 async function perfMemoryPayload(args = {}, deps = {}) {
-  const samples = clampNumber23(args.samples ?? 1, 1, 100);
+  const samples = clampNumber22(args.samples ?? 1, 1, 100);
   const nativeArtifact = requireOptionalString9(args.nativeArtifact);
   const projectRoot = await projectCwd(args.cwd, deps);
   const metrics = [perfMetric({
@@ -13546,7 +13586,7 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
   if (profiler === "ettrace" && subaction === "start" && args.pid !== void 0) {
     const pid = requirePid(args.pid);
     samplePid = pid;
-    const seconds = String(clampNumber23(args.seconds ?? 1, 1, 30));
+    const seconds = String(clampNumber22(args.seconds ?? 1, 1, 30));
     sampleSeconds = Number(seconds);
     sampleResult = await execFile9("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1e3 });
   } else if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
@@ -13654,7 +13694,7 @@ async function dashboardCommand(args = {}) {
     available: true,
     action,
     status,
-    port: clampNumber24(args.port ?? previous?.port ?? 0, 0, 65535),
+    port: clampNumber23(args.port ?? previous?.port ?? 0, 0, 65535),
     stateRoot,
     sessions: await dashboardSessions(stateRoot),
     artifacts: {
@@ -13721,7 +13761,7 @@ async function writeJsonFile8(file, value) {
 function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber24(value, min, max) {
+function clampNumber23(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -14484,7 +14524,8 @@ function materializeLiveBacklogArgv(argv, args, rowDir) {
 }
 function parseBacklogJson(stdout) {
   try {
-    return JSON.parse(stdout);
+    const parsed = JSON.parse(stdout);
+    return asRecord20(parsed);
   } catch {
     return null;
   }
@@ -14496,7 +14537,7 @@ function classifyLiveBacklogRow(row, exitCode, parsed) {
     if (row.expectedClass === "expected-usage-error") return "expected-usage-error";
     return "defect";
   }
-  const data = parsed?.data ?? parsed;
+  const data = asRecord20(parsed?.data) ?? parsed;
   const requiresRuntime = row.requirements.some((requirement) => ["metro", "metro-message", "hermes-target", "app-bridge"].includes(requirement));
   if (requiresRuntime && !hasLiveRuntimeEvidence(data, row.requirements)) return "environment-blocked";
   if (data?.available === false) {
@@ -14508,23 +14549,34 @@ function classifyLiveBacklogRow(row, exitCode, parsed) {
   return row.requirements.length > 0 || row.mutatesRuntime ? "live-pass" : "static-pass";
 }
 function hasLiveRuntimeEvidence(data, requirements) {
-  if (!data || typeof data !== "object") return false;
+  const record = asRecord20(data);
+  if (!record) return false;
   if (requirements.includes("hermes-target")) {
-    return Boolean(data.target?.webSocketDebuggerUrl || data.cdp?.calls?.length || data.metro?.targets?.some?.((target) => target.webSocketDebuggerUrl));
+    const target = asRecord20(record.target);
+    const cdp = asRecord20(record.cdp);
+    const metro = asRecord20(record.metro);
+    const metroTargets2 = Array.isArray(metro?.targets) ? metro.targets : [];
+    return Boolean(
+      target?.webSocketDebuggerUrl || Array.isArray(cdp?.calls) && cdp.calls.length > 0 || metroTargets2.some((targetEntry) => Boolean(asRecord20(targetEntry)?.webSocketDebuggerUrl))
+    );
   }
   if (requirements.includes("metro")) {
-    return data.status === "available" || data.metro?.status === "available" || data.metro?.status === "packager-status:running" || data.context?.metro?.status === "available" || data.context?.metro?.status === "packager-status:running" || Number(data.metro?.targetCount ?? data.context?.metro?.targetCount ?? 0) > 0 || Array.isArray(data.targets) && data.targets.length > 0 || Array.isArray(data.metro?.targets) && data.metro.targets.length > 0;
+    const metro = asRecord20(record.metro);
+    const context = asRecord20(record.context);
+    const contextMetro = asRecord20(context?.metro);
+    return record.status === "available" || metro?.status === "available" || metro?.status === "packager-status:running" || contextMetro?.status === "available" || contextMetro?.status === "packager-status:running" || Number(metro?.targetCount ?? contextMetro?.targetCount ?? 0) > 0 || Array.isArray(record.targets) && record.targets.length > 0 || Array.isArray(metro?.targets) && metro.targets.length > 0;
   }
   if (requirements.includes("metro-message")) {
-    return data.messageSocket?.available === true || data.transport === "metro-message-socket";
+    const messageSocket = asRecord20(record.messageSocket);
+    return messageSocket?.available === true || record.transport === "metro-message-socket";
   }
   if (requirements.includes("app-bridge")) {
-    return data.source === "app-instrumentation" || data.sources?.includes?.("app-instrumentation");
+    return record.source === "app-instrumentation" || Array.isArray(record.sources) && record.sources.includes("app-instrumentation");
   }
   return true;
 }
 function summarizeBacklogPayload(parsed) {
-  const data = parsed?.data ?? parsed;
+  const data = asRecord20(parsed?.data) ?? parsed;
   if (!data || typeof data !== "object") return null;
   return {
     ok: parsed?.ok,
@@ -14572,6 +14624,9 @@ function isoStamp3(deps = {}) {
 }
 function firstPositional3(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
+}
+function asRecord20(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function execFile11(file, argv, options) {
   return new Promise((resolve18) => {
@@ -14671,7 +14726,7 @@ var runtime = createCliRuntime({
   },
   exitCodeForError,
   handlerImplementations,
-  startRunRecord,
+  startRunRecord: (entry) => startRunRecord(entry),
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
   printHelp: () => cliHelpText(CLI_VERSION5),

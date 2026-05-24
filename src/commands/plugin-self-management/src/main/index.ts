@@ -5,11 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { CURRENT_CLI_NAME } from "../../../../core/cli-identity/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface ExecResult {
   stdout: string;
@@ -36,10 +32,6 @@ export interface BundledSkill {
 
 const CLI_NAME = CURRENT_CLI_NAME;
 const CLI_VERSION = "0.1.0";
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function skillsCommand(
   args: Record<string, unknown> = {},

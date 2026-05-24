@@ -1,12 +1,9 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 import { captureScreenshot } from "../../../screenshot-capture/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface ReviewDiffDependencies {
   openExpoRoute?: (args: Record<string, unknown>) => Promise<ToolTextResult> | ToolTextResult;
@@ -33,10 +30,6 @@ export interface RunSummary {
 
 const REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
 const ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function reviewCommand(
   args: Record<string, unknown> = {},
@@ -318,11 +311,6 @@ async function captureRouteScreenshot(
   if (!deps.captureScreenshot) return null;
   const outputPath = join(resolveExpoStateRoot(args), "artifacts", filename);
   return deps.captureScreenshot({ ...args, outputPath });
-}
-
-function unwrapToolJson(result: ToolTextResult): any {
-  const text = result.content[0]?.text ?? "null";
-  return JSON.parse(text);
 }
 
 function isoStamp(deps: ReviewDiffDependencies): string {

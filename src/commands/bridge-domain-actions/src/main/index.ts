@@ -4,11 +4,7 @@ import path from "node:path";
 import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface BridgeTarget {
   id?: string | null;

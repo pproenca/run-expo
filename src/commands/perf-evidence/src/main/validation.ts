@@ -1,7 +1,7 @@
-import { realValidation } from "../../../../core/real-validation/src/main/index.ts";
+import { realValidation, type RealValidation } from "../../../../core/real-validation/src/main/index.ts";
 import { perfEvidenceSource, perfOverallConfidence } from "./model.js";
 
-export function perfValidation(payload: Record<string, any>, action: string) {
+export function perfValidation(payload: Record<string, any>, action: string): RealValidation {
   const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
   const hasNetwork = metrics.some((metric) => /network/i.test(String(metric.name)) && Number(metric.value) > 0) ||
     Array.isArray(payload.requests) && payload.requests.length > 0 ||

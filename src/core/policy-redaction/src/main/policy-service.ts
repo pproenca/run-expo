@@ -20,6 +20,16 @@ export type PolicyDeniedDecision = {
   [key: string]: unknown;
 };
 
+export interface DefaultPolicySummary {
+  allow: string[];
+  defaults: {
+    read: "allow";
+    write: "deny";
+    device: "deny";
+    runtimeEval: string;
+  };
+}
+
 /**
  * RULE-001 and RULE-004: evaluates the legacy action-policy contract from
  * the compiled CLI while accepting an already-loaded policy object.
@@ -87,7 +97,7 @@ export function policyAllowsAction(policy: PolicyDocument | null | undefined, ac
   return false;
 }
 
-export function defaultPolicySummary() {
+export function defaultPolicySummary(): DefaultPolicySummary {
   return {
     allow: [],
     defaults: {

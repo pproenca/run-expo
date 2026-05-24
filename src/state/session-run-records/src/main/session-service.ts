@@ -1,11 +1,14 @@
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
+import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import type { CleanSessionsResult, Clock, RandomSuffix, SessionActionResult, SessionRecord, ToolTextResult } from "./domain.js";
 import { createSessionId, randomBase36Suffix, systemClock } from "./ids.js";
 import { readJsonFile, writeJsonFile } from "./json-store.js";
 import { resolveExpoStateRoot, sessionDirectory, sessionJsonPath } from "./paths.js";
 import { requireOptionalString, requireString } from "./validation.js";
+
+export { toolJson };
 
 export interface SessionCommandDependencies {
   now?: Clock;
@@ -39,10 +42,6 @@ export async function sessionCommand(
     now: deps.now,
     randomSuffix: deps.randomSuffix,
   }));
-}
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }], isError: false };
 }
 
 export function parseDurationMs(value: unknown): number {

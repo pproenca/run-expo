@@ -8,16 +8,9 @@ import {
   type PolicyDeniedDecision,
   type PolicyDocument,
 } from "../../../../core/policy-redaction/src/main/policy-service.ts";
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 const MAX_OUTPUT = 40_000;
-
-export interface ToolTextResult {
-  content: Array<{
-    type: "text";
-    text: string;
-  }>;
-  isError?: boolean;
-}
 
 export interface ExecFileResult {
   stdout?: string;
@@ -279,10 +272,6 @@ async function readPolicyDocument(
 ): Promise<PolicyDocument> {
   const read = deps.readJsonFile ?? readJsonFile;
   return await read(file) as PolicyDocument;
-}
-
-function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
 }
 
 function truncate(value: unknown, limit = MAX_OUTPUT): string {

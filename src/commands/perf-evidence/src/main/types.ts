@@ -1,11 +1,10 @@
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
+export type { ToolTextResult };
+
 export const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 
 export const PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph", "interaction", "report"];
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface PerfDependencies {
   normalizeProjectCwd?: (cwd: unknown, options: { allowMissingPackageJson: true }) => Promise<string> | string;

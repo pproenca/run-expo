@@ -1,9 +1,5 @@
 import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface DevtoolsTarget {
   id?: string | null;
@@ -535,8 +531,9 @@ export async function diagnosticMessagesCommand(
   }
   if (action === "clear") {
     const result = await evaluateHermesExpression(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5000 });
+    const value = valueFromHermes(result);
     return toolJson({
-      ...(valueFromHermes(result) ?? { available: false, reason: result?.error ?? "Runtime diagnostics did not return a value." }),
+      ...(value && typeof value === "object" && !Array.isArray(value) ? value : { available: false, reason: result?.error ?? "Runtime diagnostics did not return a value." }),
       kind,
       action,
       metroPort,

@@ -6,17 +6,13 @@ import {
   doctor,
   projectInfo,
 } from "../../../project-info-doctor/src/main/index.ts";
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export const EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"] as const;
 
 export type ExpoAction = (typeof EXPO_ACTIONS)[number];
 export type ExpoModuleCategory = "expo" | "config-plugin" | "other";
 export type ExpoRiskLevel = "low" | "medium" | "high";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface ExpoCommandArgs {
   action?: unknown;
@@ -86,26 +82,6 @@ export interface ExpoCommandDependencies extends ExpoModuleRecordsDependencies, 
   doctor: (args: { cwd: string }) => Promise<unknown>;
   projectInfo: (args: { cwd: string }) => Promise<unknown>;
   buildUpstreamDependencyReport: (projectRoot: string, allDeps: Record<string, string>) => unknown;
-}
-
-export function toolJson(value: unknown): ToolTextResult {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }],
-    isError: false,
-  };
-}
-
-export function unwrapToolJson(value: unknown): unknown {
-  const text = asRecord(value)?.content;
-  if (!Array.isArray(text)) return value;
-  const first = asRecord(text[0]);
-  if (first?.type !== "text" || typeof first.text !== "string") return value;
-
-  try {
-    return JSON.parse(first.text);
-  } catch {
-    return { text: first.text };
-  }
 }
 
 export async function expoCommand(

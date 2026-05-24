@@ -1,3 +1,7 @@
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
+export type { ToolTextResult };
+
 export const EXIT_RUNTIME_FAILURE = 1;
 export const EXIT_INVALID_USAGE = 2;
 
@@ -8,11 +12,6 @@ export class CliUsageError extends Error {
     super(message);
     this.name = "CliUsageError";
   }
-}
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
 }
 
 export interface ParsedCliArgs {

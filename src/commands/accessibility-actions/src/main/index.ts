@@ -2,18 +2,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { execFile as nodeExecFile } from "node:child_process";
 import { basename, join, resolve } from "node:path";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
-import { unwrapToolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
-
-export interface RefCache {
-  snapshotId?: string | null;
-  targetId?: string | null;
-  refs?: Array<Record<string, any>>;
-}
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import type { RefCache } from "../../../snapshot-evidence/src/main/index.ts";
+import type { SessionRecord } from "../../../../state/session-run-records/src/main/index.ts";
 
 export interface AccessibilityDependencies {
   readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
@@ -35,10 +26,6 @@ export interface StateRootArgs extends Record<string, unknown> {
 }
 
 const FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function accessibilityCommand(
   args: Record<string, unknown> = {},
@@ -156,9 +143,10 @@ export async function readLatestRefCache(
 ): Promise<RefCache | null> {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot(args);
-  const session = asRecord(await readLatestSession(stateRoot));
+  const session = await readLatestSession(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null) as Promise<RefCache | null>;
+  const parsed = await readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return asRefCache(parsed);
 }
 
 export async function semanticBridgeTree(
@@ -177,16 +165,17 @@ export async function semanticBridgeTree(
   }
 }
 
-export async function readLatestSession(stateRoot: string): Promise<unknown | null> {
+export async function readLatestSession(stateRoot: string): Promise<SessionRecord | null> {
   const sessionsRoot = join(stateRoot, "sessions");
   const entries = await readdir(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
-    if (record) sessions.push(record);
+    const session = asSessionRecord(record);
+    if (session) sessions.push(session);
   }
-  sessions.sort((a, b) => String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt)));
+  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
   return sessions[0] ?? null;
 }
 
@@ -231,4 +220,15 @@ function formatError(error: unknown): string {
 
 function asRecord(value: unknown): Record<string, any> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+}
+
+function asRefCache(value: unknown): RefCache | null {
+  const record = asRecord(value);
+  if (!record || !Array.isArray(record.refs)) return null;
+  return record as RefCache;
+}
+
+function asSessionRecord(value: unknown): SessionRecord | null {
+  const record = asRecord(value);
+  return typeof record?.sessionId === "string" ? record as SessionRecord : null;
 }

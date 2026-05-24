@@ -84,7 +84,9 @@ export async function snapshotCommand(
 const defaultSnapshotDependencies: SnapshotCommandDependencies = {
   now: () => new Date(),
   randomSuffix: randomBase36Suffix,
-  ensureDirectory: (path) => mkdir(path, { recursive: true }),
+  ensureDirectory: async (path) => {
+    await mkdir(path, { recursive: true });
+  },
   writeJsonFile: writeJson,
   updateSessionRecord: async (stateRoot, record) => {
     await mkdir(sessionDirectory(stateRoot, record.sessionId), { recursive: true });

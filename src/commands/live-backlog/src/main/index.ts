@@ -3,11 +3,7 @@ import { mkdir as fsMkdir, readdir as fsReaddir, writeFile as fsWriteFile } from
 import { join, resolve } from "node:path";
 
 import { commandAliases, manipulatingCommandNames } from "../../../../core/command-surface/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface LiveBacklogDependencies {
   mkdir?: (path: string, options?: { recursive?: boolean }) => Promise<void> | void;
@@ -23,6 +19,19 @@ export interface LiveBacklogDependencies {
   cliWrapperPath?: string;
 }
 
+export interface LiveBacklogArgs extends Record<string, unknown> {
+  _?: unknown[];
+  action?: unknown;
+  cwd?: string;
+  scope?: string;
+  outputDir?: string;
+  metroPort?: unknown;
+  bundleId?: string;
+  device?: string;
+  devClientUrl?: string;
+  actionPolicy?: string;
+}
+
 export interface LiveBacklogRow {
   id: string;
   command: string;
@@ -36,6 +45,96 @@ export interface LiveBacklogRow {
   artifacts: string[];
   source: { dispatcher: boolean; helpListed: boolean };
   rationale: string;
+}
+
+export interface LiveBacklogTemplate {
+  id?: string;
+  argv: string[];
+  scope?: string;
+  expectedClass?: string;
+  requirements?: string[];
+  rationale?: string;
+  setupFiles?: Array<{ path: string; content: string }>;
+}
+
+export interface LiveBacklogMatrix {
+  schemaVersion: 1;
+  scope: string;
+  source: {
+    dispatcher: "commandAliases";
+    dispatcherCommandCount: number;
+    dispatcherCommands: string[];
+    help: "cliHelpText";
+    helpCommandCount: number;
+    helpCommands: string[];
+    fullRowCount: number;
+    rowSubsetCount: number;
+    rowSubset: string[];
+    unrepresentedDispatcherCommands: string[];
+    unrepresentedHelpCommands: string[];
+  };
+  rows: LiveBacklogRow[];
+}
+
+export interface BacklogJsonPayload {
+  ok?: unknown;
+  data?: unknown;
+  available?: unknown;
+  action?: unknown;
+  reason?: unknown;
+  [key: string]: unknown;
+}
+
+export interface BacklogPayloadSummary {
+  ok: unknown;
+  available?: boolean;
+  action: unknown;
+  reason: unknown;
+  keys: string[];
+}
+
+export interface LiveBacklogSelfCheck {
+  ok: boolean;
+  issueCount: number;
+  issues: Array<Record<string, unknown>>;
+  adapterFindings: AdapterFinding[];
+  adapterFindingCount: number;
+  missingAdapterCount: number;
+  hiddenPreflightPolicy: {
+    allowed: false;
+    statement: string;
+  };
+}
+
+export interface LiveBacklogRunArgs extends LiveBacklogArgs {
+  cwd: string;
+  outputDir: string;
+}
+
+export interface BacklogRowResult {
+  id: string;
+  command: string;
+  exactCommand: string[];
+  startedAt: string;
+  finishedAt: string;
+  exitCode: number | string;
+  classification: string;
+  requirements: string[];
+  mutatesRuntime: boolean;
+  stdoutPath: string;
+  stderrPath: string;
+  exitCodePath: string;
+  runRecordPaths: string[];
+  artifactPaths: string[];
+  parsedSummary: BacklogPayloadSummary | null;
+}
+
+export interface LiveBacklogSummary {
+  rowCount: number;
+  classifications: Record<string, number>;
+  defectCount: number;
+  environmentBlockedCount: number;
+  unexplainedPartialCount: number;
 }
 
 export interface AdapterFinding {
@@ -113,12 +212,8 @@ const ADAPTER_SELF_CHECK_FINDINGS: AdapterFinding[] = [
   },
 ];
 
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
-
 export async function liveBacklogCommand(
-  args: Record<string, any> = {},
+  args: LiveBacklogArgs = {},
   deps: LiveBacklogDependencies = defaultLiveBacklogDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? firstPositional(args) ?? "matrix", "action");
@@ -139,7 +234,7 @@ export async function liveBacklogCommand(
 
   const outputDir = resolve(args.outputDir ?? join(cwd, ".scratch", "expo98", "live-backlog", isoStamp(deps)));
   await (deps.mkdir ?? fsMkdir)(outputDir, { recursive: true });
-  const rows: Array<Record<string, any>> = [];
+  const rows: BacklogRowResult[] = [];
   for (const row of matrix.rows) {
     rows.push(await runLiveBacklogRow(row, { ...args, cwd, outputDir }, deps));
   }
@@ -170,7 +265,7 @@ const defaultLiveBacklogDependencies: LiveBacklogDependencies = {
   execFile,
 };
 
-export function buildLiveBacklogMatrix(args: Record<string, any> = {}): Record<string, any> {
+export function buildLiveBacklogMatrix(args: LiveBacklogArgs = {}): LiveBacklogMatrix {
   const dispatcherCommands = Object.keys(COMMAND_ALIASES).sort();
   const helpCommands = parseHelpCommandNames(cliHelpText()).sort();
   const allRows = orderLiveBacklogRows(dispatcherCommands.map((command) => liveBacklogRowForCommand(command, args)));
@@ -205,7 +300,7 @@ export function orderLiveBacklogRows(rows: LiveBacklogRow[]): LiveBacklogRow[] {
   ];
 }
 
-export function liveBacklogRowForCommand(command: string, args: Record<string, any> = {}): LiveBacklogRow {
+export function liveBacklogRowForCommand(command: string, args: LiveBacklogArgs = {}): LiveBacklogRow {
   const template = liveBacklogTemplate(command, args);
   const requirements = template.requirements ?? inferLiveBacklogRequirements(command);
   return {
@@ -224,7 +319,7 @@ export function liveBacklogRowForCommand(command: string, args: Record<string, a
   };
 }
 
-export function liveBacklogTemplate(command: string, _args: Record<string, any> = {}): Record<string, any> {
+export function liveBacklogTemplate(command: string, _args: LiveBacklogArgs = {}): LiveBacklogTemplate {
   const cwdArg = ["--cwd", "__CWD__"];
   const metroArg = ["--metro-port", "__METRO_PORT__"];
   const bundleArg = ["--bundle-id", "__BUNDLE_ID__"];
@@ -337,8 +432,8 @@ export function parseHelpCommandNames(text: string): string[] {
   return [...commands];
 }
 
-export function liveBacklogSelfCheck(matrix: Record<string, any>): Record<string, any> {
-  const issues = [];
+export function liveBacklogSelfCheck(matrix: LiveBacklogMatrix): LiveBacklogSelfCheck {
+  const issues: Array<Record<string, unknown>> = [];
   const adapterFindings = ADAPTER_SELF_CHECK_FINDINGS.map((finding) => ({ ...finding }));
   for (const command of matrix.source.unrepresentedDispatcherCommands) issues.push({ type: "missing-dispatcher-row", command });
   for (const command of matrix.source.unrepresentedHelpCommands) issues.push({ type: "missing-help-row", command });
@@ -372,9 +467,9 @@ export function liveBacklogSelfCheck(matrix: Record<string, any>): Record<string
 
 export async function runLiveBacklogRow(
   row: LiveBacklogRow,
-  args: Record<string, any>,
+  args: LiveBacklogRunArgs,
   deps: LiveBacklogDependencies = defaultLiveBacklogDependencies,
-): Promise<Record<string, any>> {
+): Promise<BacklogRowResult> {
   const rowDir = join(args.outputDir, row.id);
   await (deps.mkdir ?? fsMkdir)(rowDir, { recursive: true });
   for (const file of liveBacklogTemplate(row.command, args).setupFiles ?? []) {
@@ -430,7 +525,7 @@ export async function runLiveBacklogRow(
   };
 }
 
-export function materializeLiveBacklogArgv(argv: string[], args: Record<string, any>, rowDir: string): string[] {
+export function materializeLiveBacklogArgv(argv: string[], args: LiveBacklogRunArgs, rowDir: string): string[] {
   const replacements: Record<string, string> = {
     "__CWD__": args.cwd,
     "__METRO_PORT__": String(args.metroPort ?? 8081),
@@ -451,22 +546,23 @@ export function materializeLiveBacklogArgv(argv: string[], args: Record<string, 
   });
 }
 
-export function parseBacklogJson(stdout: string): any {
+export function parseBacklogJson(stdout: string): BacklogJsonPayload | null {
   try {
-    return JSON.parse(stdout);
+    const parsed: unknown = JSON.parse(stdout);
+    return asRecord(parsed);
   } catch {
     return null;
   }
 }
 
-export function classifyLiveBacklogRow(row: Pick<LiveBacklogRow, "requirements" | "expectedClass" | "mutatesRuntime">, exitCode: number, parsed: any): string {
+export function classifyLiveBacklogRow(row: Pick<LiveBacklogRow, "requirements" | "expectedClass" | "mutatesRuntime">, exitCode: number | string, parsed: BacklogJsonPayload | null): string {
   if (exitCode === EXIT_INVALID_USAGE) return "expected-usage-error";
   if (exitCode !== EXIT_SUCCESS) {
     if (row.requirements.length > 0) return "environment-blocked";
     if (row.expectedClass === "expected-usage-error") return "expected-usage-error";
     return "defect";
   }
-  const data = parsed?.data ?? parsed;
+  const data = asRecord(parsed?.data) ?? parsed;
   const requiresRuntime = row.requirements.some((requirement) => ["metro", "metro-message", "hermes-target", "app-bridge"].includes(requirement));
   if (requiresRuntime && !hasLiveRuntimeEvidence(data, row.requirements)) return "environment-blocked";
   if (data?.available === false) {
@@ -478,32 +574,46 @@ export function classifyLiveBacklogRow(row: Pick<LiveBacklogRow, "requirements" 
   return row.requirements.length > 0 || row.mutatesRuntime ? "live-pass" : "static-pass";
 }
 
-export function hasLiveRuntimeEvidence(data: any, requirements: string[]): boolean {
-  if (!data || typeof data !== "object") return false;
+export function hasLiveRuntimeEvidence(data: unknown, requirements: string[]): boolean {
+  const record = asRecord(data);
+  if (!record) return false;
   if (requirements.includes("hermes-target")) {
-    return Boolean(data.target?.webSocketDebuggerUrl || data.cdp?.calls?.length || data.metro?.targets?.some?.((target: any) => target.webSocketDebuggerUrl));
+    const target = asRecord(record.target);
+    const cdp = asRecord(record.cdp);
+    const metro = asRecord(record.metro);
+    const metroTargets = Array.isArray(metro?.targets) ? metro.targets : [];
+    return Boolean(
+      target?.webSocketDebuggerUrl ||
+      (Array.isArray(cdp?.calls) && cdp.calls.length > 0) ||
+      metroTargets.some((targetEntry) => Boolean(asRecord(targetEntry)?.webSocketDebuggerUrl))
+    );
   }
   if (requirements.includes("metro")) {
-    return data.status === "available" ||
-      data.metro?.status === "available" ||
-      data.metro?.status === "packager-status:running" ||
-      data.context?.metro?.status === "available" ||
-      data.context?.metro?.status === "packager-status:running" ||
-      Number(data.metro?.targetCount ?? data.context?.metro?.targetCount ?? 0) > 0 ||
-      (Array.isArray(data.targets) && data.targets.length > 0) ||
-      (Array.isArray(data.metro?.targets) && data.metro.targets.length > 0);
+    const metro = asRecord(record.metro);
+    const context = asRecord(record.context);
+    const contextMetro = asRecord(context?.metro);
+    return record.status === "available" ||
+      metro?.status === "available" ||
+      metro?.status === "packager-status:running" ||
+      contextMetro?.status === "available" ||
+      contextMetro?.status === "packager-status:running" ||
+      Number(metro?.targetCount ?? contextMetro?.targetCount ?? 0) > 0 ||
+      (Array.isArray(record.targets) && record.targets.length > 0) ||
+      (Array.isArray(metro?.targets) && metro.targets.length > 0);
   }
   if (requirements.includes("metro-message")) {
-    return data.messageSocket?.available === true || data.transport === "metro-message-socket";
+    const messageSocket = asRecord(record.messageSocket);
+    return messageSocket?.available === true || record.transport === "metro-message-socket";
   }
   if (requirements.includes("app-bridge")) {
-    return data.source === "app-instrumentation" || data.sources?.includes?.("app-instrumentation");
+    return record.source === "app-instrumentation" ||
+      (Array.isArray(record.sources) && record.sources.includes("app-instrumentation"));
   }
   return true;
 }
 
-export function summarizeBacklogPayload(parsed: any): Record<string, any> | null {
-  const data = parsed?.data ?? parsed;
+export function summarizeBacklogPayload(parsed: BacklogJsonPayload | null): BacklogPayloadSummary | null {
+  const data = asRecord(parsed?.data) ?? parsed;
   if (!data || typeof data !== "object") return null;
   return {
     ok: parsed?.ok,
@@ -519,7 +629,7 @@ export async function listJsonFiles(dir: string, deps: Pick<LiveBacklogDependenc
   return entries.filter((entry: string) => entry.endsWith(".json")).sort().map((entry: string) => join(dir, entry));
 }
 
-export function summarizeLiveBacklogRows(rows: Array<{ classification: string } | Record<string, any>>): Record<string, any> {
+export function summarizeLiveBacklogRows(rows: Array<Pick<BacklogRowResult, "classification">>): LiveBacklogSummary {
   const classifications: Record<string, number> = {};
   for (const row of rows) {
     classifications[row.classification] = (classifications[row.classification] ?? 0) + 1;
@@ -553,6 +663,10 @@ function isoStamp(deps: Pick<LiveBacklogDependencies, "now"> = {}): string {
 
 function firstPositional(args: Record<string, unknown>): unknown {
   return Array.isArray(args._) ? args._[0] : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function execFile(

@@ -2,11 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface MetroTarget {
   id: string | null;
@@ -133,15 +129,6 @@ const LIMITATIONS = [
 ];
 
 const MAX_OUTPUT = 16_384;
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
-}
-
-export function unwrapToolJson(result: ToolTextResult): unknown {
-  const text = result.content[0]?.text;
-  return typeof text === "string" ? JSON.parse(text) : result;
-}
 
 export function clampNumber(value: unknown, min: number, max: number): number {
   const number = Number(value);
@@ -501,14 +488,6 @@ function positionalArg(value: unknown, index: number): unknown {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
-}
-
-async function defaultEvaluateHermesExpression(
-  webSocketDebuggerUrl: string,
-  expression: string,
-  { timeoutMs = 3000 }: { timeoutMs?: number } = {},
-): Promise<HermesEvaluationResult> {
-  return sharedEvaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs });
 }
 
 async function defaultFetchLocalText(url: string, options: { timeoutMs: number }): Promise<string> {

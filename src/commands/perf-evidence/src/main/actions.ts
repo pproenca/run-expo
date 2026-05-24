@@ -116,7 +116,7 @@ export async function perfInteractionPayload(args: Record<string, any> = {}, dep
 export async function perfReportPayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
   const nativeArtifact = requireOptionalString(args.nativeArtifact);
   const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: "report", label: args.interaction ?? args.label });
-  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve(nativeArtifact), deps) : null;
+  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve(nativeArtifact)) : null;
   const report = normalizePerfReport(evidence.bridgePayload, nativeSummary);
   const payload = {
     available: report.available,
@@ -250,7 +250,7 @@ export async function perfNativeProfilerPayload(args: Record<string, any> = {}, 
     await (deps.writeFile ?? fsWriteFile)(nativeArtifact, `${profiler} placeholder\n`, "utf8");
   }
   const projectRoot = await projectCwd(args.cwd, deps);
-  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact, deps);
+  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact);
   const payload = {
     available: true,
     action: profiler,

@@ -1,5 +1,7 @@
 import { execFile as nodeExecFile } from "node:child_process";
 
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
 export type DeviceListingPlatform = "all" | "ios" | "android";
 
 export interface ListDevicesArgs {
@@ -25,11 +27,6 @@ export type ExecFileDependency = (
 
 export interface DeviceListingDependencies {
   execFile: ExecFileDependency;
-}
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError: boolean;
 }
 
 export interface SafeToolSectionOk<T> {
@@ -219,13 +216,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringOrNull(value: unknown): string | null {
   return value == null ? null : String(value);
-}
-
-function toolJson(value: unknown): ToolTextResult {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }],
-    isError: false,
-  };
 }
 
 function truncate(value: unknown, limit = MAX_OUTPUT): string {

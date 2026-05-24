@@ -3,16 +3,12 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 
 import { CURRENT_CLI_NAME, CLI_VERSION } from "../../../../core/cli-identity/src/main/index.ts";
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 declare const process: { cwd(): string };
 
 export const CLI_NAME = CURRENT_CLI_NAME;
 export const MAX_OUTPUT = 40_000;
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface CommandPaths {
   node: string | null;
@@ -512,22 +508,6 @@ export function formatError(error: unknown): string {
   if (record?.stdout) parts.push(`stdout:\n${truncate(record.stdout)}`);
   if (record?.stderr) parts.push(`stderr:\n${truncate(record.stderr)}`);
   return parts.join("\n\n");
-}
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }], isError: false };
-}
-
-export function unwrapToolJson(result: unknown): unknown {
-  const content = asRecord(result)?.content;
-  const first = Array.isArray(content) ? asRecord(content[0]) : null;
-  const text = first?.text;
-  if (typeof text !== "string") return result;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
 }
 
 async function commandPath(command: string, deps?: DoctorDependencies): Promise<string | null> {

@@ -1,3 +1,7 @@
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
+export type { ToolTextResult };
+
 export const MAX_OUTPUT = 40_000;
 
 export type Platform = "ios" | "android";
@@ -64,11 +68,6 @@ export type RefRecord = {
 
 export type RefCache = {
   refs: RefRecord[];
-};
-
-export type ToolTextResult = {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
 };
 
 export type GesturePlan = {

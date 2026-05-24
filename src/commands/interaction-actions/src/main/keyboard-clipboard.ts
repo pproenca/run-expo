@@ -1,5 +1,5 @@
 import { defaultInteractionDependencies } from "./dependencies.js";
-import { optionalString, policyGate, requireString, truncate } from "./shared.js";
+import { clampNumber, optionalString, policyGate, requireString, truncate } from "./shared.js";
 import type { InteractionArgs, InteractionDependencies, InteractionPayload } from "./types.js";
 
 export async function clipboardCommand(

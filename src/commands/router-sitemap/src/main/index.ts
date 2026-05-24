@@ -1,10 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface DirentLike {
   name: string;
@@ -189,10 +186,6 @@ async function normalizeCwd(cwd: string | undefined, deps: RequiredRouterDepende
   const stat = await deps.fs.stat(resolved);
   if (!stat?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
-}
-
-function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
 }
 
 interface RequiredRouterDependencies {

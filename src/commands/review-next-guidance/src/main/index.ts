@@ -1,7 +1,4 @@
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface ReviewFlags {
   hasAcceptanceContract: boolean;
@@ -56,10 +53,6 @@ export interface ReviewNextStepArgs extends Record<string, unknown> {
 
 const SUBORDINATE_RULE = "Do not patch or call done until the current constraint is proven or deliberately elevated.";
 const NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigation model without a separate reason."];
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
 
 export async function reviewNextStep(args: ReviewNextStepArgs = {}): Promise<ToolTextResult> {
   const surface = args.surface ?? "generic";

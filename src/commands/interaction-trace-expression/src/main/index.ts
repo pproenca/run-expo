@@ -1,7 +1,7 @@
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
-import { realValidation } from "../../../../core/real-validation/src/main/index.ts";
-import { toolJson, unwrapToolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { realValidation, type RealValidation } from "../../../../core/real-validation/src/main/index.ts";
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface InteractionTraceExpressionArgs {
   action: unknown;
@@ -33,11 +33,6 @@ export interface TraceInteractionDependencies {
     expression: string,
     options: { timeoutMs: number },
   ) => Promise<unknown>;
-}
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
 }
 
 export async function traceInteraction(
@@ -567,7 +562,7 @@ export function targetSummary(target: unknown): Record<string, unknown> | null {
   };
 }
 
-export function traceRealValidation(trace: unknown, action: unknown) {
+export function traceRealValidation(trace: unknown, action: unknown): RealValidation {
   const record = asRecord(trace);
   if (!record || record.available === false) {
     return realValidation({

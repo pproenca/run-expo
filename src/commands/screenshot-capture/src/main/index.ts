@@ -3,6 +3,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { execFile, spawn } from "node:child_process";
 
+import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+
 declare const process: { env: Record<string, string | undefined> };
 
 export const MAX_OUTPUT = 40_000;
@@ -92,10 +94,7 @@ export type ScreenshotCaptureArgs = {
   [key: string]: unknown;
 };
 
-export type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};
+export type ToolResult = ToolTextResult;
 
 export type SpawnedProcess = {
   stdout: {
@@ -517,13 +516,6 @@ export async function pathExists(
   deps: { access(file: string): Promise<void> },
 ): Promise<boolean> {
   return deps.access(file).then(() => true, () => false);
-}
-
-function toolJson(value: unknown): ToolResult {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }],
-    isError: false,
-  };
 }
 
 async function execFilePromise(

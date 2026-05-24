@@ -1,3 +1,4 @@
+import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { policyDeniedPayload as sharedPolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
 import type {
   ActionPolicyDecision,
@@ -11,6 +12,8 @@ import type {
   ToolTextResult,
 } from "./types.js";
 import { MAX_OUTPUT } from "./types.js";
+
+export { toolJson };
 
 export function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
@@ -27,10 +30,6 @@ export function truncate(value: unknown, limit = MAX_OUTPUT): string {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}\n[truncated ${text.length - limit} characters]`;
-}
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }], isError: false };
 }
 
 export function createRefActionAdapter(

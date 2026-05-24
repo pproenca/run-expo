@@ -1,10 +1,11 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
+import { policyDecision as bridgePolicyDecision } from "../../../bridge-domain-actions/src/main/index.ts";
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface ModalBridgeTarget {
   id?: string | null;
@@ -54,6 +55,8 @@ export interface ModalBridgeDependencies {
     expression: string,
     options: { timeoutMs: number },
   ) => Promise<HermesEvaluationResult | null | undefined>;
+  readJsonFile?: (file: string) => Promise<unknown>;
+  resolvePath?: (file: string) => string;
   redactValue?: (value: unknown) => unknown;
 }
 
@@ -112,6 +115,8 @@ export async function sheetCommand(
 const defaultModalBridgeDependencies: ModalBridgeDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort) as Promise<ModalBridgeTarget[]>,
   evaluateHermesExpression: sharedEvaluateHermesExpression,
+  readJsonFile: async (file) => JSON.parse(await readFile(file, "utf8")),
+  resolvePath: (file) => path.resolve(file),
 };
 
 async function modalBridgeCommand(
@@ -122,13 +127,8 @@ async function modalBridgeCommand(
   const action = requireString(input.args.action ?? positionals[0] ?? "status", "action");
   if (!input.actions.includes(action)) throw new Error(`Unknown ${input.domain} action: ${action}`);
   const sideEffect = action === "status" ? "read" : "device";
-  const policy = {
-    checked: true,
-    action: `${input.domain}.${action}`,
-    sideEffect,
-    allowed: true,
-    reason: "Modal action is non-destructive.",
-  };
+  const policy = await bridgePolicyDecision(input.args, `${input.domain}.${action}`, sideEffect, deps);
+  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: input.domain, action, policy }));
   return toolJson(await bridgeDomainCommand({
     args: input.args,
     domain: input.domain,

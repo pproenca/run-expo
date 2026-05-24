@@ -4,15 +4,11 @@ import {
   openExpoRoute,
   routeActionPolicyDecision,
 } from "../../../route-url-actions/src/main/index.ts";
+import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = Record<string, unknown>;
-
-export interface ToolTextResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
 
 export interface NavigationCommandArgs {
   action?: unknown;
@@ -329,7 +325,7 @@ const defaultNavigationDependencies: NavigationCommandDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort) as Promise<NavigationTarget[]>,
   evaluateHermesExpression: sharedEvaluateHermesExpression,
   openExpoRoute,
-  policyDecision: (args, action) => routeActionPolicyDecision(args, action) as Promise<NavigationPolicyDecision>,
+  policyDecision: (args, action) => routeActionPolicyDecision(args as Pick<Parameters<typeof routeActionPolicyDecision>[0], "actionPolicy">, action) as Promise<NavigationPolicyDecision>,
 };
 
 export function navigationExpression(args: { action: string; tab?: unknown }): string {
@@ -455,28 +451,6 @@ export async function latestSessionId(
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
-}
-
-function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
-}
-
-function unwrapToolJson(result: ToolTextResult | JsonObject): unknown {
-  if (isToolTextResult(result)) {
-    const text = result.content[0]?.text;
-    if (typeof text === "string") {
-      try {
-        return JSON.parse(text);
-      } catch {
-        return text;
-      }
-    }
-  }
-  return result;
-}
-
-function isToolTextResult(value: ToolTextResult | JsonObject): value is ToolTextResult {
-  return Array.isArray((value as { content?: unknown }).content);
 }
 
 function sanitizeOpenRouteResult(result: OpenRouteResult): OpenRouteResult {

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import { toolJson, type ToolTextResult } from "../../../tool-json-envelope/src/main/index.ts";
 import { POLICY_REASONS } from "./domain.js";
 import {
   actionSideEffect,
@@ -11,15 +12,8 @@ import {
 import { redactJson, redactText, type JsonValue } from "./redactor.js";
 
 export type CommandArgs = Record<string, unknown>;
-
-export type ToolTextResult = {
-  content: [{ type: "text"; text: string }];
-  isError: false;
-};
-
-export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }], isError: false };
-}
+export { toolJson };
+export type { ToolTextResult };
 
 export async function policyCommand(args: CommandArgs = {}): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "show", "action");

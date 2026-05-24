@@ -104,7 +104,7 @@ export async function targetCommand(
   args: TargetCommandArgs,
   deps: TargetDependencies = defaultTargetDependencies,
 ): Promise<TargetCommandResult> {
-  const effectiveArgs = { ...args, stateRoot: args.stateRoot ?? resolveExpoStateRoot(args as Record<string, string | null>) };
+  const effectiveArgs = { ...args, stateRoot: args.stateRoot ?? resolveExpoStateRoot(args as unknown as Record<string, string | null>) };
   const action = requireString(args.action ?? "list", "action");
   if (!["list", "select", "current"].includes(action)) {
     throw new Error(`Unknown target action: ${action}`);
