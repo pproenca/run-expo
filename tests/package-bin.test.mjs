@@ -7,9 +7,12 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const sanitizedEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.toLowerCase().startsWith("npm_config_")),
+);
 const npxEnv = {
-  ...process.env,
-  npm_config_cache: resolve(".tmp", "npm-cache"),
+  ...sanitizedEnv,
+  npm_config_cache: resolve(tmpdir(), "expo98-npm-cache"),
 };
 
 describe("expo98 package bin", () => {
@@ -74,8 +77,11 @@ describe("expo98 package bin", () => {
   });
 
   it("packs as one npm package containing the executable, not workspace package sources", async () => {
-    const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json"], { env: npxEnv });
-    const [pack] = JSON.parse(stdout);
+    const { stdout } = await execFileAsync("pnpm", ["pack", "--dry-run", "--json"], { env: npxEnv });
+    const jsonStart = stdout.lastIndexOf("\n{");
+    assert.notEqual(jsonStart, -1);
+    const parsedPack = JSON.parse(stdout.slice(jsonStart + 1));
+    const pack = Array.isArray(parsedPack) ? parsedPack[0] : parsedPack;
     const files = pack.files.map((file) => file.path).sort();
     const bundledCli = await readFile("cli/expo98.mjs", "utf8");
     const packageJson = JSON.parse(await readFile("package.json", "utf8"));

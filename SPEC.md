@@ -34,8 +34,8 @@ State-changing commands require an explicit action policy. Runtime evaluation, b
 
 ## Build Contract
 
-`npm run build` bundles `src/bundled-cli.ts` into `cli/expo98.mjs`. The checked-in bundle is required so `npx expo98 ...` works from the packed package without rebuilding source modules.
+`pnpm run build` bundles `src/bundled-cli.ts` into `cli/expo98.mjs`. The checked-in bundle is required so `npx expo98 ...` works from the packed package without rebuilding source modules.
 
 ## Test Contract
 
-Root tests verify package entrypoints and packed CLI behavior. Module tests verify transformed behavior at package boundaries. A valid release candidate must pass root tests, rebuild the bundle, pass the full module sweep, and satisfy `npm pack --dry-run --json`.
+Root tests verify package entrypoints and packed CLI behavior. Module tests verify transformed behavior at package boundaries. A valid release candidate must pass `pnpm install --frozen-lockfile`, `pnpm test`, rebuild the bundle, and satisfy `pnpm pack --dry-run --json`.

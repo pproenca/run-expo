@@ -8,6 +8,7 @@ This repository is the hard replacement for the previous `expo98` checkout at `/
 - Runtime ownership moved from a checked-in monolithic `dist/expo-ios.mjs` file to `src/bundled-cli.ts` plus a generated bundle at `cli/expo98.mjs`.
 - Runtime dependency `esbuild` is declared in `dependencies` so the package can build and pack in normal npm environments.
 - The repo is now intentionally one clean executable CLI package, not a monorepo and not the modernization staging workspace.
+- Package management is pnpm-only, with `pnpm-workspace.yaml` defining the workspace root and `pnpm-lock.yaml` as the committed lockfile.
 - Legacy Clawpatch output, generated topology HTML/JSON, local caches, per-module workspaces, and per-package `dist` outputs are not part of this final repo.
 
 ## Evidence Carried Forward
@@ -19,10 +20,10 @@ This repository is the hard replacement for the previous `expo98` checkout at `/
 
 A valid publish candidate should pass:
 
-- `npm ci`
-- `npm test`
-- `npm run build`
-- `npm pack --dry-run --json`
+- `pnpm install --frozen-lockfile`
+- `pnpm test`
+- `pnpm run build`
+- `pnpm pack --dry-run --json`
 - `npx --no-install expo98 --version`
 - `npx --no-install expo98 --json doctor`
 - `npx --no-install expo98 --json project-info --cwd .`
