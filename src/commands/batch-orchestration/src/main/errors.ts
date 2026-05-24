@@ -1,4 +1,3 @@
-import type { BatchErrorEnvelope } from "./domain.js";
 import {
   errorCodeForExitCode,
   exitCodeForError,
@@ -9,14 +8,11 @@ import {
   sanitizeErrorMessage,
   truncateOutput,
 } from "../../../../core/policy-redaction/src/main/redactor.ts";
+import type { BatchErrorEnvelope } from "./domain.js";
 
 const MAX_OUTPUT = 40_000;
 
-export {
-  formatError,
-  redactValue,
-  sanitizeErrorMessage,
-};
+export { formatError, redactValue, sanitizeErrorMessage };
 
 export function batchStepError(error: unknown): BatchErrorEnvelope {
   const exitCode = exitCodeForError(error);

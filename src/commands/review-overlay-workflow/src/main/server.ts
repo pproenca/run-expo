@@ -2,11 +2,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import path from "node:path";
-
 import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { createEventsFile, readJson } from "./events.js";
 
-export async function reviewOverlayServer(args: { dir: string; port?: unknown; endpointPath?: unknown }): Promise<ToolTextResult> {
+export async function reviewOverlayServer(args: {
+  dir: string;
+  port?: unknown;
+  endpointPath?: unknown;
+}): Promise<ToolTextResult> {
   const dir = path.resolve(args.dir);
   const port = args.port ? clampNumber(args.port, 1, 65535) : await findAvailablePort(17655);
   const endpointPath = normalizeEndpointPath(args.endpointPath);
@@ -22,8 +25,11 @@ export async function reviewOverlayServer(args: { dir: string; port?: unknown; e
       const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
       const eventsPath = path.join(dir, "events.json");
       if (request.method === "GET" && url.pathname === "/events.json") {
-        const text = await readFile(eventsPath, "utf8").catch(() => "{\"events\":[]}\n");
-        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        const text = await readFile(eventsPath, "utf8").catch(() => '{"events":[]}\n');
+        response.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        });
         response.end(text);
         return;
       }
@@ -33,16 +39,27 @@ export async function reviewOverlayServer(args: { dir: string; port?: unknown; e
         events.push(JSON.parse(body || "{}"));
         const next = { ...current, events, updatedAt: new Date().toISOString() };
         await writeFile(eventsPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}\n`);
+        response.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        });
+        response.end(
+          `${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}\n`,
+        );
         return;
       }
       response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-      response.end("{\"ok\":false,\"error\":\"not found\"}\n");
+      response.end('{"ok":false,"error":"not found"}\n');
     });
   });
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", () => resolve()));
-  const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
+  const payload = {
+    ok: true,
+    url: `http://127.0.0.1:${port}/`,
+    endpoint: `http://127.0.0.1:${port}${endpointPath}`,
+    eventsUrl: `http://127.0.0.1:${port}/events.json`,
+    dir,
+  };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   return await new Promise<never>(() => {});
 }
@@ -50,7 +67,8 @@ export async function reviewOverlayServer(args: { dir: string; port?: unknown; e
 export function normalizeEndpointPath(value: unknown): string {
   const raw = requireOptionalString(value) ?? "/events";
   const endpoint = raw.startsWith("/") ? raw : `/${raw}`;
-  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint)) throw new Error("endpointPath must be a simple URL path.");
+  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint))
+    throw new Error("endpointPath must be a simple URL path.");
   return endpoint;
 }
 

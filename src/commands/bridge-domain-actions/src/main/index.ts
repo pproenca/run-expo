@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
+import {
+  policyDeniedPayload,
+  type PolicyDeniedPayload,
+} from "../../../../core/policy-redaction/src/main/policy-service.ts";
+import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
-import { policyDeniedPayload, type PolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
-import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface BridgeTarget {
   id?: string | null;
@@ -107,25 +109,32 @@ export async function storageCommand(
   const positionals = Array.isArray(args._) ? args._ : [];
   const store = requireString(args.store ?? positionals[0], "store");
   const action = requireString(args.action ?? positionals[1] ?? "list", "action");
-  if (!["list", "get", "set", "clear"].includes(action)) throw new Error(`Unknown storage action: ${action}`);
+  if (!["list", "get", "set", "clear"].includes(action))
+    throw new Error(`Unknown storage action: ${action}`);
   const key = args.key ?? positionals[2];
   const sideEffect = action === "list" || action === "get" ? "read" : "write";
   const policy = await policyDecision(args, `storage.${action}`, sideEffect, deps);
-  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "storage", action, policy }));
+  if (!policy.allowed)
+    return boundedToolJson(policyDeniedPayload({ domain: "storage", action, policy }));
   const value = action === "set" ? parseStorageValue(args.value ?? positionals[3]) : null;
-  return boundedToolJson(await bridgeDomainCommand({
-    args,
-    domain: "storage",
-    action,
-    expression: storageExpression({
-      store,
-      action,
-      key,
-      value,
-      limit: clampNumber(args.limit ?? 100, 1, 1000),
-    }),
-    policy,
-  }, deps));
+  return boundedToolJson(
+    await bridgeDomainCommand(
+      {
+        args,
+        domain: "storage",
+        action,
+        expression: storageExpression({
+          store,
+          action,
+          key,
+          value,
+          limit: clampNumber(args.limit ?? 100, 1, 1000),
+        }),
+        policy,
+      },
+      deps,
+    ),
+  );
 }
 
 export async function stateCommand(
@@ -134,17 +143,24 @@ export async function stateCommand(
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "list", "action");
-  if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
+  if (!["list", "save", "load", "clear"].includes(action))
+    throw new Error(`Unknown state action: ${action}`);
   const sideEffect = action === "list" ? "read" : "write";
   const policy = await policyDecision(args, `state.${action}`, sideEffect, deps);
-  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "state", action, policy }));
-  return boundedToolJson(await bridgeDomainCommand({
-    args,
-    domain: "state",
-    action,
-    expression: stateExpression({ action, name: args.name ?? positionals[1] }),
-    policy,
-  }, deps));
+  if (!policy.allowed)
+    return boundedToolJson(policyDeniedPayload({ domain: "state", action, policy }));
+  return boundedToolJson(
+    await bridgeDomainCommand(
+      {
+        args,
+        domain: "state",
+        action,
+        expression: stateExpression({ action, name: args.name ?? positionals[1] }),
+        policy,
+      },
+      deps,
+    ),
+  );
 }
 
 export async function controlsCommand(
@@ -153,17 +169,24 @@ export async function controlsCommand(
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "list", "action");
-  if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
+  if (!["list", "get", "press"].includes(action))
+    throw new Error(`Unknown controls action: ${action}`);
   const sideEffect = action === "press" ? "device" : "read";
   const policy = await policyDecision(args, `controls.${action}`, sideEffect, deps);
-  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "controls", action, policy }));
-  return boundedToolJson(await bridgeDomainCommand({
-    args,
-    domain: "controls",
-    action,
-    expression: controlsExpression({ action, name: args.name ?? positionals[1] }),
-    policy,
-  }, deps));
+  if (!policy.allowed)
+    return boundedToolJson(policyDeniedPayload({ domain: "controls", action, policy }));
+  return boundedToolJson(
+    await bridgeDomainCommand(
+      {
+        args,
+        domain: "controls",
+        action,
+        expression: controlsExpression({ action, name: args.name ?? positionals[1] }),
+        policy,
+      },
+      deps,
+    ),
+  );
 }
 
 const defaultBridgeDomainDependencies: BridgeDomainDependencies = {
@@ -180,14 +203,18 @@ export async function bridgeDomainCommand(
   const metroPort = clampNumber(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
   if (sideEffect !== "read" && input.policy?.allowed !== true) {
-    return policyDeniedPayload({ domain: input.domain, action: input.action, policy: input.policy ?? {
-      checked: true,
-      action: `${input.domain}.${input.action}`,
-      sideEffect,
-      allowed: false,
-      source: null,
-      reason: "No action policy allowed this state-changing operation.",
-    } });
+    return policyDeniedPayload({
+      domain: input.domain,
+      action: input.action,
+      policy: input.policy ?? {
+        checked: true,
+        action: `${input.domain}.${input.action}`,
+        sideEffect,
+        allowed: false,
+        source: null,
+        reason: "No action policy allowed this state-changing operation.",
+      },
+    });
   }
   const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
   const target = targets[0] ?? null;
@@ -213,7 +240,9 @@ export async function bridgeDomainCommand(
       policy: input.policy,
     });
   }
-  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, input.expression, { timeoutMs: 5000 });
+  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, input.expression, {
+    timeoutMs: 5000,
+  });
   const value = result?.result?.result?.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return domainUnavailable({
@@ -223,18 +252,29 @@ export async function bridgeDomainCommand(
       code: "transport-failure",
       reason: result?.error ?? `${input.domain} bridge did not return a value.`,
       target: targetSummary(target),
-      transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
+      transport: bridgeRuntimeTransport(
+        metroPort,
+        target,
+        result?.diagnostics ?? result?.cdp ?? null,
+      ),
       policy: input.policy,
     });
   }
-  const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(value) : value) as Record<string, any>;
+  const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(value) : value) as Record<
+    string,
+    any
+  >;
   return sanitizePayload({
     ...redacted,
     domain: input.domain,
     action: input.action,
     metroPort,
     target: targetSummary(target),
-    transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
+    transport: bridgeRuntimeTransport(
+      metroPort,
+      target,
+      result?.diagnostics ?? result?.cdp ?? null,
+    ),
     evidenceSource: typeof redacted.source === "string" ? redacted.source : "unknown",
     policy: input.policy,
   }) as Record<string, any>;
@@ -287,14 +327,29 @@ export async function policyDecision(
   deps: Pick<BridgeDomainDependencies, "readJsonFile" | "resolvePath"> = {},
 ): Promise<PolicyDecision> {
   if (sideEffect === "read") {
-    return { checked: true, action, sideEffect, allowed: true, source: null, reason: "Read action does not require policy approval." };
+    return {
+      checked: true,
+      action,
+      sideEffect,
+      allowed: true,
+      source: null,
+      reason: "Read action does not require policy approval.",
+    };
   }
   const policyPath = optionalString(args.actionPolicy);
   if (!policyPath) {
-    return { checked: true, action, sideEffect, allowed: false, source: null, reason: "No action policy allowed this state-changing operation." };
+    return {
+      checked: true,
+      action,
+      sideEffect,
+      allowed: false,
+      source: null,
+      reason: "No action policy allowed this state-changing operation.",
+    };
   }
   const resolved = deps.resolvePath ? deps.resolvePath(policyPath) : policyPath;
-  if (!deps.readJsonFile) throw new Error("policyDecision requires readJsonFile when actionPolicy is supplied.");
+  if (!deps.readJsonFile)
+    throw new Error("policyDecision requires readJsonFile when actionPolicy is supplied.");
   const policy = await deps.readJsonFile(resolved);
   const allowed = policyAllowsAction(policy, action);
   return {
@@ -462,7 +517,9 @@ function controlsExpression(args: { action: unknown; name?: unknown }): string {
   })()`;
 }
 
-export function targetSummary(target: BridgeTarget | TargetSummary | null | undefined): TargetSummary | null {
+export function targetSummary(
+  target: BridgeTarget | TargetSummary | null | undefined,
+): TargetSummary | null {
   if (!target) return null;
   return sanitizePayload({
     id: target.id ?? null,
@@ -474,8 +531,11 @@ export function targetSummary(target: BridgeTarget | TargetSummary | null | unde
     webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
     reactNative: target.reactNative ?? null,
     capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      hermesRuntime:
+        typeof target.webSocketDebuggerUrl === "string" &&
+        target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend:
+        typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
       reactNative: Boolean(target.reactNative),
     },
   }) as TargetSummary;
@@ -488,7 +548,8 @@ export function clampNumber(value: unknown, min: number, max: number): number {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -527,7 +588,10 @@ function stringifyBoundedJson(value: unknown): string {
   return output;
 }
 
-function bridgeActionSideEffect(domain: string, action: string): "read" | "write" | "device" | "unknown" {
+function bridgeActionSideEffect(
+  domain: string,
+  action: string,
+): "read" | "write" | "device" | "unknown" {
   if (domain === "storage") return action === "list" || action === "get" ? "read" : "write";
   if (domain === "state") return action === "list" ? "read" : "write";
   if (domain === "controls") return action === "press" ? "device" : "read";
@@ -539,7 +603,9 @@ function boundValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
   const record = asRecord(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]),
+  );
 }
 
 function redactValue(value: unknown): unknown {
@@ -547,10 +613,12 @@ function redactValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactValue);
   const record = asRecord(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
-    key,
-    isSensitiveKey(key) ? "[redacted]" : redactValue(nested),
-  ]));
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [
+      key,
+      isSensitiveKey(key) ? "[redacted]" : redactValue(nested),
+    ]),
+  );
 }
 
 function redactString(value: string): string {
@@ -565,7 +633,10 @@ function redactString(value: string): string {
     }
     return changed ? parsed.toString() : value;
   } catch {
-    return value.replace(/([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi, "$1[redacted]");
+    return value.replace(
+      /([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi,
+      "$1[redacted]",
+    );
   }
 }
 
@@ -580,7 +651,9 @@ function truncate(value: unknown, max = MAX_OUTPUT): string {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }
 
 function formatError(error: unknown): string {

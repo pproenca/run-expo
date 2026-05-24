@@ -1,5 +1,4 @@
 import { basename } from "node:path";
-
 import { defaultInteractionDependencies } from "./dependencies.js";
 import {
   asGesturePlan,
@@ -15,7 +14,12 @@ import {
   truncate,
   unwrapToolPayload,
 } from "./shared.js";
-import type { GesturePlan, InteractionArgs, InteractionDependencies, InteractionPayload } from "./types.js";
+import type {
+  GesturePlan,
+  InteractionArgs,
+  InteractionDependencies,
+  InteractionPayload,
+} from "./types.js";
 
 export async function automationGesture(
   args: InteractionArgs,
@@ -31,7 +35,9 @@ export async function automationGestureInternal(
 ): Promise<InteractionPayload> {
   const platform = platformArg(args.platform);
   const gesture = normalizeGesture(args.gesture);
-  const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
+  const policyDenied = policyChecked
+    ? null
+    : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
   const repeat = clampNumber(args.repeat ?? 1, 1, 20);
   const intervalMs = clampNumber(args.intervalMs ?? 250, 0, 10_000);
@@ -42,7 +48,16 @@ export async function automationGestureInternal(
   const componentFilter = optionalString(args.componentFilter);
   const cwd = optionalString(args.cwd) ?? ".";
   const coordinates = normalizeGestureCoordinates(gesture, args);
-  const plan = gestureCommandPlan({ platform, gesture, coordinates, durationMs, holdMs, repeat, intervalMs, device: args.device });
+  const plan = gestureCommandPlan({
+    platform,
+    gesture,
+    coordinates,
+    durationMs,
+    holdMs,
+    repeat,
+    intervalMs,
+    device: args.device,
+  });
   const reviewQuestionsThisCanAnswer = reviewQuestions();
 
   if (args.dryRun === true) {
@@ -63,20 +78,62 @@ export async function automationGestureInternal(
     };
   }
 
-  const evidence: InteractionPayload = { traceStart: null, traceRead: null, traceStop: null, screenshots: {} };
+  const evidence: InteractionPayload = {
+    traceStart: null,
+    traceRead: null,
+    traceStop: null,
+    screenshots: {},
+  };
   if (args.captureBeforeAfter === true) {
-    asRecord(evidence.screenshots).before = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "before" }, deps);
+    asRecord(evidence.screenshots).before = await captureGestureScreenshot(
+      { platform, device: args.device, outputDir: args.outputDir, label: "before" },
+      deps,
+    );
   }
   if (args.includeTrace === true) {
-    evidence.traceStart = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "start", componentFilter, maxEvents, includeEvents: false }));
+    evidence.traceStart = unwrapToolPayload(
+      await deps.traceInteraction({
+        cwd,
+        metroPort,
+        action: "start",
+        componentFilter,
+        maxEvents,
+        includeEvents: false,
+      }),
+    );
   }
-  const execution = await executeGesturePlanInternal({ platform, device: args.device, gesture, plan, repeat, intervalMs }, deps, true);
+  const execution = await executeGesturePlanInternal(
+    { platform, device: args.device, gesture, plan, repeat, intervalMs },
+    deps,
+    true,
+  );
   if (args.includeTrace === true) {
-    evidence.traceRead = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "read", componentFilter, maxEvents, includeEvents: false }));
-    evidence.traceStop = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "stop", componentFilter, maxEvents, includeEvents: false }));
+    evidence.traceRead = unwrapToolPayload(
+      await deps.traceInteraction({
+        cwd,
+        metroPort,
+        action: "read",
+        componentFilter,
+        maxEvents,
+        includeEvents: false,
+      }),
+    );
+    evidence.traceStop = unwrapToolPayload(
+      await deps.traceInteraction({
+        cwd,
+        metroPort,
+        action: "stop",
+        componentFilter,
+        maxEvents,
+        includeEvents: false,
+      }),
+    );
   }
   if (args.captureBeforeAfter === true) {
-    asRecord(evidence.screenshots).after = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "after" }, deps);
+    asRecord(evidence.screenshots).after = await captureGestureScreenshot(
+      { platform, device: args.device, outputDir: args.outputDir, label: "after" },
+      deps,
+    );
   }
 
   return {
@@ -93,7 +150,8 @@ export async function automationGestureInternal(
     evidence,
     reviewQuestionsThisCanAnswer,
     interferenceReview: {
-      requiredHumanCheck: "Compare before/after screenshots and trace summary against the intended gesture owner. This command gathers evidence; it does not know the app's product semantics.",
+      requiredHumanCheck:
+        "Compare before/after screenshots and trace summary against the intended gesture owner. This command gathers evidence; it does not know the app's product semantics.",
       possibleSignals: [
         "after screenshot shows unexpected scroll offset or selected state",
         "trace shows commits/layout changes outside the intended component filter",
@@ -106,7 +164,8 @@ export async function automationGestureInternal(
 export function normalizeGesture(value: unknown): string {
   const gesture = requireString(value, "gesture");
   if (gesture === "tap-and-hold") return "long-press";
-  if (!["tap", "long-press", "drag", "swipe"].includes(gesture)) throw new Error(`Unknown gesture: ${gesture}`);
+  if (!["tap", "long-press", "drag", "swipe"].includes(gesture))
+    throw new Error(`Unknown gesture: ${gesture}`);
   return gesture;
 }
 
@@ -117,7 +176,10 @@ export function defaultGestureDurationMs(gesture: string): number {
   return 80;
 }
 
-export function normalizeGestureCoordinates(gesture: string, args: InteractionArgs): InteractionPayload {
+export function normalizeGestureCoordinates(
+  gesture: string,
+  args: InteractionArgs,
+): InteractionPayload {
   if (gesture === "tap" || gesture === "long-press") {
     return {
       x: clampNumber(args.x, 0, Number.MAX_SAFE_INTEGER),
@@ -144,31 +206,91 @@ export function gestureCommandPlan(args: InteractionArgs): GesturePlan {
   const holdSeconds = holdMs === null ? null : formatSeconds(holdMs);
   if (platform === "android") {
     const deviceArgs = optionalString(args.device) ? ["-s", String(args.device)] : [];
-    const command = gesture === "tap"
-      ? ["adb", ...deviceArgs, "shell", "input", "tap", String(coordinates.x), String(coordinates.y)]
-      : gesture === "long-press"
-        ? ["adb", ...deviceArgs, "shell", "input", "swipe", String(coordinates.x), String(coordinates.y), String(coordinates.x), String(coordinates.y), String(durationMs)]
-        : ["adb", ...deviceArgs, "shell", "input", "swipe", String(coordinates.startX), String(coordinates.startY), String(coordinates.endX), String(coordinates.endY), String(durationMs)];
+    const command =
+      gesture === "tap"
+        ? [
+            "adb",
+            ...deviceArgs,
+            "shell",
+            "input",
+            "tap",
+            String(coordinates.x),
+            String(coordinates.y),
+          ]
+        : gesture === "long-press"
+          ? [
+              "adb",
+              ...deviceArgs,
+              "shell",
+              "input",
+              "swipe",
+              String(coordinates.x),
+              String(coordinates.y),
+              String(coordinates.x),
+              String(coordinates.y),
+              String(durationMs),
+            ]
+          : [
+              "adb",
+              ...deviceArgs,
+              "shell",
+              "input",
+              "swipe",
+              String(coordinates.startX),
+              String(coordinates.startY),
+              String(coordinates.endX),
+              String(coordinates.endY),
+              String(durationMs),
+            ];
     return {
       tool: "adb",
       command,
       repeat,
       intervalMs,
-      notes: holdMs ? ["Android adb input swipe has duration but no separate hold-before-move primitive."] : [],
+      notes: holdMs
+        ? ["Android adb input swipe has duration but no separate hold-before-move primitive."]
+        : [],
     };
   }
-  const udidArgs = optionalString(args.device) ? ["--udid", String(args.device)] : ["--udid", "<resolved-booted-simulator-udid>"];
-  const command = gesture === "tap"
-    ? ["idb", "ui", "tap", String(coordinates.x), String(coordinates.y), ...udidArgs]
-    : gesture === "long-press"
-      ? ["idb", "ui", "tap", String(coordinates.x), String(coordinates.y), "--duration", durationSeconds, ...udidArgs]
-      : ["idb", "ui", "swipe", String(coordinates.startX), String(coordinates.startY), String(coordinates.endX), String(coordinates.endY), "--duration", durationSeconds, ...udidArgs];
+  const udidArgs = optionalString(args.device)
+    ? ["--udid", String(args.device)]
+    : ["--udid", "<resolved-booted-simulator-udid>"];
+  const command =
+    gesture === "tap"
+      ? ["idb", "ui", "tap", String(coordinates.x), String(coordinates.y), ...udidArgs]
+      : gesture === "long-press"
+        ? [
+            "idb",
+            "ui",
+            "tap",
+            String(coordinates.x),
+            String(coordinates.y),
+            "--duration",
+            durationSeconds,
+            ...udidArgs,
+          ]
+        : [
+            "idb",
+            "ui",
+            "swipe",
+            String(coordinates.startX),
+            String(coordinates.startY),
+            String(coordinates.endX),
+            String(coordinates.endY),
+            "--duration",
+            durationSeconds,
+            ...udidArgs,
+          ];
   return {
     tool: "idb",
     command,
     repeat,
     intervalMs,
-    notes: holdSeconds ? ["Current idb plan records holdMs as intent; idb swipe supports duration but not a separate hold-before-move flag in this wrapper."] : [],
+    notes: holdSeconds
+      ? [
+          "Current idb plan records holdMs as intent; idb swipe supports duration but not a separate hold-before-move flag in this wrapper.",
+        ]
+      : [],
   };
 }
 
@@ -187,32 +309,64 @@ async function executeGesturePlanInternal(
   const platform = platformArg(args.platform);
   const plan = asGesturePlan(args.plan);
   const gesture = optionalString(args.gesture) ?? "unknown";
-  const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
+  const policyDenied = policyChecked
+    ? null
+    : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
   const repeat = clampNumber(args.repeat ?? plan.repeat, 1, 20);
   const intervalMs = clampNumber(args.intervalMs ?? plan.intervalMs, 0, 10_000);
   if (platform === "android") {
     const adb = await deps.commandPath("adb");
-    if (!adb) return { available: false, reason: "Android gestures require adb, which is not installed or not on PATH.", plan };
-    return executeRepeatedCommandInternal(plan.command[0] ?? "adb", plan.command.slice(1), { repeat, intervalMs }, deps);
+    if (!adb)
+      return {
+        available: false,
+        reason: "Android gestures require adb, which is not installed or not on PATH.",
+        plan,
+      };
+    return executeRepeatedCommandInternal(
+      plan.command[0] ?? "adb",
+      plan.command.slice(1),
+      { repeat, intervalMs },
+      deps,
+    );
   }
 
   const tool = await resolveIosInteractionTool(deps);
   if (!tool) {
     return {
       available: false,
-      reason: "iOS complex gestures require the idb or axe CLI, but neither is installed or on PATH.",
-      installHint: "Install idb or axe and rerun this command, or use dryRun=true to inspect the intended gesture plan.",
+      reason:
+        "iOS complex gestures require the idb or axe CLI, but neither is installed or on PATH.",
+      installHint:
+        "Install idb or axe and rerun this command, or use dryRun=true to inspect the intended gesture plan.",
       plan,
     };
   }
-  const resolvedDevice = args.device ? { udid: String(args.device) } : await deps.resolveIosDevice(undefined, { preferBooted: true });
+  const resolvedDevice = args.device
+    ? { udid: String(args.device) }
+    : await deps.resolveIosDevice(undefined, { preferBooted: true });
   if (tool.tool === "axe") {
-    const command = axeGestureCommandFromPlan({ gesture: args.gesture, plan, udid: resolvedDevice.udid });
-    return executeRepeatedCommandInternal(tool.path, command.slice(1), { repeat, intervalMs, device: resolvedDevice, tool: tool.tool, plannedCommand: command }, deps);
+    const command = axeGestureCommandFromPlan({
+      gesture: args.gesture,
+      plan,
+      udid: resolvedDevice.udid,
+    });
+    return executeRepeatedCommandInternal(
+      tool.path,
+      command.slice(1),
+      { repeat, intervalMs, device: resolvedDevice, tool: tool.tool, plannedCommand: command },
+      deps,
+    );
   }
-  const command = plan.command.map((part) => part === "<resolved-booted-simulator-udid>" ? resolvedDevice.udid : part);
-  return executeRepeatedCommandInternal(tool.path, command.slice(1), { repeat, intervalMs, device: resolvedDevice, tool: tool.tool, plannedCommand: command }, deps);
+  const command = plan.command.map((part) =>
+    part === "<resolved-booted-simulator-udid>" ? resolvedDevice.udid : part,
+  );
+  return executeRepeatedCommandInternal(
+    tool.path,
+    command.slice(1),
+    { repeat, intervalMs, device: resolvedDevice, tool: tool.tool, plannedCommand: command },
+    deps,
+  );
 }
 
 export function axeGestureCommandFromPlan(args: InteractionArgs): string[] {
@@ -220,11 +374,25 @@ export function axeGestureCommandFromPlan(args: InteractionArgs): string[] {
   const plan = asGesturePlan(args.plan);
   const udid = requireString(args.udid, "udid");
   const command = plan.command;
-  if (gesture === "tap") return ["axe", "tap", "-x", command[3] ?? "", "-y", command[4] ?? "", "--udid", udid];
+  if (gesture === "tap")
+    return ["axe", "tap", "-x", command[3] ?? "", "-y", command[4] ?? "", "--udid", udid];
   if (gesture === "long-press") {
     const durationIndex = command.indexOf("--duration");
-    const delay = durationIndex === -1 ? "0.9" : command[durationIndex + 1] ?? "0.9";
-    return ["axe", "touch", "-x", command[3] ?? "", "-y", command[4] ?? "", "--down", "--up", "--delay", delay, "--udid", udid];
+    const delay = durationIndex === -1 ? "0.9" : (command[durationIndex + 1] ?? "0.9");
+    return [
+      "axe",
+      "touch",
+      "-x",
+      command[3] ?? "",
+      "-y",
+      command[4] ?? "",
+      "--down",
+      "--up",
+      "--delay",
+      delay,
+      "--udid",
+      udid,
+    ];
   }
   const durationIndex = command.indexOf("--duration");
   const duration = durationIndex === -1 ? null : command[durationIndex + 1];
@@ -296,6 +464,11 @@ export async function captureGestureScreenshot(
 ): Promise<InteractionPayload> {
   const root = optionalString(args.outputDir) ?? deps.joinPath(deps.tmpdir(), "expo98-gestures");
   await deps.mkdir(root, { recursive: true });
-  const outputPath = deps.joinPath(root, `${requireString(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`);
-  return unwrapToolPayload(await deps.captureScreenshot({ platform: args.platform, device: args.device, outputPath }));
+  const outputPath = deps.joinPath(
+    root,
+    `${requireString(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`,
+  );
+  return unwrapToolPayload(
+    await deps.captureScreenshot({ platform: args.platform, device: args.device, outputPath }),
+  );
 }

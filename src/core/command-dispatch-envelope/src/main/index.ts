@@ -1,9 +1,4 @@
 import {
-  toolJson,
-  unwrapToolJson,
-  type ToolTextResult,
-} from "../../../tool-json-envelope/src/main/index.ts";
-import {
   CliUsageError,
   errorCodeForExitCode,
   exitCodeForError,
@@ -19,6 +14,11 @@ import {
   sanitizeErrorMessage,
   truncateOutput,
 } from "../../../policy-redaction/src/main/redactor.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../tool-json-envelope/src/main/index.ts";
 
 export const CLI_NAME = CURRENT_CLI_NAME;
 export const REDACTED = "[redacted]";
@@ -32,11 +32,7 @@ export {
   EXIT_RUNTIME_FAILURE,
   EXIT_SUCCESS,
 };
-export {
-  formatError,
-  redactValue,
-  sanitizeErrorMessage,
-};
+export { formatError, redactValue, sanitizeErrorMessage };
 export type { ToolTextResult };
 
 export interface CliGlobals {
@@ -67,13 +63,26 @@ export type ToolHandler = (args: Record<string, unknown>) => Promise<unknown> | 
 
 export interface RunRecorder {
   path: string | null;
-  finish(entry: { status: "completed" | "failed"; exitCode: number; payload?: unknown; error?: unknown }): Promise<void> | void;
+  finish(entry: {
+    status: "completed" | "failed";
+    exitCode: number;
+    payload?: unknown;
+    error?: unknown;
+  }): Promise<void> | void;
 }
 
 export interface DispatchDependencies {
   handlers: Record<string, ToolHandler>;
-  projectArgs?: (command: string, args: ParsedCommand["args"], globals: CliGlobals) => Record<string, unknown>;
-  startRunRecord?: (entry: { command: string; args: Record<string, unknown>; globals: CliGlobals }) => Promise<RunRecorder> | RunRecorder;
+  projectArgs?: (
+    command: string,
+    args: ParsedCommand["args"],
+    globals: CliGlobals,
+  ) => Record<string, unknown>;
+  startRunRecord?: (entry: {
+    command: string;
+    args: Record<string, unknown>;
+    globals: CliGlobals;
+  }) => Promise<RunRecorder> | RunRecorder;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
   printHelp?: () => string;
@@ -82,7 +91,10 @@ export interface DispatchDependencies {
 
 export { COMMAND_ALIASES, commandAliases };
 
-export async function dispatchCommand(parsed: ParsedCommand, dependencies: DispatchDependencies): Promise<number> {
+export async function dispatchCommand(
+  parsed: ParsedCommand,
+  dependencies: DispatchDependencies,
+): Promise<number> {
   const { globals, command, args } = parsed;
   const stdout = dependencies.stdout ?? (() => {});
   const stderr = dependencies.stderr ?? (() => {});
@@ -106,7 +118,9 @@ export async function dispatchCommand(parsed: ParsedCommand, dependencies: Dispa
     throw new CliUsageError(`Unknown command: ${command}`);
   }
 
-  const effectiveArgs = dependencies.projectArgs ? dependencies.projectArgs(command, args, globals) : pickDefined({ ...args });
+  const effectiveArgs = dependencies.projectArgs
+    ? dependencies.projectArgs(command, args, globals)
+    : pickDefined({ ...args });
   const recorder = await (dependencies.startRunRecord
     ? dependencies.startRunRecord({ command, args: effectiveArgs, globals })
     : noopRecorder());
@@ -136,7 +150,10 @@ export async function dispatchCommand(parsed: ParsedCommand, dependencies: Dispa
 export async function runToolAndEmitPayload(
   toolName: string,
   args: Record<string, unknown>,
-  options: RunToolOptions & { handlers: Record<string, ToolHandler>; stdout?: (text: string) => void },
+  options: RunToolOptions & {
+    handlers: Record<string, ToolHandler>;
+    stdout?: (text: string) => void;
+  },
 ): Promise<unknown> {
   const handler = options.handlers[toolName];
   if (!handler) {
@@ -159,19 +176,29 @@ export function formatCliPayload(payload: unknown, options: RunToolOptions): str
   if (globals.quiet && !globals.json) {
     return null;
   }
-  const maybeBoundedPayload = globals.contentBoundaries === true
-    ? { contentBoundary: "expo98-untrusted-output", payload }
-    : payload;
+  const maybeBoundedPayload =
+    globals.contentBoundaries === true
+      ? { contentBoundary: "expo98-untrusted-output", payload }
+      : payload;
   if (globals.json) {
-    return boundOutput(`${JSON.stringify({ ok: true, data: maybeBoundedPayload }, null, 2)}\n`, globals);
+    return boundOutput(
+      `${JSON.stringify({ ok: true, data: maybeBoundedPayload }, null, 2)}\n`,
+      globals,
+    );
   }
   if (globals.plain) {
-    return boundOutput(`${plainPayload(options.command, maybeBoundedPayload).join("\n")}\n`, globals);
+    return boundOutput(
+      `${plainPayload(options.command, maybeBoundedPayload).join("\n")}\n`,
+      globals,
+    );
   }
   return boundOutput(`${JSON.stringify(maybeBoundedPayload, null, 2)}\n`, globals);
 }
 
-export function boundOutput(text: string, globals: Pick<CliGlobals, "maxOutput"> = { maxOutput: null }): string {
+export function boundOutput(
+  text: string,
+  globals: Pick<CliGlobals, "maxOutput"> = { maxOutput: null },
+): string {
   if (globals.maxOutput === null || globals.maxOutput === undefined) {
     return text;
   }

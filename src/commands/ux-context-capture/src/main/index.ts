@@ -1,20 +1,32 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { collectAppLogs } from "../../../app-lifecycle-actions/src/main/index.ts";
 import { metroStatusPayload } from "../../../metro-probes/src/main/index.ts";
 import { projectInfo } from "../../../project-info-doctor/src/main/index.ts";
-import { expoRouteContext } from "../../../router-sitemap/src/main/index.ts";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
+import { expoRouteContext } from "../../../router-sitemap/src/main/index.ts";
 import { automationTakeScreenshot } from "../../../screenshot-capture/src/main/index.ts";
 
 export interface UxContextDependencies {
-  normalizeProjectCwd: (cwd: unknown, options: { allowMissingPackageJson: true }) => Promise<string>;
-  resolveIosDevice: (device: unknown, options: { preferBooted: true }) => Promise<Record<string, any>>;
+  normalizeProjectCwd: (
+    cwd: unknown,
+    options: { allowMissingPackageJson: true },
+  ) => Promise<string>;
+  resolveIosDevice: (
+    device: unknown,
+    options: { preferBooted: true },
+  ) => Promise<Record<string, any>>;
   expoProjectRuntimeSummary: (cwd: string) => Promise<Record<string, any>>;
-  inspectMetro: (metroPort: number, options: { includeComponents: boolean; componentFilter: string | null }) => Promise<{
+  inspectMetro: (
+    metroPort: number,
+    options: { includeComponents: boolean; componentFilter: string | null },
+  ) => Promise<{
     metro?: Record<string, any> | null;
     runtime?: Record<string, any> | null;
   }>;
@@ -23,7 +35,10 @@ export interface UxContextDependencies {
   analyzePngScreenshot: (outputPath: string) => Promise<Record<string, any>>;
   expoRouteContext: (cwd: string) => Promise<Record<string, any>>;
   describeIosHierarchy: (udid: string) => Promise<Record<string, any>>;
-  collectFilteredIosLogs: (udid: string, options: { last: string; bundleId: string | null; processName: string | null }) => Promise<Record<string, any>>;
+  collectFilteredIosLogs: (
+    udid: string,
+    options: { last: string; bundleId: string | null; processName: string | null },
+  ) => Promise<Record<string, any>>;
   now?: () => Date;
   nowMs?: () => number;
 }
@@ -84,12 +99,15 @@ export async function captureUxContext(
   const projectSummary = await safeToolSection(() => deps.expoProjectRuntimeSummary(cwd));
   context.project = projectSummary.ok ? projectSummary.value : projectSummary;
 
-  const metroSummary = args.includeRuntime === false
-    ? { ok: false as const, skipped: true, reason: "includeRuntime is false" }
-    : await safeToolSection(() => deps.inspectMetro(metroPort, {
-      includeComponents: args.includeComponents !== false,
-      componentFilter: requireOptionalString(args.componentFilter),
-    }));
+  const metroSummary =
+    args.includeRuntime === false
+      ? { ok: false as const, skipped: true, reason: "includeRuntime is false" }
+      : await safeToolSection(() =>
+          deps.inspectMetro(metroPort, {
+            includeComponents: args.includeComponents !== false,
+            componentFilter: requireOptionalString(args.componentFilter),
+          }),
+        );
   if (metroSummary.ok === true) {
     context.metro = metroSummary.value.metro;
     context.runtime = metroSummary.value.runtime;
@@ -97,14 +115,18 @@ export async function captureUxContext(
     context.metro = metroSummary;
     context.runtime = metroSummary;
   }
-  context.componentHierarchy = context.runtime?.componentHierarchy ?? (
-    args.includeRuntime === false
+  context.componentHierarchy =
+    context.runtime?.componentHierarchy ??
+    (args.includeRuntime === false
       ? { skipped: true, reason: "includeRuntime is false" }
       : args.includeComponents === false
         ? { skipped: true, reason: "includeComponents is false" }
-        : { available: false, reason: "No component hierarchy returned by runtime probe." }
-  );
-  if (context.runtime && typeof context.runtime === "object" && "componentHierarchy" in context.runtime) {
+        : { available: false, reason: "No component hierarchy returned by runtime probe." });
+  if (
+    context.runtime &&
+    typeof context.runtime === "object" &&
+    "componentHierarchy" in context.runtime
+  ) {
     delete context.runtime.componentHierarchy;
   }
 
@@ -113,16 +135,25 @@ export async function captureUxContext(
     firstMetroAppId(context.metro) ??
     appConfigBundleId(context.project) ??
     null;
-  const processName = requireOptionalString(args.processName) ?? processNameFromBundleId(inferredBundleId);
+  const processName =
+    requireOptionalString(args.processName) ?? processNameFromBundleId(inferredBundleId);
   if (inferredBundleId) {
-    const appInfo = await safeToolSection(() => deps.iosInstalledAppInfo(String(device.udid), inferredBundleId));
+    const appInfo = await safeToolSection(() =>
+      deps.iosInstalledAppInfo(String(device.udid), inferredBundleId),
+    );
     context.app = appInfo.ok ? appInfo.value : { bundleId: inferredBundleId, ...appInfo };
   } else {
-    context.app = { bundleId: null, warning: "Could not infer bundleId. Pass bundleId for app container details and precise log filtering." };
+    context.app = {
+      bundleId: null,
+      warning:
+        "Could not infer bundleId. Pass bundleId for app container details and precise log filtering.",
+    };
   }
 
   if (args.includeScreenshot !== false) {
-    const screenshot = await safeToolSection(() => deps.captureIosScreenshot(String(device.udid), args.outputPath));
+    const screenshot = await safeToolSection(() =>
+      deps.captureIosScreenshot(String(device.udid), args.outputPath),
+    );
     context.screenshot = screenshot.ok ? screenshot.value : screenshot;
     if (screenshot.ok && args.includeImageAnalysis !== false) {
       const outputPath = screenshot.value.outputPath;
@@ -146,18 +177,25 @@ export async function captureUxContext(
 
   if (args.includeLogs) {
     const logsLast = args.logsLast ?? "60s";
-    if (!/^\d+[smhd]$/.test(logsLast)) throw new Error("logsLast must look like 30s, 2m, 1h, or 1d.");
-    const logs = await safeToolSection(() => deps.collectFilteredIosLogs(String(device.udid), {
-      last: logsLast,
-      bundleId: inferredBundleId,
-      processName,
-    }));
+    if (!/^\d+[smhd]$/.test(logsLast))
+      throw new Error("logsLast must look like 30s, 2m, 1h, or 1d.");
+    const logs = await safeToolSection(() =>
+      deps.collectFilteredIosLogs(String(device.udid), {
+        last: logsLast,
+        bundleId: inferredBundleId,
+        processName,
+      }),
+    );
     context.logs = logs.ok ? logs.value : logs;
   } else {
     context.logs = {
       skipped: true,
       reason: "includeLogs is false. Set includeLogs=true for recent filtered iOS logs.",
-      suggestedFilter: processName ? `process == "${processName}"` : inferredBundleId ? `process CONTAINS "${processNameFromBundleId(inferredBundleId)}"` : null,
+      suggestedFilter: processName
+        ? `process == "${processName}"`
+        : inferredBundleId
+          ? `process CONTAINS "${processNameFromBundleId(inferredBundleId)}"`
+          : null,
     };
   }
 
@@ -168,10 +206,18 @@ export async function captureUxContext(
 const defaultUxContextDependencies: UxContextDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd,
   resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString(device), options),
-  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson(await projectInfo({ cwd })) as Record<string, any>,
+  expoProjectRuntimeSummary: async (cwd) =>
+    unwrapToolJson(await projectInfo({ cwd })) as Record<string, any>,
   inspectMetro: async (metroPort) => {
     const metro = await metroStatusPayload({ metroPort });
-    return { metro, runtime: { available: metro.available, targetCount: metro.targetCount, targets: metro.targets } };
+    return {
+      metro,
+      runtime: {
+        available: metro.available,
+        targetCount: metro.targetCount,
+        targets: metro.targets,
+      },
+    };
   },
   iosInstalledAppInfo: async (udid, bundleId) => {
     const result = await execFile("xcrun", ["simctl", "get_app_container", udid, bundleId], {
@@ -186,15 +232,23 @@ const defaultUxContextDependencies: UxContextDependencies = {
       error: result.error ?? null,
     };
   },
-  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson(await automationTakeScreenshot({
-    platform: "ios",
-    device: udid,
-    outputPath: String(outputPath),
-  })) as Record<string, any>,
+  captureIosScreenshot: async (udid, outputPath) =>
+    unwrapToolJson(
+      await automationTakeScreenshot({
+        platform: "ios",
+        device: udid,
+        outputPath: String(outputPath),
+      }),
+    ) as Record<string, any>,
   analyzePngScreenshot: async (outputPath) => {
     const details = await stat(outputPath).catch(() => null);
     return details
-      ? { available: true, outputPath, bytes: details.size, modifiedAt: details.mtime.toISOString() }
+      ? {
+          available: true,
+          outputPath,
+          bytes: details.size,
+          modifiedAt: details.mtime.toISOString(),
+        }
       : { available: false, outputPath, reason: "Screenshot file was not found." };
   },
   expoRouteContext,
@@ -211,18 +265,21 @@ const defaultUxContextDependencies: UxContextDependencies = {
       error: result.error ?? null,
     };
   },
-  collectFilteredIosLogs: async (udid, options) => collectAppLogs({
-    platform: "ios",
-    device: udid,
-    last: options.last,
-    bundleId: options.bundleId ?? undefined,
-    processName: options.processName ?? undefined,
-  }),
+  collectFilteredIosLogs: async (udid, options) =>
+    collectAppLogs({
+      platform: "ios",
+      device: udid,
+      last: options.last,
+      bundleId: options.bundleId ?? undefined,
+      processName: options.processName ?? undefined,
+    }),
   now: () => new Date(),
   nowMs: () => Date.now(),
 };
 
-export async function safeToolSection<T>(fn: () => Promise<T> | T): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
+export async function safeToolSection<T>(
+  fn: () => Promise<T> | T,
+): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
   try {
     return { ok: true, value: await fn() };
   } catch (error) {
@@ -261,7 +318,9 @@ function appConfigBundleId(project: unknown): string | null {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }
 
 function now(deps: UxContextDependencies): Date {
@@ -283,15 +342,26 @@ function execFile(
   file: string,
   args: string[],
   options: { timeout: number; rejectOnError: false },
-): Promise<{ stdout: string; stderr: string; error?: Error & { code?: number | string | null; signal?: string | null } }> {
+): Promise<{
+  stdout: string;
+  stderr: string;
+  error?: Error & { code?: number | string | null; signal?: string | null };
+}> {
   return new Promise((resolve) => {
-    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error as (Error & { code?: number | string | null; signal?: string | null }) | undefined,
-      });
-    });
+    nodeExecFile(
+      file,
+      args,
+      { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error as
+            | (Error & { code?: number | string | null; signal?: string | null })
+            | undefined,
+        });
+      },
+    );
   });
 }
 

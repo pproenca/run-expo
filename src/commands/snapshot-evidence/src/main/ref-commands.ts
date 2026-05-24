@@ -1,8 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-
-import type { RefCache, RefCommandDependencies, RefRecord } from "./domain.js";
 import { resolveExpoStateRoot } from "../../../../state/session-run-records/src/main/paths.js";
+import type { RefCache, RefCommandDependencies, RefRecord } from "./domain.js";
 
 export async function refsCommand(
   args: { stateRoot?: string; cwd?: string; root?: string; stateDir?: string } = {},
@@ -16,9 +15,19 @@ export async function refsCommand(
 }
 
 export async function getRefCommand(
-  args: { stateRoot?: string; cwd?: string; root?: string; stateDir?: string; ref: string; field: string },
+  args: {
+    stateRoot?: string;
+    cwd?: string;
+    root?: string;
+    stateDir?: string;
+    ref: string;
+    field: string;
+  },
   deps: RefCommandDependencies = defaultRefCommandDependencies,
-): Promise<{ available?: false; reason?: string; ref?: string } | { ref: string; field: string; stale: boolean; value: unknown }> {
+): Promise<
+  | { available?: false; reason?: string; ref?: string }
+  | { ref: string; field: string; stale: boolean; value: unknown }
+> {
   const field = requireString(args.field, "field");
   const ref = requireString(args.ref, "ref");
   if (!/^@e\d+$/.test(ref)) {
@@ -50,16 +59,27 @@ const defaultRefCommandDependencies: RefCommandDependencies = {
     const sessions = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(
+        () => null,
+      );
       if (record) sessions.push(record as any);
     }
-    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    sessions.sort((left, right) =>
+      String(right.updatedAt ?? right.createdAt).localeCompare(
+        String(left.updatedAt ?? left.createdAt),
+      ),
+    );
     return sessions[0] ?? null;
   },
   readJsonFile: readJson,
 };
 
-function resolveStateRoot(args: { stateRoot?: string; cwd?: string; root?: string; stateDir?: string }): string {
+function resolveStateRoot(args: {
+  stateRoot?: string;
+  cwd?: string;
+  root?: string;
+  stateDir?: string;
+}): string {
   return args.stateRoot ?? resolveExpoStateRoot(args);
 }
 
@@ -92,7 +112,10 @@ export function refFieldValue(record: RefRecord, field: string): unknown {
   }
 }
 
-async function readLatestRefCache(stateRoot: string, deps: RefCommandDependencies): Promise<RefCache | null> {
+async function readLatestRefCache(
+  stateRoot: string,
+  deps: RefCommandDependencies,
+): Promise<RefCache | null> {
   const session = await deps.readLatestSession(stateRoot);
   if (!session?.lastSnapshotId) {
     return null;

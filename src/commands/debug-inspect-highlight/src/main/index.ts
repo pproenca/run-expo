@@ -1,10 +1,12 @@
 import { mkdir as fsMkdir, readdir, readFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import type { RefCache, RefRecord } from "../../../snapshot-evidence/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import type { SessionRecord } from "../../../../state/session-run-records/src/main/index.ts";
 import type { TargetRecord } from "../../../../state/target-management/src/main/index.ts";
+import type { RefCache, RefRecord } from "../../../snapshot-evidence/src/main/index.ts";
 
 export interface StateRootArgs extends Record<string, unknown> {
   stateDir?: string | null;
@@ -13,10 +15,17 @@ export interface StateRootArgs extends Record<string, unknown> {
 }
 
 export interface DebugInspectDependencies {
-  readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
+  readLatestRefCache?: (
+    args: Record<string, unknown>,
+  ) => Promise<RefCache | null> | RefCache | null;
   readLatestSession?: (stateRoot: string) => Promise<SessionRecord | null> | SessionRecord | null;
-  readSelectedTarget?: (stateRoot: string, session: SessionRecord) => Promise<TargetRecord | null> | TargetRecord | null;
-  metroStatusPayload?: (args: { metroPort: number }) => Promise<Record<string, any>> | Record<string, any>;
+  readSelectedTarget?: (
+    stateRoot: string,
+    session: SessionRecord,
+  ) => Promise<TargetRecord | null> | TargetRecord | null;
+  metroStatusPayload?: (args: {
+    metroPort: number;
+  }) => Promise<Record<string, any>> | Record<string, any>;
   mkdir?: (path: string, options: { recursive: true }) => Promise<void> | void;
   writeFile?: (path: string, data: string, encoding: "utf8") => Promise<void> | void;
   now?: () => Date;
@@ -122,9 +131,22 @@ export async function highlightCommand(
 
   const stateRoot = resolveExpoStateRoot(args);
   const timestamp = (deps.now?.() ?? new Date()).toISOString().replace(/[:.]/g, "-");
-  const outputPath = resolve(String(args.outputPath ?? join(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`)));
+  const outputPath = resolve(
+    String(
+      args.outputPath ??
+        join(
+          stateRoot,
+          "artifacts",
+          `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`,
+        ),
+    ),
+  );
   await (deps.mkdir ?? fsMkdir)(dirname(outputPath), { recursive: true });
-  await (deps.writeFile ?? fsWriteFile)(outputPath, highlightSvg({ ref, record: found.record, durationMs: args.durationMs }), "utf8");
+  await (deps.writeFile ?? fsWriteFile)(
+    outputPath,
+    highlightSvg({ ref, record: found.record, durationMs: args.durationMs }),
+    "utf8",
+  );
   return toolJson({
     available: true,
     action: "highlight",
@@ -134,11 +156,17 @@ export async function highlightCommand(
     targetId: found.cache.targetId,
     outputPath,
     record: found.record,
-    limitations: ["Highlight writes an evidence overlay artifact from cached bounds; it does not draw inside the running app."],
+    limitations: [
+      "Highlight writes an evidence overlay artifact from cached bounds; it does not draw inside the running app.",
+    ],
   });
 }
 
-export function highlightSvg({ ref, record, durationMs }: {
+export function highlightSvg({
+  ref,
+  record,
+  durationMs,
+}: {
   ref: string;
   record: RefRecord;
   durationMs?: unknown;
@@ -162,10 +190,12 @@ export async function readRefRecord(
   deps: Pick<DebugInspectDependencies, "readLatestRefCache"> = {},
 ): Promise<RefRecordLookup> {
   const cache = await readLatestRefCache(args, deps);
-  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
+  if (!cache)
+    return { available: false, reason: "No snapshot exists for the current session.", ref };
   const record = (cache.refs ?? []).find((item) => item.ref === ref);
   if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
-  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  if (record.stale)
+    return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
   return { available: true, record, cache };
 }
 
@@ -177,7 +207,9 @@ export async function readLatestRefCache(
   const stateRoot = resolveExpoStateRoot(args);
   const session = await readLatestSession(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  const parsed = await readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  const parsed = await readJsonFile(
+    join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json"),
+  ).catch(() => null);
   return asRefCache(parsed);
 }
 
@@ -187,16 +219,25 @@ export async function readLatestSession(stateRoot: string): Promise<SessionRecor
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(
+      () => null,
+    );
     const session = asSessionRecord(record);
     if (session) sessions.push(session);
   }
-  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
+  sessions.sort((a, b) =>
+    String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)),
+  );
   return sessions[0] ?? null;
 }
 
-export async function readSelectedTarget(stateRoot: string, session: SessionRecord): Promise<TargetRecord | null> {
-  const parsed = await readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "target.json")).catch(() => null);
+export async function readSelectedTarget(
+  stateRoot: string,
+  session: SessionRecord,
+): Promise<TargetRecord | null> {
+  const parsed = await readJsonFile(
+    join(sessionDirectory(stateRoot, String(session.sessionId)), "target.json"),
+  ).catch(() => null);
   return asTargetRecord(parsed);
 }
 
@@ -218,7 +259,8 @@ export async function readJsonFile(file: string): Promise<unknown> {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -247,14 +289,18 @@ async function selectedTarget(
   session: SessionRecord,
   deps: Pick<DebugInspectDependencies, "readSelectedTarget">,
 ): Promise<TargetRecord | null> {
-  return deps.readSelectedTarget ? deps.readSelectedTarget(stateRoot, session) : readSelectedTarget(stateRoot, session);
+  return deps.readSelectedTarget
+    ? deps.readSelectedTarget(stateRoot, session)
+    : readSelectedTarget(stateRoot, session);
 }
 
 async function metroStatus(
   args: { metroPort: number },
   deps: Pick<DebugInspectDependencies, "metroStatusPayload">,
 ): Promise<Record<string, any>> {
-  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : { available: false, targetCount: 0, targets: [] };
+  return deps.metroStatusPayload
+    ? deps.metroStatusPayload(args)
+    : { available: false, targetCount: 0, targets: [] };
 }
 
 function asBox(value: unknown): { x: number; y: number; width: number; height: number } {
@@ -263,7 +309,8 @@ function asBox(value: unknown): { x: number; y: number; width: number; height: n
   const y = Number(record?.y);
   const width = Number(record?.width);
   const height = Number(record?.height);
-  if (![x, y, width, height].every(Number.isFinite)) throw new Error("record.box must include finite x, y, width, and height.");
+  if (![x, y, width, height].every(Number.isFinite))
+    throw new Error("record.box must include finite x, y, width, and height.");
   return { x, y, width, height };
 }
 
@@ -272,7 +319,9 @@ function firstPositional(args: Record<string, unknown>): unknown {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }
 
 function asRefCache(value: unknown): RefCache | null {
@@ -283,10 +332,10 @@ function asRefCache(value: unknown): RefCache | null {
 
 function asSessionRecord(value: unknown): SessionRecord | null {
   const record = asRecord(value);
-  return typeof record?.sessionId === "string" ? record as SessionRecord : null;
+  return typeof record?.sessionId === "string" ? (record as SessionRecord) : null;
 }
 
 function asTargetRecord(value: unknown): TargetRecord | null {
   const record = asRecord(value);
-  return typeof record?.targetId === "string" ? record as TargetRecord : null;
+  return typeof record?.targetId === "string" ? (record as TargetRecord) : null;
 }

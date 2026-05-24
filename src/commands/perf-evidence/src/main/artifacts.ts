@@ -1,13 +1,20 @@
 import { mkdir as fsMkdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-
 import { resolveExpoStateRoot } from "./common.js";
 import { writeJsonFile } from "./dependencies.js";
 import type { PerfDependencies } from "./types.js";
 
-export async function writePerfArtifact(args: Record<string, any>, action: string, payload: Record<string, any>, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function writePerfArtifact(
+  args: Record<string, any>,
+  action: string,
+  payload: Record<string, any>,
+  deps: PerfDependencies = {},
+): Promise<Record<string, any>> {
   const timestamp = (deps.now?.() ?? new Date()).toISOString().replace(/[:.]/g, "-");
-  const artifactPath = resolve(args.outputPath ?? join(resolveExpoStateRoot(args), "artifacts", "perf", `${action}-${timestamp}.json`));
+  const artifactPath = resolve(
+    args.outputPath ??
+      join(resolveExpoStateRoot(args), "artifacts", "perf", `${action}-${timestamp}.json`),
+  );
   await (deps.mkdir ?? fsMkdir)(dirname(artifactPath), { recursive: true });
   const withArtifact = { ...payload, artifacts: [...(payload.artifacts ?? []), artifactPath] };
   await writeJsonFile(artifactPath, withArtifact, deps);
@@ -16,10 +23,18 @@ export async function writePerfArtifact(args: Record<string, any>, action: strin
 
 export async function parseNativeSampleArtifact(file: string): Promise<Record<string, any>> {
   const text = await readFile(file, "utf8").catch(() => null);
-  if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
+  if (!text)
+    return {
+      available: false,
+      artifact: file,
+      reason: "Native sample artifact was not found or unreadable.",
+    };
   const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);
   const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/);
-  const mainThreadSamples = numberFromMatch(text, /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s);
+  const mainThreadSamples = numberFromMatch(
+    text,
+    /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s,
+  );
   const idleSamples = countSampleBucket(text, [/mach_msg/i, /CFRunLoopServiceMachPort/i]);
   const buckets = {
     hermes: countSampleBucket(text, [/hermes/i]),
@@ -30,7 +45,11 @@ export async function parseNativeSampleArtifact(file: string): Promise<Record<st
   };
   const topSymbols = [...text.matchAll(/^\s*([0-9]+)\s+(.+?)\s+\(in\s+(.+?)\)/gm)]
     .slice(0, 30)
-    .map((match) => ({ samples: Number(match[1]), symbol: match[2].trim(), library: match[3].trim() }));
+    .map((match) => ({
+      samples: Number(match[1]),
+      symbol: match[2].trim(),
+      library: match[3].trim(),
+    }));
   return {
     available: Boolean(physicalFootprintMb || peakFootprintMb || topSymbols.length),
     artifact: file,
@@ -39,7 +58,8 @@ export async function parseNativeSampleArtifact(file: string): Promise<Record<st
     peakFootprintMb,
     mainThreadSamples,
     estimatedMainThreadIdleSamples: idleSamples,
-    estimatedMainThreadBusySamples: mainThreadSamples == null ? null : Math.max(0, mainThreadSamples - idleSamples),
+    estimatedMainThreadBusySamples:
+      mainThreadSamples == null ? null : Math.max(0, mainThreadSamples - idleSamples),
     buckets,
     topSymbols,
   };

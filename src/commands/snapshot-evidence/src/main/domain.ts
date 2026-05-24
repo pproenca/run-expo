@@ -150,13 +150,19 @@ export type SnapshotPersistenceDependencies = {
 export type SnapshotCommandDependencies = SnapshotPersistenceDependencies & {
   readLatestSession(stateRoot: string): Promise<SessionRecord | null>;
   readSelectedTarget(stateRoot: string, session: SessionRecord): Promise<TargetRecord | null>;
-  captureSemanticBridge(args: SnapshotArgs, context: {
-    stateRoot: string;
-    session: SessionRecord;
-    filters: SnapshotFilters;
-  }): Promise<SemanticBridgeSnapshot | { available: false; [key: string]: unknown }>;
+  captureSemanticBridge(
+    args: SnapshotArgs,
+    context: {
+      stateRoot: string;
+      session: SessionRecord;
+      filters: SnapshotFilters;
+    },
+  ): Promise<SemanticBridgeSnapshot | { available: false; [key: string]: unknown }>;
   findAxeCli(): Promise<string | null>;
-  describeNativeUi(axePath: string, deviceId: string): Promise<{ stdout: string; stderr: string; error?: unknown }>;
+  describeNativeUi(
+    axePath: string,
+    deviceId: string,
+  ): Promise<{ stdout: string; stderr: string; error?: unknown }>;
 };
 
 export type RefCommandDependencies = {

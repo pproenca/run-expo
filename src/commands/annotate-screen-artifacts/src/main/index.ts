@@ -1,5 +1,11 @@
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import { reviewOverlayAction, type ReviewOverlayPayload } from "../../../review-overlay-workflow/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  reviewOverlayAction,
+  type ReviewOverlayPayload,
+} from "../../../review-overlay-workflow/src/main/index.ts";
 
 export interface AnnotateScreenArgs extends Record<string, unknown> {
   action?: unknown;
@@ -16,7 +22,9 @@ export interface AnnotateScreenArgs extends Record<string, unknown> {
 }
 
 export interface AnnotateScreenDependencies {
-  reviewOverlayAction: (args: Record<string, unknown>) => Promise<ReviewOverlayPayload | ToolTextResult> | ReviewOverlayPayload | ToolTextResult;
+  reviewOverlayAction: (
+    args: Record<string, unknown>,
+  ) => Promise<ReviewOverlayPayload | ToolTextResult> | ReviewOverlayPayload | ToolTextResult;
 }
 
 const ANNOTATE_ACTIONS = new Set(["prepare", "read", "clear", "scaffold", "server"]);
@@ -32,7 +40,10 @@ export async function annotateScreen(
     throw new Error(`Unknown annotate-screen action: ${action}`);
   }
 
-  if (action === "scaffold" && !hasExplicitConfirmation(args.confirmActions, SCAFFOLD_CONFIRMATION)) {
+  if (
+    action === "scaffold" &&
+    !hasExplicitConfirmation(args.confirmActions, SCAFFOLD_CONFIRMATION)
+  ) {
     return toolJson({
       available: false,
       action,
@@ -81,7 +92,10 @@ export function unwrapToolJson(result: unknown): unknown {
 
 export function hasExplicitConfirmation(value: unknown, required: string): boolean {
   if (typeof value !== "string") return false;
-  return value.split(/[,\s]+/).filter(Boolean).includes(required);
+  return value
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .includes(required);
 }
 
 export function requireOptionalString(value: unknown): string | null {

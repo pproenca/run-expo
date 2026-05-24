@@ -1,7 +1,14 @@
+import {
+  realValidation,
+  type RealValidation,
+} from "../../../../core/real-validation/src/main/index.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
-import { realValidation, type RealValidation } from "../../../../core/real-validation/src/main/index.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface InteractionTraceExpressionArgs {
   action: unknown;
@@ -56,12 +63,17 @@ export async function traceInteraction(
       metroPort,
       realValidation: realValidation({
         state: "environment-blocked",
-        evidence: [{ source: "metro", command: `trace.${String(action ?? "read")}`, confidence: "low" }],
-        missingEvidence: [{
-          signal: "metro-hermes-target",
-          reason: "No Metro inspector target.",
-          recommendedFix: "Start Metro, launch the app in a Hermes dev client, and rerun with --metro-port.",
-        }],
+        evidence: [
+          { source: "metro", command: `trace.${String(action ?? "read")}`, confidence: "low" },
+        ],
+        missingEvidence: [
+          {
+            signal: "metro-hermes-target",
+            reason: "No Metro inspector target.",
+            recommendedFix:
+              "Start Metro, launch the app in a Hermes dev client, and rerun with --metro-port.",
+          },
+        ],
       }),
       limitations: [
         "No Hermes Runtime.evaluate trace was collected.",
@@ -70,8 +82,15 @@ export async function traceInteraction(
     });
   }
 
-  const expression = interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents });
-  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8000 });
+  const expression = interactionTraceExpression({
+    action,
+    maxEvents,
+    componentFilter,
+    includeEvents,
+  });
+  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, {
+    timeoutMs: 8000,
+  });
 
   const trace = getPath(result, ["result", "result", "value"]) ?? null;
   return toolJson({
@@ -79,7 +98,8 @@ export async function traceInteraction(
     metroPort,
     target: targetSummary(targetList[0]),
     trace,
-    protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord(result)?.error ?? null,
+    protocolError:
+      getPath(result, ["result", "exceptionDetails"]) ?? asRecord(result)?.error ?? null,
     cdp: asRecord(result)?.diagnostics ?? asRecord(result)?.cdp ?? null,
     realValidation: traceRealValidation(trace, action),
   });
@@ -92,7 +112,12 @@ const defaultTraceInteractionDependencies: TraceInteractionDependencies = {
 
 export { toolJson, unwrapToolJson };
 
-export function interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents }: InteractionTraceExpressionArgs): string {
+export function interactionTraceExpression({
+  action,
+  maxEvents,
+  componentFilter,
+  includeEvents,
+}: InteractionTraceExpressionArgs): string {
   return `(() => {
     const action = ${JSON.stringify(action)};
     const maxEvents = ${JSON.stringify(maxEvents)};
@@ -567,12 +592,17 @@ export function traceRealValidation(trace: unknown, action: unknown): RealValida
   if (!record || record.available === false) {
     return realValidation({
       state: "unvalidated",
-      evidence: [{ source: "trace", command: `trace.${String(action ?? "read")}`, confidence: "low" }],
-      missingEvidence: [{
-        signal: "trace-runtime",
-        reason: "No Hermes trace payload was returned.",
-        recommendedFix: "Start Metro, launch a Hermes target, and run trace --action start before reading.",
-      }],
+      evidence: [
+        { source: "trace", command: `trace.${String(action ?? "read")}`, confidence: "low" },
+      ],
+      missingEvidence: [
+        {
+          signal: "trace-runtime",
+          reason: "No Hermes trace payload was returned.",
+          recommendedFix:
+            "Start Metro, launch a Hermes target, and run trace --action start before reading.",
+        },
+      ],
     });
   }
   const hasCommits = Number(asRecord(record.renderSummary)?.commitCount ?? 0) > 0;
@@ -584,18 +614,34 @@ export function traceRealValidation(trace: unknown, action: unknown): RealValida
       renderCost: hasCommits,
       frameJank: hasFrames,
     },
-    evidence: [{ source: "hermes-runtime-trace", command: `trace.${String(action ?? "read")}`, confidence: hasEvents ? "medium" : "low" }],
+    evidence: [
+      {
+        source: "hermes-runtime-trace",
+        command: `trace.${String(action ?? "read")}`,
+        confidence: hasEvents ? "medium" : "low",
+      },
+    ],
     missingEvidence: [
-      ...(!hasCommits ? [{
-        signal: "react-profiler-commits",
-        reason: "Trace did not include React Profiler commit durations.",
-        recommendedFix: "Mount the dev-only Profiler bridge or run rn renders with commit recording.",
-      }] : []),
-      ...(!hasFrames ? [{
-        signal: "frame-deltas",
-        reason: "Trace did not observe enough animation frames to compute frame deltas.",
-        recommendedFix: "Start trace before an animated interaction and rerun trace read/stop.",
-      }] : []),
+      ...(!hasCommits
+        ? [
+            {
+              signal: "react-profiler-commits",
+              reason: "Trace did not include React Profiler commit durations.",
+              recommendedFix:
+                "Mount the dev-only Profiler bridge or run rn renders with commit recording.",
+            },
+          ]
+        : []),
+      ...(!hasFrames
+        ? [
+            {
+              signal: "frame-deltas",
+              reason: "Trace did not observe enough animation frames to compute frame deltas.",
+              recommendedFix:
+                "Start trace before an animated interaction and rerun trace read/stop.",
+            },
+          ]
+        : []),
     ],
   });
 }
@@ -625,5 +671,5 @@ function asString(value: unknown): string | null {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" ? value as Record<string, any> : null;
+  return value && typeof value === "object" ? (value as Record<string, any>) : null;
 }

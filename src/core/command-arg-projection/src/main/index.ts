@@ -14,7 +14,11 @@ const COMMAND_PROJECTORS: Record<string, CommandProjector> = {
   ...maintenanceCommandProjectors,
 };
 
-export function commandArgs(command: string, args: CliArgs, globals: CliGlobals = {}): Record<string, unknown> {
+export function commandArgs(
+  command: string,
+  args: CliArgs,
+  globals: CliGlobals = {},
+): Record<string, unknown> {
   const projector = COMMAND_PROJECTORS[command];
   return projector ? projector(createProjectionContext(command, args, globals)) : {};
 }

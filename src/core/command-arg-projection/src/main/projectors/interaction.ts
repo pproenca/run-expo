@@ -33,7 +33,13 @@ export const interactionCommandProjectors: Record<string, CommandProjector> = {
   "annotation-server": projectAnnotationServerArgs,
 };
 
-function projectRefActionArgs({ command, args, globals, cwd, common }: CommandProjectionContext): ProjectedCommandArgs {
+function projectRefActionArgs({
+  command,
+  args,
+  globals,
+  cwd,
+  common,
+}: CommandProjectionContext): ProjectedCommandArgs {
   const first = args._[0];
   const second = args._[1];
   const third = args._[2];
@@ -54,15 +60,38 @@ function projectRefActionArgs({ command, args, globals, cwd, common }: CommandPr
   });
 }
 
-function projectKeyboardTextAliasArgs({ command, args, common }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ ...common, action: command, text: args.text ?? args._[0], key: args.key ?? args._[0], dryRun: args.dryRun });
+function projectKeyboardTextAliasArgs({
+  command,
+  args,
+  common,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    ...common,
+    action: command,
+    text: args.text ?? args._[0],
+    key: args.key ?? args._[0],
+    dryRun: args.dryRun,
+  });
 }
 
-function projectClipboardKeyboardArgs({ args, common }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ ...common, action: args.action ?? args._[0], text: args.text ?? args._[1], key: args.key ?? args._[1], dryRun: args.dryRun });
+function projectClipboardKeyboardArgs({
+  args,
+  common,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    ...common,
+    action: args.action ?? args._[0],
+    text: args.text ?? args._[1],
+    key: args.key ?? args._[1],
+    dryRun: args.dryRun,
+  });
 }
 
-function projectSetEnvironmentArgs({ args, globals, common }: CommandProjectionContext): ProjectedCommandArgs {
+function projectSetEnvironmentArgs({
+  args,
+  globals,
+  common,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     ...common,
     domain: args.domain ?? args._[0],
@@ -77,7 +106,11 @@ function projectLogsArgs({ args, common }: CommandProjectionContext): ProjectedC
   return pickDefined({ ...common, last: args.last, lines: args.lines, predicate: args.predicate });
 }
 
-function projectScreenshotArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectScreenshotArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     platform: args.platform,
     device: args.device,
@@ -106,7 +139,11 @@ function projectTapArgs({ args, globals, cwd }: CommandProjectionContext): Proje
   });
 }
 
-function projectGestureArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectGestureArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     platform: args.platform,
     device: args.device,
@@ -133,7 +170,11 @@ function projectGestureArgs({ args, globals, cwd }: CommandProjectionContext): P
   });
 }
 
-function projectOpenRouteArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectOpenRouteArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     cwd,
     device: args.device,
@@ -161,7 +202,11 @@ function projectUxContextArgs({ args, common }: CommandProjectionContext): Proje
   });
 }
 
-function projectAnnotateScreenArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectAnnotateScreenArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     action: args.action ?? args._[0],
     cwd,
@@ -191,10 +236,14 @@ function projectInspectorArgs({ args, cwd }: CommandProjectionContext): Projecte
   });
 }
 
-function projectReviewOverlayArgs({ command, args, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectReviewOverlayArgs({
+  command,
+  args,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     cwd,
-    action: command === "review-overlay-server" ? "server" : args.action ?? args._[0],
+    action: command === "review-overlay-server" ? "server" : (args.action ?? args._[0]),
     outputDir: args.outputDir,
     overlayDir: args.overlayDir,
     endpointPath: args.endpointPath,

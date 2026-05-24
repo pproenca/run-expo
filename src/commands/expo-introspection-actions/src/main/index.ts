@@ -1,14 +1,23 @@
 import { access, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import {
   buildUpstreamDependencyReport,
   doctor,
   projectInfo,
 } from "../../../project-info-doctor/src/main/index.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
-export const EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"] as const;
+export const EXPO_ACTIONS = [
+  "modules",
+  "config",
+  "doctor",
+  "upstream-policy",
+  "prebuild-plan",
+] as const;
 
 export type ExpoAction = (typeof EXPO_ACTIONS)[number];
 export type ExpoModuleCategory = "expo" | "config-plugin" | "other";
@@ -74,8 +83,12 @@ export interface ExpoAppConfigPluginDependencies {
 
 export interface ExpoPrebuildRiskDependencies extends ExpoAppConfigPluginDependencies {}
 
-export interface ExpoCommandDependencies extends ExpoModuleRecordsDependencies, ExpoPrebuildRiskDependencies {
-  normalizeProjectCwd: (cwd: string | undefined, options: { allowMissingPackageJson: true }) => Promise<string>;
+export interface ExpoCommandDependencies
+  extends ExpoModuleRecordsDependencies, ExpoPrebuildRiskDependencies {
+  normalizeProjectCwd: (
+    cwd: string | undefined,
+    options: { allowMissingPackageJson: true },
+  ) => Promise<string>;
   resolvePath: (input: string) => string;
   currentWorkingDirectory: () => string;
   runtimeSummary: (cwd: string) => Promise<ExpoProjectSummary>;
@@ -91,7 +104,8 @@ export async function expoCommand(
   const action = requireString(args.action ?? "modules", "action");
   if (!isExpoAction(action)) throw new Error(`Unknown Expo action: ${action}`);
 
-  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true })
+  const cwd = await deps
+    .normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true })
     .catch(() => deps.resolvePath(args.cwd ?? deps.currentWorkingDirectory()));
   const summary = await deps.runtimeSummary(cwd);
 
@@ -106,13 +120,15 @@ export async function expoCommand(
   }
 
   if (action === "upstream-policy") {
-    const info = asRecord(unwrapToolJson(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
+    const info =
+      asRecord(unwrapToolJson(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
     return toolJson({
       available: Boolean(info.isExpoProject),
       action,
       sources: ["project"],
       projectRoot: summary.projectRoot,
-      report: info.upstreamDependencies ?? deps.buildUpstreamDependencyReport(summary.projectRoot, {}),
+      report:
+        info.upstreamDependencies ?? deps.buildUpstreamDependencyReport(summary.projectRoot, {}),
       limitations: [
         "Static dependency policy cannot prove a runtime target is registered; run DevTools and bridge health checks for live domains.",
       ],
@@ -139,7 +155,9 @@ export async function expoCommand(
       expoDependency: summary.expoDependency,
       reactNativeDependency: summary.reactNativeDependency,
       modules,
-      limitations: ["Static dependency inspection cannot prove which native modules are currently compiled into the running app."],
+      limitations: [
+        "Static dependency inspection cannot prove which native modules are currently compiled into the running app.",
+      ],
     });
   }
 
@@ -179,11 +197,21 @@ const defaultExpoCommandDependencies: ExpoCommandDependencies = {
   findUp,
   readJsonFile: async (filePath) => JSON.parse(await readFile(filePath, "utf8")),
   joinPath: (...parts) => path.join(...parts),
-  pathExists: async (filePath) => access(filePath).then(() => true, () => false),
+  pathExists: async (filePath) =>
+    access(filePath).then(
+      () => true,
+      () => false,
+    ),
   firstExisting: async (projectRoot, names) => {
     for (const name of names) {
       const candidate = path.join(projectRoot, name);
-      if (await access(candidate).then(() => true, () => false)) return candidate;
+      if (
+        await access(candidate).then(
+          () => true,
+          () => false,
+        )
+      )
+        return candidate;
     }
     return null;
   },
@@ -195,7 +223,9 @@ export async function expoModuleRecords(
   deps: ExpoModuleRecordsDependencies,
 ): Promise<ExpoModuleRecord[]> {
   const packageJsonPath = await deps.findUp(projectRoot, "package.json");
-  const packageJson = packageJsonPath ? asRecord(await deps.readJsonFile(packageJsonPath)) ?? {} : {};
+  const packageJson = packageJsonPath
+    ? (asRecord(await deps.readJsonFile(packageJsonPath)) ?? {})
+    : {};
   const allDeps = {
     ...asRecord(packageJson.dependencies),
     ...asRecord(packageJson.devDependencies),
@@ -212,11 +242,13 @@ export async function expoModuleRecords(
 }
 
 export function isExpoRelatedPackage(name: string): boolean {
-  return name === "expo" ||
+  return (
+    name === "expo" ||
     name.startsWith("expo-") ||
     name.startsWith("@expo/") ||
     name.startsWith("@config-plugins/") ||
-    name.includes("config-plugin");
+    name.includes("config-plugin")
+  );
 }
 
 export function expoModuleCategory(name: string): ExpoModuleCategory {
@@ -276,7 +308,12 @@ export async function readExpoAppConfigPlugins(
     return Array.isArray(plugins) ? plugins.map(formatExpoPluginEntry) : [];
   }
 
-  const configPath = await deps.firstExisting(projectRoot, ["app.config.ts", "app.config.js", "app.config.mjs", "app.config.cjs"]);
+  const configPath = await deps.firstExisting(projectRoot, [
+    "app.config.ts",
+    "app.config.js",
+    "app.config.mjs",
+    "app.config.cjs",
+  ]);
   if (!configPath) return [];
   const text = await deps.readTextFile(configPath);
   const match = /\bplugins\s*:\s*\[([\s\S]*?)\]/m.exec(text);
@@ -292,7 +329,9 @@ export function formatExpoPluginEntry(entry: unknown): string {
 
 export function expoConfigLimitations(summary: Pick<ExpoProjectSummary, "appConfig">): string[] {
   return summary.appConfig?.dynamic
-    ? ["Dynamic Expo config was summarized with static string extraction and may omit computed values."]
+    ? [
+        "Dynamic Expo config was summarized with static string extraction and may omit computed values.",
+      ]
     : ["Expo config is summarized from project files; native runtime overrides are not included."];
 }
 
@@ -314,7 +353,7 @@ function isExpoAction(action: string): action is ExpoAction {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -329,7 +368,13 @@ async function findUp(projectRoot: string, filename: string): Promise<string | n
   let current = path.resolve(projectRoot);
   while (true) {
     const candidate = path.join(current, filename);
-    if (await access(candidate).then(() => true, () => false)) return candidate;
+    if (
+      await access(candidate).then(
+        () => true,
+        () => false,
+      )
+    )
+      return candidate;
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;

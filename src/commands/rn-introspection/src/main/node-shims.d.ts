@@ -1,5 +1,8 @@
 declare module "node:fs/promises" {
-  export function readdir(path: string, options?: { withFileTypes?: boolean }): Promise<Array<{ name: string; isDirectory(): boolean }>>;
+  export function readdir(
+    path: string,
+    options?: { withFileTypes?: boolean },
+  ): Promise<Array<{ name: string; isDirectory(): boolean }>>;
   export function readFile(path: string, encoding: "utf8"): Promise<string>;
 }
 

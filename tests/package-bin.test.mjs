@@ -1,10 +1,10 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createServer } from "node:http";
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { describe, it } from "node:test";
 import { promisify } from "node:util";
 import { WebSocketServer } from "ws";
 
@@ -16,18 +16,15 @@ const npxEnv = {
   ...sanitizedEnv,
   npm_config_cache: resolve(tmpdir(), "expo98-npm-cache"),
 };
-const missingAdapterMessagePattern = new RegExp([
-  "adapter is not",
-  "configured",
-].join(" "), "i");
-const missingEvaluatorMessagePattern = new RegExp([
-  "evaluator dependency is not",
-  "configured",
-].join(" "), "i");
-const oldSemanticBridgeMessagePattern = new RegExp([
-  "Semantic bridge adapter is not",
-  "configured",
-].join(" "), "i");
+const missingAdapterMessagePattern = new RegExp(["adapter is not", "configured"].join(" "), "i");
+const missingEvaluatorMessagePattern = new RegExp(
+  ["evaluator dependency is not", "configured"].join(" "),
+  "i",
+);
+const oldSemanticBridgeMessagePattern = new RegExp(
+  ["Semantic bridge adapter is not", "configured"].join(" "),
+  "i",
+);
 
 async function makeFixtureProject(prefix = "expo98-fixture-") {
   const project = await mkdtemp(resolve(tmpdir(), prefix));
@@ -36,7 +33,11 @@ async function makeFixtureProject(prefix = "expo98-fixture-") {
 }
 
 async function runJson(args, options = {}) {
-  const { stdout } = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--json", ...args], options);
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["cli/expo98.mjs", "--json", ...args],
+    options,
+  );
   return JSON.parse(stdout);
 }
 
@@ -47,16 +48,20 @@ async function makeFakeHermesMetro(valueForExpression) {
   const server = createServer((req, res) => {
     if (req.url?.startsWith("/json/list")) {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify([{
-        id: "fake-target",
-        title: "Fake Hermes Target",
-        description: "React Native fake target",
-        appId: "com.example.fake",
-        deviceName: "iPhone 16",
-        devtoolsFrontendUrl: `http://localhost:${port}/debugger-frontend`,
-        webSocketDebuggerUrl: `ws://localhost:${port}/inspector/debug?device=1&page=1`,
-        reactNative: {},
-      }]));
+      res.end(
+        JSON.stringify([
+          {
+            id: "fake-target",
+            title: "Fake Hermes Target",
+            description: "React Native fake target",
+            appId: "com.example.fake",
+            deviceName: "iPhone 16",
+            devtoolsFrontendUrl: `http://localhost:${port}/debugger-frontend`,
+            webSocketDebuggerUrl: `ws://localhost:${port}/inspector/debug?device=1&page=1`,
+            reactNative: {},
+          },
+        ]),
+      );
       return;
     }
     if (req.url?.startsWith("/status")) {
@@ -82,9 +87,10 @@ async function makeFakeHermesMetro(valueForExpression) {
       const parsed = JSON.parse(String(message));
       if (parsed.method === "Runtime.evaluate") {
         expressions.push(String(parsed.params?.expression ?? ""));
-        const value = typeof valueForExpression === "function"
-          ? valueForExpression(String(parsed.params?.expression ?? ""))
-          : valueForExpression;
+        const value =
+          typeof valueForExpression === "function"
+            ? valueForExpression(String(parsed.params?.expression ?? ""))
+            : valueForExpression;
         ws.send(JSON.stringify({ id: parsed.id, result: { result: { type: "object", value } } }));
         return;
       }
@@ -108,28 +114,39 @@ async function makeFakeHermesMetro(valueForExpression) {
 
 describe("expo98 package bin", () => {
   it("prints the modernized package version through the direct bin", async () => {
-    const { stdout, stderr } = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--version"]);
+    const { stdout, stderr } = await execFileAsync(process.execPath, [
+      "cli/expo98.mjs",
+      "--version",
+    ]);
 
     assert.equal(stdout, "0.1.0\n");
     assert.equal(stderr, "");
   });
 
   it("runs the npx-facing binary from the package root without installing from the network", async () => {
-    const { stdout, stderr } = await execFileAsync("npx", ["--no-install", "expo98", "--version"], { env: npxEnv });
+    const { stdout, stderr } = await execFileAsync("npx", ["--no-install", "expo98", "--version"], {
+      env: npxEnv,
+    });
 
     assert.equal(stdout, "0.1.0\n");
     assert.equal(stderr, "");
   });
 
   it("runs the local pnpm expo98 script for development testing", async () => {
-    const { stdout, stderr } = await execFileAsync("pnpm", ["expo98", "--version"], { env: npxEnv });
+    const { stdout, stderr } = await execFileAsync("pnpm", ["expo98", "--version"], {
+      env: npxEnv,
+    });
 
     assert.match(stdout, /0\.1\.0\n$/);
     assert.equal(stderr, "");
   });
 
   it("returns JSON doctor evidence from the modernized package entrypoint", async () => {
-    const { stdout } = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--json", "doctor"]);
+    const { stdout } = await execFileAsync(process.execPath, [
+      "cli/expo98.mjs",
+      "--json",
+      "doctor",
+    ]);
     const payload = JSON.parse(stdout);
 
     assert.equal(payload.ok, true);
@@ -142,13 +159,17 @@ describe("expo98 package bin", () => {
   it("dispatches bundled project-info and policy commands without monorepo package imports", async () => {
     const project = await makeFixtureProject("expo98-package-bin-");
     try {
-      await writeFile(resolve(project, "package.json"), JSON.stringify({
-        dependencies: {
-          expo: "~54.0.0",
-          "react-native": "0.81.0",
-          "expo-router": "^5.0.0",
-        },
-      }), "utf8");
+      await writeFile(
+        resolve(project, "package.json"),
+        JSON.stringify({
+          dependencies: {
+            expo: "~54.0.0",
+            "react-native": "0.81.0",
+            "expo-router": "^5.0.0",
+          },
+        }),
+        "utf8",
+      );
 
       const projectInfo = await execFileAsync(process.execPath, [
         "cli/expo98.mjs",
@@ -157,7 +178,12 @@ describe("expo98 package bin", () => {
         "--cwd",
         project,
       ]);
-      const policy = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--json", "policy", "show"]);
+      const policy = await execFileAsync(process.execPath, [
+        "cli/expo98.mjs",
+        "--json",
+        "policy",
+        "show",
+      ]);
 
       const projectPayload = JSON.parse(projectInfo.stdout);
       const policyPayload = JSON.parse(policy.stdout);
@@ -177,7 +203,11 @@ describe("expo98 package bin", () => {
   it("denies route-opening device mutations without an action policy", async () => {
     const project = await makeFixtureProject("expo98-route-policy-");
     try {
-      await writeFile(resolve(project, "app.json"), JSON.stringify({ expo: { scheme: "fixture" } }), "utf8");
+      await writeFile(
+        resolve(project, "app.json"),
+        JSON.stringify({ expo: { scheme: "fixture" } }),
+        "utf8",
+      );
 
       const openUrlPayload = await runJson(["open-url", "fixture:///customers"]);
       const openRoutePayload = await runJson(["open-route", "/customers", "--cwd", project]);
@@ -282,7 +312,10 @@ describe("expo98 package bin", () => {
       assert.equal(payload.ok, true);
       assert.equal(payload.data.command, "annotate-screen");
       assert.equal(payload.data.annotationSurface, "in-app-overlay");
-      assert.equal(payload.data.componentPath, resolve(project, "codex-review-overlay", "CodexReviewOverlay.tsx"));
+      assert.equal(
+        payload.data.componentPath,
+        resolve(project, "codex-review-overlay", "CodexReviewOverlay.tsx"),
+      );
       assert.equal(payload.data.indexPath, resolve(project, "codex-review-overlay", "index.ts"));
       assert.match(payload.data.integration.import, /CodexReviewOverlay/);
       await access(payload.data.componentPath);
@@ -295,7 +328,11 @@ describe("expo98 package bin", () => {
   it("returns annotation-server as a deprecation response instead of serving the old HTML workflow", async () => {
     const project = await makeFixtureProject("expo98-annotation-server-");
     try {
-      const payload = await runJson(["annotation-server", "--dir", resolve(project, "annotations")]);
+      const payload = await runJson([
+        "annotation-server",
+        "--dir",
+        resolve(project, "annotations"),
+      ]);
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.available, false);
@@ -320,7 +357,9 @@ describe("expo98 package bin", () => {
         state: index === 123 ? "Booted" : "Shutdown",
         isAvailable: true,
       }));
-      const simctlPayload = JSON.stringify({ devices: { "com.apple.CoreSimulator.SimRuntime.iOS-99-0": devices } });
+      const simctlPayload = JSON.stringify({
+        devices: { "com.apple.CoreSimulator.SimRuntime.iOS-99-0": devices },
+      });
       assert.ok(Buffer.byteLength(simctlPayload) > 40_000);
       const xcrunPath = resolve(fakeBin, "xcrun");
       const axePath = resolve(fakeBin, "axe");
@@ -330,19 +369,22 @@ describe("expo98 package bin", () => {
       await chmod(axePath, 0o755);
       await writeFile(policyPath, JSON.stringify({ allow: ["keyboard.press"] }), "utf8");
 
-      const payload = await runJson([
-        "--root",
-        project,
-        "press",
-        "--key",
-        "Return",
-        "--dry-run",
-        "true",
-        "--action-policy",
-        policyPath,
-      ], {
-        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ""}` },
-      });
+      const payload = await runJson(
+        [
+          "--root",
+          project,
+          "press",
+          "--key",
+          "Return",
+          "--dry-run",
+          "true",
+          "--action-policy",
+          policyPath,
+        ],
+        {
+          env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ""}` },
+        },
+      );
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.available, true);
@@ -359,22 +401,49 @@ describe("expo98 package bin", () => {
     const outputPath = resolve(project, "custom-highlight.svg");
     try {
       await mkdir(sessionDir, { recursive: true });
-      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
-        sessionId: "s1",
-        createdAt: "2026-05-24T00:00:00.000Z",
-        updatedAt: "2026-05-24T00:00:00.000Z",
-        lastSnapshotId: "snap1",
-      }), "utf8");
-      await writeFile(resolve(sessionDir, "refs.json"), JSON.stringify({
-        snapshotId: "snap1",
-        targetId: "target1",
-        refs: [
-          { ref: "@e1", stale: false, label: "Save", box: { x: 10, y: 20, width: 80, height: 30 }, actions: ["tap"] },
-          { ref: "@e2", stale: false, label: "Empty", box: { x: 0, y: 0, width: 0, height: 0 }, actions: [] },
-        ],
-      }), "utf8");
+      await writeFile(
+        resolve(sessionDir, "session.json"),
+        JSON.stringify({
+          sessionId: "s1",
+          createdAt: "2026-05-24T00:00:00.000Z",
+          updatedAt: "2026-05-24T00:00:00.000Z",
+          lastSnapshotId: "snap1",
+        }),
+        "utf8",
+      );
+      await writeFile(
+        resolve(sessionDir, "refs.json"),
+        JSON.stringify({
+          snapshotId: "snap1",
+          targetId: "target1",
+          refs: [
+            {
+              ref: "@e1",
+              stale: false,
+              label: "Save",
+              box: { x: 10, y: 20, width: 80, height: 30 },
+              actions: ["tap"],
+            },
+            {
+              ref: "@e2",
+              stale: false,
+              label: "Empty",
+              box: { x: 0, y: 0, width: 0, height: 0 },
+              actions: [],
+            },
+          ],
+        }),
+        "utf8",
+      );
 
-      const highlighted = await runJson(["--root", project, "highlight", "@e1", "--output-path", outputPath]);
+      const highlighted = await runJson([
+        "--root",
+        project,
+        "highlight",
+        "@e1",
+        "--output-path",
+        outputPath,
+      ]);
       assert.equal(highlighted.ok, true);
       assert.equal(highlighted.data.available, true);
       assert.equal(highlighted.data.outputPath, outputPath);
@@ -399,43 +468,61 @@ describe("expo98 package bin", () => {
       await mkdir(sessionDir, { recursive: true });
       const simctlPayload = JSON.stringify({
         devices: {
-          "com.apple.CoreSimulator.SimRuntime.iOS-99-0": [{
-            name: "iPhone Fixture",
-            udid: "00000000-0000-0000-0000-000000000123",
-            state: "Booted",
-            isAvailable: true,
-          }],
+          "com.apple.CoreSimulator.SimRuntime.iOS-99-0": [
+            {
+              name: "iPhone Fixture",
+              udid: "00000000-0000-0000-0000-000000000123",
+              state: "Booted",
+              isAvailable: true,
+            },
+          ],
         },
       });
-      await writeFile(resolve(fakeBin, "xcrun"), `#!/bin/sh\nprintf '%s\\n' '${simctlPayload}'\n`, "utf8");
+      await writeFile(
+        resolve(fakeBin, "xcrun"),
+        `#!/bin/sh\nprintf '%s\\n' '${simctlPayload}'\n`,
+        "utf8",
+      );
       await writeFile(resolve(fakeBin, "idb"), "#!/bin/sh\nexit 0\n", "utf8");
       await writeFile(resolve(fakeBin, "axe"), "#!/bin/sh\nexit 0\n", "utf8");
       await chmod(resolve(fakeBin, "xcrun"), 0o755);
       await chmod(resolve(fakeBin, "idb"), 0o755);
       await chmod(resolve(fakeBin, "axe"), 0o755);
       await writeFile(policyPath, JSON.stringify({ allow: ["tap"] }), "utf8");
-      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
-        sessionId: "s1",
-        createdAt: "2026-05-24T00:00:00.000Z",
-        updatedAt: "2026-05-24T00:00:00.000Z",
-        lastSnapshotId: "snap1",
-      }), "utf8");
-      await writeFile(resolve(sessionDir, "refs.json"), JSON.stringify({
-        snapshotId: "snap1",
-        targetId: "target1",
-        refs: [{ ref: "@e1", stale: false, label: "Send", box: { x: 20, y: 40, width: 100, height: 50 }, actions: ["tap"] }],
-      }), "utf8");
+      await writeFile(
+        resolve(sessionDir, "session.json"),
+        JSON.stringify({
+          sessionId: "s1",
+          createdAt: "2026-05-24T00:00:00.000Z",
+          updatedAt: "2026-05-24T00:00:00.000Z",
+          lastSnapshotId: "snap1",
+        }),
+        "utf8",
+      );
+      await writeFile(
+        resolve(sessionDir, "refs.json"),
+        JSON.stringify({
+          snapshotId: "snap1",
+          targetId: "target1",
+          refs: [
+            {
+              ref: "@e1",
+              stale: false,
+              label: "Send",
+              box: { x: 20, y: 40, width: 100, height: 50 },
+              actions: ["tap"],
+            },
+          ],
+        }),
+        "utf8",
+      );
 
-      const payload = await runJson([
-        "--root",
-        project,
-        "tap",
-        "@e1",
-        "--action-policy",
-        policyPath,
-      ], {
-        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ""}` },
-      });
+      const payload = await runJson(
+        ["--root", project, "tap", "@e1", "--action-policy", policyPath],
+        {
+          env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ""}` },
+        },
+      );
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.x, 70);
@@ -461,7 +548,10 @@ describe("expo98 package bin", () => {
       assert.equal(payload.data.action, "tree");
       assert.equal(payload.data.source, "app-instrumentation");
       assert.equal(metro.origin, `http://127.0.0.1:${metro.port}`);
-      assert.equal(metro.expressions.some((expression) => expression.includes("__EXPO_IOS_RN_BRIDGE__")), true);
+      assert.equal(
+        metro.expressions.some((expression) => expression.includes("__EXPO_IOS_RN_BRIDGE__")),
+        true,
+      );
     } finally {
       await metro.close();
     }
@@ -522,19 +612,27 @@ describe("expo98 package bin", () => {
           ],
         },
       ],
-      tree: [{
-        name: "withDevTools(App)",
-        children: [{
-          name: "RootLayout(./_layout.tsx)",
-          children: [{
-            name: "Route(index)",
-            children: [{
-              name: "ScheduleRoute(./index.tsx)",
-              children: [{ name: "SignIn" }],
-            }],
-          }],
-        }],
-      }],
+      tree: [
+        {
+          name: "withDevTools(App)",
+          children: [
+            {
+              name: "RootLayout(./_layout.tsx)",
+              children: [
+                {
+                  name: "Route(index)",
+                  children: [
+                    {
+                      name: "ScheduleRoute(./index.tsx)",
+                      children: [{ name: "SignIn" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
       transport: { cdp: { connectedUrl: "ws://localhost/inspector/debug" } },
     };
     const metro = await makeFakeHermesMetro(nativeInspectorPayload);
@@ -558,7 +656,14 @@ describe("expo98 package bin", () => {
       assert.equal("transport" in concise.data, false);
       assert.doesNotMatch(JSON.stringify(concise), /componentStack|inspector\/debug/);
 
-      const raw = await runJson(["rn", "tree", "--metro-port", String(metro.port), "--raw", "true"]);
+      const raw = await runJson([
+        "rn",
+        "tree",
+        "--metro-port",
+        String(metro.port),
+        "--raw",
+        "true",
+      ]);
       assert.equal(Array.isArray(raw.data.elements), true);
       assert.match(JSON.stringify(raw), /componentStack|inspector\/debug/);
     } finally {
@@ -592,19 +697,21 @@ describe("expo98 package bin", () => {
     const metro = await makeFakeHermesMetro({
       available: true,
       source: "app-instrumentation",
-      requests: [{
-        id: "req-1",
-        method: "GET",
-        url: "http://localhost:3000/api/console/customers?token=secret",
-        startedAt: "2026-05-24T10:00:00.000Z",
-        durationMs: 640,
-        status: 200,
-        body: "must-not-leak",
-        postData: "must-not-leak",
-        headers: { authorization: "Bearer secret", accept: "application/json" },
-        response: { status: 200, content: { text: "must-not-leak" }, encodedBodySize: 512 },
-        initiator: { route: "/", screen: "Schedule", interactionId: "i1", queryKey: "customers" },
-      }],
+      requests: [
+        {
+          id: "req-1",
+          method: "GET",
+          url: "http://localhost:3000/api/console/customers?token=secret",
+          startedAt: "2026-05-24T10:00:00.000Z",
+          durationMs: 640,
+          status: 200,
+          body: "must-not-leak",
+          postData: "must-not-leak",
+          headers: { authorization: "Bearer secret", accept: "application/json" },
+          response: { status: 200, content: { text: "must-not-leak" }, encodedBodySize: 512 },
+          initiator: { route: "/", screen: "Schedule", interactionId: "i1", queryKey: "customers" },
+        },
+      ],
     });
     try {
       const payload = await runJson(["network", "waterfall", "--metro-port", String(metro.port)]);
@@ -629,10 +736,24 @@ describe("expo98 package bin", () => {
       available: true,
       source: "app-instrumentation",
       actionName: "open customer",
-      metrics: [{ name: "interaction.duration", value: 0, unit: "ms", source: "app-performance-mark", confidence: "low" }],
+      metrics: [
+        {
+          name: "interaction.duration",
+          value: 0,
+          unit: "ms",
+          source: "app-performance-mark",
+          confidence: "low",
+        },
+      ],
     });
     try {
-      const payload = await runJson(["perf", "action", "open customer", "--metro-port", String(metro.port)]);
+      const payload = await runJson([
+        "perf",
+        "action",
+        "open customer",
+        "--metro-port",
+        String(metro.port),
+      ]);
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.available, true);
@@ -649,14 +770,16 @@ describe("expo98 package bin", () => {
       available: true,
       source: "app-instrumentation",
       network: {
-        requests: [{
-          id: "req-2",
-          method: "GET",
-          url: "http://localhost:3000/api/console/customers",
-          startedAt: "2026-05-24T10:00:00.000Z",
-          durationMs: 1036,
-          status: 200,
-        }],
+        requests: [
+          {
+            id: "req-2",
+            method: "GET",
+            url: "http://localhost:3000/api/console/customers",
+            startedAt: "2026-05-24T10:00:00.000Z",
+            durationMs: 1036,
+            status: 200,
+          },
+        ],
       },
       renders: {
         commits: [{ id: "commit-1", durationMs: 42, phase: "update", route: "/customers" }],
@@ -669,16 +792,31 @@ describe("expo98 package bin", () => {
       metrics: [],
     });
     try {
-      const payload = await runJson(["perf", "report", "tab-customers", "--metro-port", String(metro.port)]);
+      const payload = await runJson([
+        "perf",
+        "report",
+        "tab-customers",
+        "--metro-port",
+        String(metro.port),
+      ]);
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.available, true);
       assert.equal(payload.data.realValidation.claimsAllowed.networkLatency, true);
       assert.equal(payload.data.realValidation.claimsAllowed.renderCost, true);
       assert.equal(payload.data.realValidation.claimsAllowed.frameJank, true);
-      assert.equal(payload.data.findings.some((finding) => finding.type === "network-latency"), true);
-      assert.equal(payload.data.findings.some((finding) => finding.type === "render-cost"), true);
-      assert.equal(payload.data.findings.some((finding) => finding.type === "frame-jank"), true);
+      assert.equal(
+        payload.data.findings.some((finding) => finding.type === "network-latency"),
+        true,
+      );
+      assert.equal(
+        payload.data.findings.some((finding) => finding.type === "render-cost"),
+        true,
+      );
+      assert.equal(
+        payload.data.findings.some((finding) => finding.type === "frame-jank"),
+        true,
+      );
     } finally {
       await metro.close();
     }
@@ -688,17 +826,28 @@ describe("expo98 package bin", () => {
     const project = await makeFixtureProject("expo98-native-sample-");
     const samplePath = resolve(project, "sample.txt");
     try {
-      await writeFile(samplePath, [
-        "Analysis of sampling MaddieConsole (pid 123) every 1 millisecond",
-        "Physical footprint:         462.7M",
-        "Physical footprint (peak):  473.5M",
-        "Call graph:",
-        "    100 Thread_1: Main Thread",
-        "    + 76 facebook::yoga::calculateLayoutInternal  (in React) + 1512",
-        "    + 64 hermes::vm::Runtime::interpretFunctionImpl  (in hermesvm) + 132",
-      ].join("\n"), "utf8");
+      await writeFile(
+        samplePath,
+        [
+          "Analysis of sampling MaddieConsole (pid 123) every 1 millisecond",
+          "Physical footprint:         462.7M",
+          "Physical footprint (peak):  473.5M",
+          "Call graph:",
+          "    100 Thread_1: Main Thread",
+          "    + 76 facebook::yoga::calculateLayoutInternal  (in React) + 1512",
+          "    + 64 hermes::vm::Runtime::interpretFunctionImpl  (in hermesvm) + 132",
+        ].join("\n"),
+        "utf8",
+      );
 
-      const payload = await runJson(["--root", project, "perf", "report", "--native-artifact", samplePath]);
+      const payload = await runJson([
+        "--root",
+        project,
+        "perf",
+        "report",
+        "--native-artifact",
+        samplePath,
+      ]);
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.nativeSummary.available, true);
@@ -720,39 +869,57 @@ describe("expo98 package bin", () => {
       available: true,
       source: "app-instrumentation",
       routeHint: "/",
-      refs: [{
-        component: "SignInIntro",
-        label: "View.",
-        text: "Welcome",
-        source: { file: "app/index.tsx", line: 12, column: 3 },
-        box: { x: 0, y: 0, width: 402, height: 120 },
-        actions: ["tap"],
-      }],
+      refs: [
+        {
+          component: "SignInIntro",
+          label: "View.",
+          text: "Welcome",
+          source: { file: "app/index.tsx", line: 12, column: 3 },
+          box: { x: 0, y: 0, width: 402, height: 120 },
+          actions: ["tap"],
+        },
+      ],
     });
     try {
       await mkdir(sessionDir, { recursive: true });
-      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
-        schemaVersion: 1,
-        sessionId,
-        name: "review",
-        artifactDir: sessionDir,
-        createdAt: "2026-05-24T00:00:00.000Z",
-        updatedAt: "2026-05-24T00:00:00.000Z",
-        activeTargetId: targetId,
-        lastSnapshotId: null,
-        sidecars: [],
-      }), "utf8");
-      await writeFile(resolve(sessionDir, "target.json"), JSON.stringify({
-        targetId,
-        platform: "ios",
-        device: { id: "SIMULATOR-1", name: "iPhone 16", state: "Booted" },
-        app: {},
-        metro: {},
-        selected: true,
-        stale: false,
-      }), "utf8");
+      await writeFile(
+        resolve(sessionDir, "session.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          sessionId,
+          name: "review",
+          artifactDir: sessionDir,
+          createdAt: "2026-05-24T00:00:00.000Z",
+          updatedAt: "2026-05-24T00:00:00.000Z",
+          activeTargetId: targetId,
+          lastSnapshotId: null,
+          sidecars: [],
+        }),
+        "utf8",
+      );
+      await writeFile(
+        resolve(sessionDir, "target.json"),
+        JSON.stringify({
+          targetId,
+          platform: "ios",
+          device: { id: "SIMULATOR-1", name: "iPhone 16", state: "Booted" },
+          app: {},
+          metro: {},
+          selected: true,
+          stale: false,
+        }),
+        "utf8",
+      );
 
-      const payload = await runJson(["--root", project, "snapshot", "--source", "--bounds", "--metro-port", String(metro.port)]);
+      const payload = await runJson([
+        "--root",
+        project,
+        "snapshot",
+        "--source",
+        "--bounds",
+        "--metro-port",
+        String(metro.port),
+      ]);
 
       assert.equal(payload.ok, true);
       assert.deepEqual(payload.data.source, ["app-instrumentation"]);
@@ -777,43 +944,62 @@ describe("expo98 package bin", () => {
       available: true,
       source: "native-inspector",
       routeHint: "/",
-      tree: [{
-        name: "Root",
-        element: { frame: { left: 0, top: 0, width: 402, height: 874 } },
-        children: [{
-          name: "Pressable",
-          element: {
-            label: "Send sign-in link",
-            role: "button",
-            frame: { left: 28, top: 559, width: 345, height: 46 },
-          },
-        }],
-      }],
+      tree: [
+        {
+          name: "Root",
+          element: { frame: { left: 0, top: 0, width: 402, height: 874 } },
+          children: [
+            {
+              name: "Pressable",
+              element: {
+                label: "Send sign-in link",
+                role: "button",
+                frame: { left: 28, top: 559, width: 345, height: 46 },
+              },
+            },
+          ],
+        },
+      ],
     });
     try {
       await mkdir(sessionDir, { recursive: true });
-      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
-        schemaVersion: 1,
-        sessionId,
-        name: "review",
-        artifactDir: sessionDir,
-        createdAt: "2026-05-24T00:00:00.000Z",
-        updatedAt: "2026-05-24T00:00:00.000Z",
-        activeTargetId: targetId,
-        lastSnapshotId: null,
-        sidecars: [],
-      }), "utf8");
-      await writeFile(resolve(sessionDir, "target.json"), JSON.stringify({
-        targetId,
-        platform: "ios",
-        device: { id: "SIMULATOR-1", name: "iPhone 16", state: "Booted" },
-        app: {},
-        metro: {},
-        selected: true,
-        stale: false,
-      }), "utf8");
+      await writeFile(
+        resolve(sessionDir, "session.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          sessionId,
+          name: "review",
+          artifactDir: sessionDir,
+          createdAt: "2026-05-24T00:00:00.000Z",
+          updatedAt: "2026-05-24T00:00:00.000Z",
+          activeTargetId: targetId,
+          lastSnapshotId: null,
+          sidecars: [],
+        }),
+        "utf8",
+      );
+      await writeFile(
+        resolve(sessionDir, "target.json"),
+        JSON.stringify({
+          targetId,
+          platform: "ios",
+          device: { id: "SIMULATOR-1", name: "iPhone 16", state: "Booted" },
+          app: {},
+          metro: {},
+          selected: true,
+          stale: false,
+        }),
+        "utf8",
+      );
 
-      const payload = await runJson(["--root", project, "snapshot", "--bounds", "--metro-port", String(metro.port)]);
+      const payload = await runJson([
+        "--root",
+        project,
+        "snapshot",
+        "--bounds",
+        "--metro-port",
+        String(metro.port),
+      ]);
 
       assert.equal(payload.ok, true);
       assert.equal(payload.data.refs.length, 2);
@@ -833,11 +1019,18 @@ describe("expo98 package bin", () => {
     assert.equal(payload.ok, true);
     assert.equal(payload.data.selfCheck.missingAdapterCount, 0);
     assert.ok(payload.data.selfCheck.adapterFindings.length >= 4);
-    assert.equal(payload.data.selfCheck.adapterFindings.every((finding) => finding.status !== "missing" && finding.status !== "stub"), true);
+    assert.equal(
+      payload.data.selfCheck.adapterFindings.every(
+        (finding) => finding.status !== "missing" && finding.status !== "stub",
+      ),
+      true,
+    );
   });
 
   it("packs as one npm package containing the executable, not workspace package sources", async () => {
-    const { stdout } = await execFileAsync("pnpm", ["pack", "--dry-run", "--json"], { env: npxEnv });
+    const { stdout } = await execFileAsync("pnpm", ["pack", "--dry-run", "--json"], {
+      env: npxEnv,
+    });
     const jsonStart = stdout.lastIndexOf("\n{");
     assert.notEqual(jsonStart, -1);
     const parsedPack = JSON.parse(stdout.slice(jsonStart + 1));
@@ -850,8 +1043,14 @@ describe("expo98 package bin", () => {
     assert.ok(files.includes("cli/expo-ios.mjs"));
     assert.ok(files.includes("package.json"));
     assert.ok(files.includes("README.md"));
-    assert.equal(files.some((file) => file.startsWith("package-entrypoints/")), false);
-    assert.equal(files.some((file) => file.includes("/src/main/")), false);
+    assert.equal(
+      files.some((file) => file.startsWith("package-entrypoints/")),
+      false,
+    );
+    assert.equal(
+      files.some((file) => file.includes("/src/main/")),
+      false,
+    );
     assert.equal(/from\s+["']\.\.\//.test(bundledCli), false);
     assert.equal(/import\s+["']\.\.\//.test(bundledCli), false);
     assert.deepEqual(packageJson.dependencies, { ws: "^8.21.0" });

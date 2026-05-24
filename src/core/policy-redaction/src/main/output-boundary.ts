@@ -42,7 +42,7 @@ export function summarizeRunPayload(payload: unknown): RunPayloadSummary | null 
     keys: Object.keys(record).slice(0, 40),
     available: typeof record.available === "boolean" ? record.available : undefined,
     routeCount: record.routeCount,
-    eventCount: Array.isArray(record.events) ? record.events.length : undefined
+    eventCount: Array.isArray(record.events) ? record.events.length : undefined,
   };
 }
 

@@ -1,16 +1,26 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
+import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
+import { policyDecision as bridgePolicyDecision } from "../../../bridge-domain-actions/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
-import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import { policyDecision as bridgePolicyDecision } from "../../../bridge-domain-actions/src/main/index.ts";
 
-export const INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"] as const;
+export const INSPECTOR_ACTIONS = [
+  "probe",
+  "toggle",
+  "install-comment-menu",
+  "read-comments",
+  "clear-comments",
+  "open-dev-menu",
+] as const;
 export type InspectorAction = (typeof INSPECTOR_ACTIONS)[number];
 
 export interface RuntimeInspectorArgs {
@@ -57,7 +67,11 @@ export interface RuntimeInspectorDependencies {
 }
 
 export interface OpenDevMenuDependencies {
-  broadcastMetroMessage: (metroPort: number, method: string | null, params?: unknown) => Promise<Record<string, unknown>>;
+  broadcastMetroMessage: (
+    metroPort: number,
+    method: string | null,
+    params?: unknown,
+  ) => Promise<Record<string, unknown>>;
   resolveIosDevice: (device: unknown, options: { preferBooted: true }) => Promise<DeviceRecord>;
   openDevClientForMessageSocket: (args: {
     device: DeviceRecord;
@@ -67,7 +81,11 @@ export interface OpenDevMenuDependencies {
     metroPort: number;
     crashCheckMs: unknown;
   }) => Promise<Record<string, unknown>>;
-  execFile: (command: string, args: string[], options: { timeout: number; rejectOnError: false }) => Promise<ExecResult>;
+  execFile: (
+    command: string,
+    args: string[],
+    options: { timeout: number; rejectOnError: false },
+  ) => Promise<ExecResult>;
   readJsonFile?: (file: string) => Promise<unknown>;
   resolvePath?: (file: string) => string;
   truncate?: (value: unknown) => string;
@@ -96,14 +114,17 @@ export async function runtimeInspector(
   }
 
   const expression = runtimeInspectorExpression({ action, commentTitle, maxComments });
-  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8000 });
+  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, {
+    timeoutMs: 8000,
+  });
 
   return toolJson({
     action,
     metroPort,
     target: targetSummary(targetList[0]),
     inspector: getPath(result, ["result", "result", "value"]) ?? null,
-    protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord(result)?.error ?? null,
+    protocolError:
+      getPath(result, ["result", "exceptionDetails"]) ?? asRecord(result)?.error ?? null,
     cdp: asRecord(result)?.diagnostics ?? asRecord(result)?.cdp ?? null,
   });
 }
@@ -117,11 +138,14 @@ const defaultRuntimeInspectorDependencies: RuntimeInspectorDependencies = {
 const defaultOpenDevMenuDependencies: OpenDevMenuDependencies = {
   broadcastMetroMessage,
   resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString(device), options),
-  openDevClientForMessageSocket: async (args) => unwrapToolJson(await openExpoRoute({
-    device: args.device.udid,
-    bundleId: args.bundleId,
-    url: args.devClientUrl,
-  })) as Record<string, unknown>,
+  openDevClientForMessageSocket: async (args) =>
+    unwrapToolJson(
+      await openExpoRoute({
+        device: args.device.udid,
+        bundleId: args.bundleId,
+        url: args.devClientUrl,
+      }),
+    ) as Record<string, unknown>,
   execFile,
   readJsonFile: async (file) => JSON.parse(await readFile(file, "utf8")),
   resolvePath: (file) => path.resolve(file),
@@ -396,7 +420,7 @@ function asString(value: unknown): string | null {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -405,8 +429,14 @@ async function broadcastMetroMessage(
   method: string | null,
   params?: unknown,
 ): Promise<Record<string, unknown>> {
-  if (!method) return { available: false, reason: "No Metro message method was requested.", metroPort };
-  if (typeof WebSocket !== "function") return { available: false, reason: "This Node runtime does not expose a WebSocket client.", metroPort };
+  if (!method)
+    return { available: false, reason: "No Metro message method was requested.", metroPort };
+  if (typeof WebSocket !== "function")
+    return {
+      available: false,
+      reason: "This Node runtime does not expose a WebSocket client.",
+      metroPort,
+    };
   const url = `ws://127.0.0.1:${metroPort}/message?role=debugger&name=expo98`;
   try {
     await cdpMessage(url, { method, params: params ?? {} }, 2500);
@@ -416,7 +446,11 @@ async function broadcastMetroMessage(
   }
 }
 
-async function cdpMessage(url: string, payload: Record<string, unknown>, timeoutMs: number): Promise<void> {
+async function cdpMessage(
+  url: string,
+  payload: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<void> {
   const ws = new WebSocket(url);
   await waitForOpen(ws, timeoutMs);
   try {
@@ -429,14 +463,22 @@ async function cdpMessage(url: string, payload: Record<string, unknown>, timeout
 function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
-    ws.addEventListener("open", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
+    ws.addEventListener(
+      "open",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+    ws.addEventListener(
+      "error",
+      () => {
+        clearTimeout(timer);
+        reject(new Error("WebSocket connection failed."));
+      },
+      { once: true },
+    );
   });
 }
 
@@ -446,13 +488,18 @@ function execFile(
   options: { timeout: number; rejectOnError: false },
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
-    nodeExecFile(command, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message } : null,
-      });
-    });
+    nodeExecFile(
+      command,
+      args,
+      { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error ? { message: error.message } : null,
+        });
+      },
+    );
   });
 }
 

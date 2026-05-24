@@ -33,4 +33,10 @@ export {
   normalizeGesture,
   normalizeGestureCoordinates,
 } from "./gestures.js";
-export { clampNumber, createRefActionAdapter, requireString, toolJson, truncate } from "./shared.js";
+export {
+  clampNumber,
+  createRefActionAdapter,
+  requireString,
+  toolJson,
+  truncate,
+} from "./shared.js";

@@ -1,10 +1,14 @@
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import {
   openExpoRoute,
   routeActionPolicyDecision,
 } from "../../../route-url-actions/src/main/index.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -43,11 +47,13 @@ export interface NavigationTargetSummary {
   devtoolsFrontendUrl: string | null;
   webSocketDebuggerUrl: string | null;
   reactNative: Record<string, unknown> | null;
-  capabilities: {
-    hermesRuntime: boolean;
-    devtoolsFrontend: boolean;
-    reactNative: boolean;
-  } | Record<string, unknown>;
+  capabilities:
+    | {
+        hermesRuntime: boolean;
+        devtoolsFrontend: boolean;
+        reactNative: boolean;
+      }
+    | Record<string, unknown>;
 }
 
 export interface NavigationPolicyDecision {
@@ -114,7 +120,9 @@ export function clampNumber(value: unknown, min: number, max: number): number {
   return Math.min(Math.max(number, min), max);
 }
 
-export function targetSummary(target: NavigationTarget | null | undefined): NavigationTargetSummary | null {
+export function targetSummary(
+  target: NavigationTarget | null | undefined,
+): NavigationTargetSummary | null {
   if (!target) return null;
   return {
     id: target.id ?? null,
@@ -126,8 +134,11 @@ export function targetSummary(target: NavigationTarget | null | undefined): Navi
     webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
     reactNative: target.reactNative ?? null,
     capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      hermesRuntime:
+        typeof target.webSocketDebuggerUrl === "string" &&
+        target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend:
+        typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
       reactNative: Boolean(target.reactNative),
     },
   };
@@ -238,16 +249,20 @@ export async function navigationCommand(
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
+    return toolJson(
+      navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }),
+    );
   }
   if (!deps.evaluateHermesExpression) {
-    return toolJson(navigationUnavailable({
-      action,
-      metroPort,
-      reason: "No Hermes evaluator is configured.",
-      target: targetSummary(target),
-      policy,
-    }));
+    return toolJson(
+      navigationUnavailable({
+        action,
+        metroPort,
+        reason: "No Hermes evaluator is configured.",
+        target: targetSummary(target),
+        policy,
+      }),
+    );
   }
 
   const result = await deps.evaluateHermesExpression(
@@ -257,13 +272,15 @@ export async function navigationCommand(
   );
   const value = result?.result?.result?.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return toolJson(navigationUnavailable({
-      action,
-      metroPort,
-      reason: result?.error ?? "Navigation bridge did not return a value.",
-      target: targetSummary(target),
-      policy,
-    }));
+    return toolJson(
+      navigationUnavailable({
+        action,
+        metroPort,
+        reason: result?.error ?? "Navigation bridge did not return a value.",
+        target: targetSummary(target),
+        policy,
+      }),
+    );
   }
 
   return toolJson({
@@ -272,19 +289,29 @@ export async function navigationCommand(
     metroPort,
     target: targetSummary(target),
     transport: navigationTransport(metroPort, target, result?.diagnostics),
-    evidenceSource: "source" in value && typeof value.source === "string" ? value.source : "unknown",
+    evidenceSource:
+      "source" in value && typeof value.source === "string" ? value.source : "unknown",
     policy,
   });
 }
 
 export async function navigationDeepLink(
   args: NavigationCommandArgs = {},
-  deps: Pick<NavigationCommandDependencies, "policyDecision" | "openExpoRoute" | "selectedTargetId" | "latestSessionId"> = defaultNavigationDependencies,
+  deps: Pick<
+    NavigationCommandDependencies,
+    "policyDecision" | "openExpoRoute" | "selectedTargetId" | "latestSessionId"
+  > = defaultNavigationDependencies,
 ): Promise<JsonObject> {
   const policy = await navigationPolicyDecision(args, "deep-link", deps);
-  if (!policy.allowed) return { available: false, action: "deep-link", reason: policy.reason, policy } as JsonObject;
+  if (!policy.allowed)
+    return { available: false, action: "deep-link", reason: policy.reason, policy } as JsonObject;
   if (!deps.openExpoRoute) {
-    return { available: false, action: "deep-link", reason: "No open-route adapter is configured.", policy } as JsonObject;
+    return {
+      available: false,
+      action: "deep-link",
+      reason: "No open-route adapter is configured.",
+      policy,
+    } as JsonObject;
   }
 
   const route = args.route ?? args._?.[1] ?? args._?.[0];
@@ -325,7 +352,11 @@ const defaultNavigationDependencies: NavigationCommandDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort) as Promise<NavigationTarget[]>,
   evaluateHermesExpression: sharedEvaluateHermesExpression,
   openExpoRoute,
-  policyDecision: (args, action) => routeActionPolicyDecision(args as Pick<Parameters<typeof routeActionPolicyDecision>[0], "actionPolicy">, action) as Promise<NavigationPolicyDecision>,
+  policyDecision: (args, action) =>
+    routeActionPolicyDecision(
+      args as Pick<Parameters<typeof routeActionPolicyDecision>[0], "actionPolicy">,
+      action,
+    ) as Promise<NavigationPolicyDecision>,
 };
 
 export function navigationExpression(args: { action: string; tab?: unknown }): string {
@@ -449,7 +480,8 @@ export async function latestSessionId(
 }
 
 function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim() === "")
+    throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -462,7 +494,10 @@ function sanitizeSensitiveUrlStrings(value: unknown): unknown {
   if (Array.isArray(value)) return value.map((item) => sanitizeSensitiveUrlStrings(item));
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, sanitizeSensitiveUrlStrings(item)]),
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        sanitizeSensitiveUrlStrings(item),
+      ]),
     );
   }
   return value;

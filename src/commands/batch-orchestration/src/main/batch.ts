@@ -1,11 +1,10 @@
 import { execFile as nodeExecFile } from "node:child_process";
-
 import { parseCliArgs, parseJsonArgument } from "./cli.js";
 import { commandAliases, commandArgs } from "./command-map.js";
-import { batchStepError, truncate } from "./errors.js";
-import { redactValue } from "./errors.js";
 import { CliUsageError } from "./domain.js";
 import type { BatchDependencies, BatchPayload, RunToolOptions, ToolTextResult } from "./domain.js";
+import { batchStepError, truncate } from "./errors.js";
+import { redactValue } from "./errors.js";
 import { toolJson, unwrapToolJson } from "./tool-json.js";
 
 /**
@@ -33,7 +32,7 @@ export async function batchCommand(
       if (failureIndex === null) failureIndex = index;
       results.push({
         index,
-        command: Array.isArray(step) ? step[0] ?? null : null,
+        command: Array.isArray(step) ? (step[0] ?? null) : null,
         ok: false,
         error: batchStepError(error),
       });
@@ -88,7 +87,11 @@ export async function runBatchStep(
     stateDir: globals.stateDir ?? batchArgs.stateDir ?? null,
   };
   const effectiveArgs = commandArgs(command, args, mergedGlobals);
-  const result = await deps.runToolAndEmitPayload(toolName, effectiveArgs, { command, globals: mergedGlobals, silent: true });
+  const result = await deps.runToolAndEmitPayload(toolName, effectiveArgs, {
+    command,
+    globals: mergedGlobals,
+    silent: true,
+  });
   return { command, data: redactValue(unwrapToolJson(result)) };
 }
 
@@ -116,10 +119,15 @@ async function runToolViaCli(
     : parsed;
 }
 
-function cliArgv(command: string, args: Record<string, unknown>, globals: Record<string, unknown>): string[] {
+function cliArgv(
+  command: string,
+  args: Record<string, unknown>,
+  globals: Record<string, unknown>,
+): string[] {
   const argv: string[] = ["--json", "--quiet"];
   if (typeof globals.root === "string" && globals.root) argv.push("--root", globals.root);
-  if (typeof globals.stateDir === "string" && globals.stateDir) argv.push("--state-dir", globals.stateDir);
+  if (typeof globals.stateDir === "string" && globals.stateDir)
+    argv.push("--state-dir", globals.stateDir);
   argv.push(command);
   for (const [key, value] of Object.entries(args)) {
     if (value === undefined || value === null || key === "root" || key === "stateDir") continue;
@@ -140,7 +148,9 @@ export function parseCliJson(stdout: string): unknown {
     return JSON.parse(text);
   } catch (error) {
     const snippet = truncate(text, 4_000);
-    throw new Error(`Batch child process returned invalid JSON on stdout: ${snippet}`, { cause: error });
+    throw new Error(`Batch child process returned invalid JSON on stdout: ${snippet}`, {
+      cause: error,
+    });
   }
 }
 
@@ -148,13 +158,19 @@ function execFile(
   file: string,
   args: string[],
   options: { timeout: number; rejectOnError: false },
-): Promise<{ stdout: string; stderr: string; error?: Error & { code?: number | string | null; signal?: string | null } }> {
+): Promise<{
+  stdout: string;
+  stderr: string;
+  error?: Error & { code?: number | string | null; signal?: string | null };
+}> {
   return new Promise((resolve) => {
     nodeExecFile(file, args, { timeout: options.timeout }, (error, stdout, stderr) => {
       resolve({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
-        error: error as (Error & { code?: number | string | null; signal?: string | null }) | undefined,
+        error: error as
+          | (Error & { code?: number | string | null; signal?: string | null })
+          | undefined,
       });
     });
   });

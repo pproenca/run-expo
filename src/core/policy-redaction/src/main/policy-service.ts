@@ -1,8 +1,4 @@
-import {
-  BRIDGE_CONFIRMATIONS,
-  POLICY_REASONS,
-  checkedPolicyDecision
-} from "./domain.js";
+import { BRIDGE_CONFIRMATIONS, POLICY_REASONS, checkedPolicyDecision } from "./domain.js";
 
 export type PolicyDocument = {
   allow?: string[];
@@ -52,7 +48,7 @@ export function decideActionPolicy({
   sideEffect,
   policy = null,
   source = null,
-  allowRuntimeEval = false
+  allowRuntimeEval = false,
 }: {
   action: string;
   sideEffect: string;
@@ -66,7 +62,7 @@ export function decideActionPolicy({
       sideEffect: "runtime-eval",
       allowed: true,
       source: "--allow-runtime-eval",
-      reason: "Runtime eval allowed by global flag."
+      reason: "Runtime eval allowed by global flag.",
     });
   }
 
@@ -76,7 +72,7 @@ export function decideActionPolicy({
       sideEffect,
       allowed: true,
       source: null,
-      reason: POLICY_REASONS.READ_ALLOWED
+      reason: POLICY_REASONS.READ_ALLOWED,
     });
   }
 
@@ -86,7 +82,7 @@ export function decideActionPolicy({
       sideEffect,
       allowed: false,
       source: null,
-      reason: POLICY_REASONS.MISSING_POLICY
+      reason: POLICY_REASONS.MISSING_POLICY,
     });
   }
 
@@ -96,11 +92,14 @@ export function decideActionPolicy({
     sideEffect,
     allowed,
     source,
-    reason: allowed ? POLICY_REASONS.ACTION_ALLOWED : POLICY_REASONS.ACTION_DENIED
+    reason: allowed ? POLICY_REASONS.ACTION_ALLOWED : POLICY_REASONS.ACTION_DENIED,
   });
 }
 
-export function policyAllowsAction(policy: PolicyDocument | null | undefined, action: string): boolean {
+export function policyAllowsAction(
+  policy: PolicyDocument | null | undefined,
+  action: string,
+): boolean {
   if (Array.isArray(policy?.allow) && policy.allow.includes(action)) {
     return true;
   }
@@ -123,16 +122,28 @@ export function defaultPolicySummary(): DefaultPolicySummary {
 }
 
 export function actionSideEffect(action: string): "read" | "device" {
-  if (/^(doctor|project-info|routes|devices|target\.list|target\.current|snapshot|refs|get|find|wait|console|errors|logs|metro\.status|policy|redact|review)/.test(action)) {
+  if (
+    /^(doctor|project-info|routes|devices|target\.list|target\.current|snapshot|refs|get|find|wait|console|errors|logs|metro\.status|policy|redact|review)/.test(
+      action,
+    )
+  ) {
     return "read";
   }
-  if (/^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.|wait\.fn)/.test(action)) {
+  if (
+    /^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.|wait\.fn)/.test(
+      action,
+    )
+  ) {
     return "device";
   }
   return "device";
 }
 
-export function policyDeniedPayload({ domain, action, policy }: {
+export function policyDeniedPayload({
+  domain,
+  action,
+  policy,
+}: {
   domain: string;
   action: string;
   policy: PolicyDeniedDecision;
@@ -146,7 +157,7 @@ export function policyDeniedPayload({ domain, action, policy }: {
     code: "policy-denied",
     denied: true,
     reason: "Policy denied action.",
-    policy
+    policy,
   };
 }
 
@@ -159,7 +170,7 @@ export function requireBridgeConfirmation({
   confirmActions,
   status,
   projectRoot,
-  plan
+  plan,
 }: {
   action: "install" | "remove" | string;
   confirmActions?: string | null;
@@ -180,11 +191,14 @@ export function requireBridgeConfirmation({
     projectRoot,
     reason: `Refusing to mutate app files without explicit --confirm-actions ${requiredConfirmation}.`,
     requiredConfirmation,
-    plan
+    plan,
   };
 }
 
-export function hasExplicitConfirmation(value: string | null | undefined, required: string): boolean {
+export function hasExplicitConfirmation(
+  value: string | null | undefined,
+  required: string,
+): boolean {
   return String(value ?? "")
     .split(",")
     .map((item) => item.trim())

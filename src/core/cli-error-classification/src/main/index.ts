@@ -20,7 +20,11 @@ export function exitCodeForError(error: unknown): number {
     return explicitExitCode as number;
   }
   const message = String(record?.message ?? "");
-  if (/Unknown command|Unknown tool|requires a value|Expected a finite number|must be a non-empty string|must look like|must not contain whitespace|valid JSON|mutually exclusive/i.test(message)) {
+  if (
+    /Unknown command|Unknown tool|requires a value|Expected a finite number|must be a non-empty string|must look like|must not contain whitespace|valid JSON|mutually exclusive/i.test(
+      message,
+    )
+  ) {
     return EXIT_INVALID_USAGE;
   }
   return EXIT_RUNTIME_FAILURE;

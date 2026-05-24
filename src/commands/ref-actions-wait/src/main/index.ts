@@ -15,16 +15,8 @@ export {
   toolJson,
   unwrapToolJson,
 } from "./common.js";
-export {
-  findCommand,
-  finderActionResult,
-  findMatches,
-} from "./find.js";
-export {
-  planRefAction,
-  refPoint,
-  scrollPlan,
-} from "./ref-actions.js";
+export { findCommand, finderActionResult, findMatches } from "./find.js";
+export { planRefAction, refPoint, scrollPlan } from "./ref-actions.js";
 export {
   evaluateWaitPredicate,
   refHasVisibleEvidence,

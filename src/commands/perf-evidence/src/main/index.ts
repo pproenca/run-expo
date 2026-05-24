@@ -1,5 +1,4 @@
 import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import { firstPositional, requireString } from "./common.js";
 import {
   perfBudgetPayload,
   perfBundlePayload,
@@ -12,6 +11,7 @@ import {
   perfRuntimePayload,
   perfSummaryPayload,
 } from "./actions.js";
+import { firstPositional, requireString } from "./common.js";
 import { PERF_ACTIONS, type PerfDependencies, type ToolTextResult } from "./types.js";
 
 export { toolJson };
@@ -30,7 +30,12 @@ export {
   perfSummaryPayload,
 } from "./actions.js";
 export { parseNativeSampleArtifact, writePerfArtifact } from "./artifacts.js";
-export { clampNumber, requireOptionalString, requireString, resolveExpoStateRoot } from "./common.js";
+export {
+  clampNumber,
+  requireOptionalString,
+  requireString,
+  resolveExpoStateRoot,
+} from "./common.js";
 export {
   lowerConfidence,
   metricMap,
@@ -48,7 +53,10 @@ export {
 export { perfBridgeAction, perfExpression } from "./runtime-bridge.js";
 export { perfValidation } from "./validation.js";
 
-export async function perfCommand(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<ToolTextResult> {
+export async function perfCommand(
+  args: Record<string, any> = {},
+  deps: PerfDependencies = {},
+): Promise<ToolTextResult> {
   const action = requireString(args.action ?? firstPositional(args) ?? "summary", "action");
   if (!PERF_ACTIONS.includes(action)) throw new Error(`Unknown performance action: ${action}`);
   if (action === "summary") return toolJson(await perfSummaryPayload(args, deps));
@@ -56,9 +64,11 @@ export async function perfCommand(args: Record<string, any> = {}, deps: PerfDepe
   if (action === "compare") return toolJson(await perfComparePayload(args, deps));
   if (action === "budget") return toolJson(await perfBudgetPayload(args, deps));
   if (action === "memory") return toolJson(await perfMemoryPayload(args, deps));
-  if (action === "ettrace" || action === "memgraph") return toolJson(await perfNativeProfilerPayload(args, action, deps));
+  if (action === "ettrace" || action === "memgraph")
+    return toolJson(await perfNativeProfilerPayload(args, action, deps));
   if (action === "interaction") return toolJson(await perfInteractionPayload(args, deps));
   if (action === "report") return toolJson(await perfReportPayload(args, deps));
-  if (["mark", "measure", "js-thread", "frames"].includes(action)) return toolJson(await perfInstrumentedPayload(args, action, deps));
+  if (["mark", "measure", "js-thread", "frames"].includes(action))
+    return toolJson(await perfInstrumentedPayload(args, action, deps));
   return toolJson(await perfRuntimePayload(args, action, deps));
 }

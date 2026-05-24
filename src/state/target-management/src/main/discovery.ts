@@ -1,4 +1,10 @@
-import type { DeviceSummary, DiscoverTargetsArgs, DiscoveryDependencies, MetroTarget, TargetRecord } from "./domain.js";
+import type {
+  DeviceSummary,
+  DiscoverTargetsArgs,
+  DiscoveryDependencies,
+  MetroTarget,
+  TargetRecord,
+} from "./domain.js";
 import { clampMetroPort, normalizeDeviceState, targetRecord } from "./target-record.js";
 
 /**
@@ -20,12 +26,18 @@ export async function discoverTargets(
     const metroTargets = normalizeMetroTargets(metroPayload);
 
     for (const device of devices) {
-      const matchingMetroTargets = metroTargets.filter((target) => !target.deviceName || target.deviceName === device.name);
+      const matchingMetroTargets = metroTargets.filter(
+        (target) => !target.deviceName || target.deviceName === device.name,
+      );
       if (matchingMetroTargets.length === 0) {
-        targets.push(targetRecord({ platform: "ios", device, metroPort, metroTarget: null, selectedTargetId }));
+        targets.push(
+          targetRecord({ platform: "ios", device, metroPort, metroTarget: null, selectedTargetId }),
+        );
       } else {
         for (const metroTarget of matchingMetroTargets) {
-          targets.push(targetRecord({ platform: "ios", device, metroPort, metroTarget, selectedTargetId }));
+          targets.push(
+            targetRecord({ platform: "ios", device, metroPort, metroTarget, selectedTargetId }),
+          );
         }
       }
     }
@@ -35,21 +47,31 @@ export async function discoverTargets(
 }
 
 function compareTargets(left: TargetRecord, right: TargetRecord): number {
-  return Number(right.selected) - Number(left.selected) ||
+  return (
+    Number(right.selected) - Number(left.selected) ||
     Number(right.metro.status === "available") - Number(left.metro.status === "available") ||
-    deviceName(left).localeCompare(deviceName(right));
+    deviceName(left).localeCompare(deviceName(right))
+  );
 }
 
 function deviceName(target: TargetRecord): string {
   return target.device.name ?? "";
 }
 
-export function normalizeSimulatorDevices(rawDevices: Array<Record<string, unknown>>): DeviceSummary[] {
-  return rawDevices.map((device) => ({
-    id: String(device.udid ?? ""),
-    name: typeof device.name === "string" ? device.name : String(device.udid ?? ""),
-    state: normalizeDeviceState(device.state),
-  })).sort((left, right) => Number(right.state === "booted") - Number(left.state === "booted") || String(left.name).localeCompare(String(right.name)));
+export function normalizeSimulatorDevices(
+  rawDevices: Array<Record<string, unknown>>,
+): DeviceSummary[] {
+  return rawDevices
+    .map((device) => ({
+      id: String(device.udid ?? ""),
+      name: typeof device.name === "string" ? device.name : String(device.udid ?? ""),
+      state: normalizeDeviceState(device.state),
+    }))
+    .sort(
+      (left, right) =>
+        Number(right.state === "booted") - Number(left.state === "booted") ||
+        String(left.name).localeCompare(String(right.name)),
+    );
 }
 
 export function normalizeMetroTargets(payload: unknown): MetroTarget[] {
@@ -60,13 +82,15 @@ export function normalizeMetroTargets(payload: unknown): MetroTarget[] {
     if (!isRecord(item)) {
       return [];
     }
-    return [{
-      id: optionalString(item.id),
-      title: optionalString(item.title),
-      appId: optionalString(item.appId),
-      webSocketDebuggerUrl: optionalString(item.webSocketDebuggerUrl),
-      deviceName: optionalString(item.deviceName),
-    }];
+    return [
+      {
+        id: optionalString(item.id),
+        title: optionalString(item.title),
+        appId: optionalString(item.appId),
+        webSocketDebuggerUrl: optionalString(item.webSocketDebuggerUrl),
+        deviceName: optionalString(item.deviceName),
+      },
+    ];
   });
 }
 

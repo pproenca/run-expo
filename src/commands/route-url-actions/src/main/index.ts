@@ -1,14 +1,16 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import path from "node:path";
-
 import {
   decideActionPolicy,
   policyDeniedPayload,
   type PolicyDeniedDecision,
   type PolicyDocument,
 } from "../../../../core/policy-redaction/src/main/policy-service.ts";
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 const MAX_OUTPUT = 40_000;
 
@@ -74,7 +76,7 @@ export function requireOptionalString(value: unknown): string | null {
 }
 
 export async function buildExpoRouteUrl(cwd: string, args: RouteUrlArgs = {}): Promise<string> {
-  const scheme = requireOptionalString(args.scheme) ?? await inferExpoScheme(cwd);
+  const scheme = requireOptionalString(args.scheme) ?? (await inferExpoScheme(cwd));
   if (!scheme) throw new Error("Could not infer Expo scheme. Pass scheme or url.");
 
   const rawRoute = requireOptionalString(args.route) ?? "/";
@@ -95,7 +97,12 @@ export async function inferExpoScheme(cwd: string): Promise<string | null> {
     if (typeof scheme === "string" && scheme.trim()) return scheme.trim();
   }
 
-  const configPath = await firstExisting(cwd, ["app.config.ts", "app.config.js", "app.config.mjs", "app.config.cjs"]);
+  const configPath = await firstExisting(cwd, [
+    "app.config.ts",
+    "app.config.js",
+    "app.config.mjs",
+    "app.config.cjs",
+  ]);
   if (!configPath) return null;
   const text = await fs.readFile(configPath, "utf8");
   const match = /\bscheme\s*:\s*["'`]([^"'`]+)["'`]/.exec(text);
@@ -120,7 +127,10 @@ export function processNameFromBundleId(bundleId: unknown): string | null {
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") : null;
 }
 
-export function androidDeviceArgs(device: string | null | undefined, args: readonly string[]): string[] {
+export function androidDeviceArgs(
+  device: string | null | undefined,
+  args: readonly string[],
+): string[] {
   return device ? ["-s", device, ...args] : [...args];
 }
 
@@ -140,13 +150,17 @@ export async function resolveIosDevice(
   });
   const parsed = JSON.parse(String(stdout ?? "{}")) as { devices?: Record<string, unknown[]> };
   const devices = Object.entries(parsed.devices ?? {}).flatMap(([runtime, runtimeDevices]) =>
-    (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => ({ ...device as Record<string, unknown>, runtime }) as IosDevice),
+    (Array.isArray(runtimeDevices) ? runtimeDevices : []).map(
+      (device) => ({ ...(device as Record<string, unknown>), runtime }) as IosDevice,
+    ),
   );
 
   if (requested) {
     const exact = devices.find((device) => device.udid === requested || device.name === requested);
     if (exact) return exact;
-    const partial = devices.find((device) => String(device.name).toLowerCase().includes(requested.toLowerCase()));
+    const partial = devices.find((device) =>
+      String(device.name).toLowerCase().includes(requested.toLowerCase()),
+    );
     if (partial) return partial;
     throw new Error(`No available iOS simulator matched: ${requested}`);
   }
@@ -170,13 +184,29 @@ export async function openUrl(
   const url = requireString(args.url, "url");
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
   const policy = await routeActionPolicyDecision(args, "open-url", deps);
-  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "route", action: "open-url", policy }));
+  if (!policy.allowed)
+    return toolJson(policyDeniedPayload({ domain: "route", action: "open-url", policy }));
   const execFile = deps.execFile ?? defaultExecFile;
 
   if (platform === "android") {
-    const adbArgs = androidDeviceArgs(args.device, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
+    const adbArgs = androidDeviceArgs(args.device, [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      url,
+    ]);
     const result = await execFile("adb", adbArgs, { timeout: 30_000, rejectOnError: false });
-    return toolJson(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate(result.stdout), stderr: truncate(result.stderr) }));
+    return toolJson(
+      redactToolPayload({
+        platform,
+        device: args.device ?? null,
+        stdout: truncate(result.stdout),
+        stderr: truncate(result.stderr),
+      }),
+    );
   }
 
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
@@ -184,7 +214,14 @@ export async function openUrl(
     timeout: 30_000,
     rejectOnError: false,
   });
-  return toolJson(redactToolPayload({ platform, device, stdout: truncate(result.stdout), stderr: truncate(result.stderr) }));
+  return toolJson(
+    redactToolPayload({
+      platform,
+      device,
+      stdout: truncate(result.stdout),
+      stderr: truncate(result.stderr),
+    }),
+  );
 }
 
 export async function openExpoRoute(
@@ -195,7 +232,8 @@ export async function openExpoRoute(
   const url = args.url ? requireString(args.url, "url") : await buildExpoRouteUrl(cwd, args);
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
   const policy = await routeActionPolicyDecision(args, "open-route", deps);
-  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "route", action: "open-route", policy }));
+  if (!policy.allowed)
+    return toolJson(policyDeniedPayload({ domain: "route", action: "open-route", policy }));
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const execFile = deps.execFile ?? defaultExecFile;
   const result = await execFile("xcrun", ["simctl", "openurl", device.udid, url], {
@@ -203,14 +241,16 @@ export async function openExpoRoute(
     rejectOnError: false,
   });
 
-  return toolJson(redactToolPayload({
-    platform: "ios",
-    device,
-    url: redactUrlAuthCookie(url),
-    stdout: truncate(result.stdout),
-    stderr: truncate(result.stderr),
-    error: normalizeExecError(result.error),
-  }));
+  return toolJson(
+    redactToolPayload({
+      platform: "ios",
+      device,
+      url: redactUrlAuthCookie(url),
+      stdout: truncate(result.stdout),
+      stderr: truncate(result.stderr),
+      error: normalizeExecError(result.error),
+    }),
+  );
 }
 
 export async function routeActionPolicyDecision(
@@ -224,11 +264,15 @@ export async function routeActionPolicyDecision(
   return decideActionPolicy({ action, sideEffect: "device", policy, source });
 }
 
-async function normalizeProjectCwd(cwd: string | undefined, options: { allowMissingPackageJson?: boolean } = {}): Promise<string> {
+async function normalizeProjectCwd(
+  cwd: string | undefined,
+  options: { allowMissingPackageJson?: boolean } = {},
+): Promise<string> {
   const resolved = await normalizeCwd(cwd);
   if (options.allowMissingPackageJson) return resolved;
   const packageJson = await findUp(resolved, "package.json");
-  if (!packageJson) throw new Error(`No package.json found from ${resolved}. Pass cwd for an Expo project.`);
+  if (!packageJson)
+    throw new Error(`No package.json found from ${resolved}. Pass cwd for an Expo project.`);
   return path.dirname(packageJson);
 }
 
@@ -259,7 +303,10 @@ async function firstExisting(root: string, names: string[]): Promise<string | nu
 }
 
 async function pathExists(file: string): Promise<boolean> {
-  return fs.access(file).then(() => true, () => false);
+  return fs.access(file).then(
+    () => true,
+    () => false,
+  );
 }
 
 async function readJsonFile(file: string): Promise<Record<string, unknown>> {
@@ -271,7 +318,7 @@ async function readPolicyDocument(
   deps: Pick<RouteUrlActionDependencies, "readJsonFile">,
 ): Promise<PolicyDocument> {
   const read = deps.readJsonFile ?? readJsonFile;
-  return await read(file) as PolicyDocument;
+  return (await read(file)) as PolicyDocument;
 }
 
 function truncate(value: unknown, limit = MAX_OUTPUT): string {
@@ -288,7 +335,9 @@ function redactUnknown(value: unknown): unknown {
   if (typeof value === "string") return redactSensitiveUrlQuery(value);
   if (Array.isArray(value)) return value.map((item) => redactUnknown(item));
   if (isRecord(value)) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactUnknown(item)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactUnknown(item)]),
+    );
   }
   return value;
 }
@@ -317,18 +366,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-const defaultExecFile: ExecFile = (file, args, options = {}) => new Promise((resolve, reject) => {
-  const { timeout = 60_000, maxBuffer = MAX_OUTPUT, rejectOnError = true } = options;
-  nodeExecFile(file, [...args], { timeout: Number(timeout), maxBuffer: Number(maxBuffer) }, (error, stdout, stderr) => {
-    if (error && rejectOnError) {
-      Object.assign(error, { stdout, stderr });
-      reject(error);
-      return;
-    }
-    resolve({
-      stdout: String(stdout ?? ""),
-      stderr: String(stderr ?? ""),
-      error: error ? { message: error.message, code: error.code, signal: error.signal } : undefined,
-    });
+const defaultExecFile: ExecFile = (file, args, options = {}) =>
+  new Promise((resolve, reject) => {
+    const { timeout = 60_000, maxBuffer = MAX_OUTPUT, rejectOnError = true } = options;
+    nodeExecFile(
+      file,
+      [...args],
+      { timeout: Number(timeout), maxBuffer: Number(maxBuffer) },
+      (error, stdout, stderr) => {
+        if (error && rejectOnError) {
+          Object.assign(error, { stdout, stderr });
+          reject(error);
+          return;
+        }
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error
+            ? { message: error.message, code: error.code, signal: error.signal }
+            : undefined,
+        });
+      },
+    );
   });
-});

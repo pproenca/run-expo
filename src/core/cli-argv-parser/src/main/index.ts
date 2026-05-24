@@ -1,4 +1,7 @@
-import { CliUsageError, EXIT_INVALID_USAGE } from "../../../cli-error-classification/src/main/index.ts";
+import {
+  CliUsageError,
+  EXIT_INVALID_USAGE,
+} from "../../../cli-error-classification/src/main/index.ts";
 
 export { CliUsageError, EXIT_INVALID_USAGE };
 
@@ -156,12 +159,14 @@ export function normalizeGlobalFlag(rawKey: string): keyof CliGlobals | null {
 }
 
 export function globalFlagTakesValue(rawKey: string): boolean {
-  return rawKey === "root" ||
+  return (
+    rawKey === "root" ||
     rawKey === "state-dir" ||
     rawKey === "action-policy" ||
     rawKey === "max-output" ||
     rawKey === "allow-runtime-eval" ||
-    rawKey === "confirm-actions";
+    rawKey === "confirm-actions"
+  );
 }
 
 export function coerceCliValue(value: string): unknown {

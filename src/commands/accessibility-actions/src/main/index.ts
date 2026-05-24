@@ -1,22 +1,36 @@
-import { readdir, readFile } from "node:fs/promises";
 import { execFile as nodeExecFile } from "node:child_process";
+import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import type { RefCache } from "../../../snapshot-evidence/src/main/index.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import type { SessionRecord } from "../../../../state/session-run-records/src/main/index.ts";
+import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
+import type { RefCache } from "../../../snapshot-evidence/src/main/index.ts";
 
 export interface AccessibilityDependencies {
-  readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
+  readLatestRefCache?: (
+    args: Record<string, unknown>,
+  ) => Promise<RefCache | null> | RefCache | null;
   refActionCommand?: (args: Record<string, unknown>) => Promise<ToolTextResult> | ToolTextResult;
-  semanticBridgeSnapshot?: (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<Record<string, any>> | Record<string, any>;
+  semanticBridgeSnapshot?: (
+    args: Record<string, unknown>,
+    context: Record<string, unknown>,
+  ) => Promise<Record<string, any>> | Record<string, any>;
   commandPath?: (name: string) => Promise<string | null> | string | null;
-  resolveIosDevice?: (device: unknown, options: { preferBooted: boolean }) => Promise<Record<string, any>> | Record<string, any>;
+  resolveIosDevice?: (
+    device: unknown,
+    options: { preferBooted: boolean },
+  ) => Promise<Record<string, any>> | Record<string, any>;
   execFile?: (
     file: string,
     argv: string[],
     options: { timeout: number; maxBuffer: number; rejectOnError: false },
-  ) => Promise<{ stdout: string; stderr: string; error?: unknown }> | { stdout: string; stderr: string; error?: unknown };
+  ) =>
+    | Promise<{ stdout: string; stderr: string; error?: unknown }>
+    | { stdout: string; stderr: string; error?: unknown };
 }
 
 export interface StateRootArgs extends Record<string, unknown> {
@@ -25,7 +39,8 @@ export interface StateRootArgs extends Record<string, unknown> {
   cwd?: string | null;
 }
 
-const FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
+const FOCUS_LIMITATION =
+  "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
 
 export async function accessibilityCommand(
   args: Record<string, unknown> = {},
@@ -33,11 +48,20 @@ export async function accessibilityCommand(
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "tree", "action");
-  if (!["tree", "inspect", "audit", "focus"].includes(action)) throw new Error(`Unknown accessibility action: ${action}`);
+  if (!["tree", "inspect", "audit", "focus"].includes(action))
+    throw new Error(`Unknown accessibility action: ${action}`);
   if (action === "focus") {
     const ref = requireString(args.ref ?? positionals[1], "ref");
-    if (!deps.refActionCommand) return toolJson({ available: false, action, ref, reason: "No ref action adapter is configured." });
-    const result = asRecord(unwrapToolJson(await deps.refActionCommand({ ...args, command: "focus", ref }))) ?? {};
+    if (!deps.refActionCommand)
+      return toolJson({
+        available: false,
+        action,
+        ref,
+        reason: "No ref action adapter is configured.",
+      });
+    const result =
+      asRecord(unwrapToolJson(await deps.refActionCommand({ ...args, command: "focus", ref }))) ??
+      {};
     return toolJson({
       ...result,
       action,
@@ -48,31 +72,61 @@ export async function accessibilityCommand(
   if (action === "inspect") {
     const ref = requireString(args.ref ?? positionals[1], "ref");
     const cache = await readLatestRefCache(args, deps);
-    if (!cache) return toolJson({ available: false, action, reason: "No snapshot exists for the current session.", ref });
+    if (!cache)
+      return toolJson({
+        available: false,
+        action,
+        reason: "No snapshot exists for the current session.",
+        ref,
+      });
     const record = (cache.refs ?? []).find((item) => item.ref === ref);
-    return toolJson(record
-      ? { available: true, action, ref, snapshotId: cache.snapshotId, targetId: cache.targetId, record }
-      : { available: false, action, reason: "Ref not found in the latest snapshot.", ref });
+    return toolJson(
+      record
+        ? {
+            available: true,
+            action,
+            ref,
+            snapshotId: cache.snapshotId,
+            targetId: cache.targetId,
+            record,
+          }
+        : { available: false, action, reason: "Ref not found in the latest snapshot.", ref },
+    );
   }
   if (action === "audit") {
     const cache = await readLatestRefCache(args, deps);
-    if (!cache) return toolJson({ available: false, action, reason: "No snapshot exists for the current session.", issues: [] });
+    if (!cache)
+      return toolJson({
+        available: false,
+        action,
+        reason: "No snapshot exists for the current session.",
+        issues: [],
+      });
     const issues = auditAccessibilityRefs(cache);
-    return toolJson({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
+    return toolJson({
+      available: true,
+      action,
+      snapshotId: cache.snapshotId,
+      targetId: cache.targetId,
+      issueCount: issues.length,
+      issues,
+    });
   }
   return toolJson(await accessibilityTreePayload(args, deps));
 }
 
 const defaultAccessibilityDependencies: AccessibilityDependencies = {
   commandPath: defaultCommandPath,
-  resolveIosDevice: (device, options) => resolveIosDevice(typeof device === "string" ? device : null, options),
+  resolveIosDevice: (device, options) =>
+    resolveIosDevice(typeof device === "string" ? device : null, options),
   execFile: defaultExecFile,
-  refActionCommand: (args) => toolJson({
-    available: false,
-    action: "focus",
-    ref: args.ref ?? null,
-    reason: "Accessibility focus requires a current ref action adapter.",
-  }),
+  refActionCommand: (args) =>
+    toolJson({
+      available: false,
+      action: "focus",
+      ref: args.ref ?? null,
+      reason: "Accessibility focus requires a current ref action adapter.",
+    }),
 };
 
 function defaultCommandPath(command: string): Promise<string | null> {
@@ -89,16 +143,23 @@ function defaultExecFile(
   options: { timeout: number; maxBuffer: number; rejectOnError: false },
 ): Promise<{ stdout: string; stderr: string; error?: unknown }> {
   return new Promise((resolve) => {
-    nodeExecFile(file, argv, {
-      timeout: options.timeout,
-      maxBuffer: options.maxBuffer,
-    }, (error, stdout, stderr) => {
-      resolve({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message, code: error.code, signal: error.signal } : undefined,
-      });
-    });
+    nodeExecFile(
+      file,
+      argv,
+      {
+        timeout: options.timeout,
+        maxBuffer: options.maxBuffer,
+      },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error
+            ? { message: error.message, code: error.code, signal: error.signal }
+            : undefined,
+        });
+      },
+    );
   });
 }
 
@@ -108,9 +169,17 @@ export async function accessibilityTreePayload(
 ): Promise<Record<string, unknown>> {
   const semanticBridge = await semanticBridgeTree(args, deps);
   const axe = deps.commandPath ? await deps.commandPath("axe") : null;
-  if (!axe) return { available: false, action: "tree", reason: "axe CLI is not installed or not on PATH.", semanticBridge };
-  if (!deps.resolveIosDevice) return { available: false, action: "tree", reason: "No iOS device resolver is configured." };
-  if (!deps.execFile) return { available: false, action: "tree", reason: "No subprocess adapter is configured." };
+  if (!axe)
+    return {
+      available: false,
+      action: "tree",
+      reason: "axe CLI is not installed or not on PATH.",
+      semanticBridge,
+    };
+  if (!deps.resolveIosDevice)
+    return { available: false, action: "tree", reason: "No iOS device resolver is configured." };
+  if (!deps.execFile)
+    return { available: false, action: "tree", reason: "No subprocess adapter is configured." };
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
   const result = await deps.execFile(axe, ["describe-ui", "--udid", String(device.udid)], {
     timeout: 12_000,
@@ -118,23 +187,38 @@ export async function accessibilityTreePayload(
     rejectOnError: false,
   });
   if (result.error) {
-    return { available: false, action: "tree", reason: "Native accessibility tree failed.", stderr: truncate(result.stderr), error: result.error, semanticBridge };
+    return {
+      available: false,
+      action: "tree",
+      reason: "Native accessibility tree failed.",
+      stderr: truncate(result.stderr),
+      error: result.error,
+      semanticBridge,
+    };
   }
   const tree = JSON.parse(result.stdout || "[]");
   return {
     available: true,
     action: "tree",
-    source: semanticBridge?.available ? ["plugin-bridge-semantic", "native-accessibility"] : "native-accessibility",
+    source: semanticBridge?.available
+      ? ["plugin-bridge-semantic", "native-accessibility"]
+      : "native-accessibility",
     device,
     tree,
     semanticBridge,
   };
 }
 
-export function auditAccessibilityRefs(cache: RefCache): Array<{ ref: unknown; rule: string; message: string }> {
+export function auditAccessibilityRefs(
+  cache: RefCache,
+): Array<{ ref: unknown; rule: string; message: string }> {
   return (cache.refs ?? [])
     .filter((record) => (record.actions ?? []).length > 0 && !record.label && !record.text)
-    .map((record) => ({ ref: record.ref, rule: "interactive-name", message: "Interactive ref has no label or text." }));
+    .map((record) => ({
+      ref: record.ref,
+      rule: "interactive-name",
+      message: "Interactive ref has no label or text.",
+    }));
 }
 
 export async function readLatestRefCache(
@@ -145,7 +229,9 @@ export async function readLatestRefCache(
   const stateRoot = resolveExpoStateRoot(args);
   const session = await readLatestSession(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  const parsed = await readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  const parsed = await readJsonFile(
+    join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json"),
+  ).catch(() => null);
   return asRefCache(parsed);
 }
 
@@ -158,10 +244,21 @@ export async function semanticBridgeTree(
     return await deps.semanticBridgeSnapshot(args, {
       stateRoot: resolveExpoStateRoot(args),
       session: { activeTargetId: null },
-      filters: { interactiveOnly: false, compact: false, depth: null, includeSource: true, includeBounds: true },
+      filters: {
+        interactiveOnly: false,
+        compact: false,
+        depth: null,
+        includeSource: true,
+        includeBounds: true,
+      },
     });
   } catch (error) {
-    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError(error) };
+    return {
+      available: false,
+      source: "plugin-bridge-semantic",
+      code: "transport-failure",
+      reason: formatError(error),
+    };
   }
 }
 
@@ -171,11 +268,15 @@ export async function readLatestSession(stateRoot: string): Promise<SessionRecor
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(
+      () => null,
+    );
     const session = asSessionRecord(record);
     if (session) sessions.push(session);
   }
-  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
+  sessions.sort((a, b) =>
+    String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)),
+  );
   return sessions[0] ?? null;
 }
 
@@ -197,7 +298,8 @@ export async function readJsonFile(file: string): Promise<unknown> {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -214,12 +316,14 @@ export function truncate(value: unknown, max = 40_000): string {
 }
 
 function formatError(error: unknown): string {
-  const record = error && typeof error === "object" ? error as { message?: unknown } : null;
+  const record = error && typeof error === "object" ? (error as { message?: unknown }) : null;
   return record?.message == null ? String(error) : String(record.message);
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }
 
 function asRefCache(value: unknown): RefCache | null {
@@ -230,5 +334,5 @@ function asRefCache(value: unknown): RefCache | null {
 
 function asSessionRecord(value: unknown): SessionRecord | null {
   const record = asRecord(value);
-  return typeof record?.sessionId === "string" ? record as SessionRecord : null;
+  return typeof record?.sessionId === "string" ? (record as SessionRecord) : null;
 }

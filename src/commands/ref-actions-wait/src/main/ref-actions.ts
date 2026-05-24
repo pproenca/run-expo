@@ -1,10 +1,6 @@
-import type { RefActionDependencies } from "./domain.js";
 import { defaultRefActionDependencies } from "./defaults.js";
-import {
-  planRefActionWithDeps,
-  refPointWithDeps,
-  scrollPlanWithDeps,
-} from "./planning.js";
+import type { RefActionDependencies } from "./domain.js";
+import { planRefActionWithDeps, refPointWithDeps, scrollPlanWithDeps } from "./planning.js";
 
 /**
  * RULE-008 and RULE-020: ref actions fail closed for missing/stale/unsupported

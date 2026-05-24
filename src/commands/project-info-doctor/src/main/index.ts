@@ -1,9 +1,12 @@
+import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { execFile } from "node:child_process";
-
 import { CURRENT_CLI_NAME, CLI_VERSION } from "../../../../core/cli-identity/src/main/index.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 declare const process: { cwd(): string };
 
@@ -82,7 +85,9 @@ export async function doctor(args: DoctorArgs = {}): Promise<ToolTextResult> {
       iosHierarchy: Boolean(commands.axe),
       androidDeviceBridge: Boolean(commands.adb),
       expoCli: Boolean(commands.npx),
-      metroHermes: hasRuntimeGlobal("fetch", args.deps?.hasFetch) && hasRuntimeGlobal("WebSocket", args.deps?.hasWebSocket),
+      metroHermes:
+        hasRuntimeGlobal("fetch", args.deps?.hasFetch) &&
+        hasRuntimeGlobal("WebSocket", args.deps?.hasWebSocket),
     },
     repairs,
     project: projectInfoResult.ok ? unwrapToolJson(projectInfoResult.value) : projectInfoResult,
@@ -119,11 +124,18 @@ export async function projectInfo(args: ProjectInfoArgs): Promise<ToolTextResult
     ...asStringRecord(packageJson.devDependencies),
   };
   const appJsonPath = await pathExists(path.join(projectRoot, "app.json"));
-  const appConfigPath = await firstExisting(projectRoot, ["app.config.ts", "app.config.js", "app.config.mjs", "app.config.cjs"]);
-  const appJson = appJsonPath ? asRecord(await readJsonFile(path.join(projectRoot, "app.json"))) : null;
-  const expoConfig = appJson ? asRecord(appJson.expo) ?? appJson : null;
+  const appConfigPath = await firstExisting(projectRoot, [
+    "app.config.ts",
+    "app.config.js",
+    "app.config.mjs",
+    "app.config.cjs",
+  ]);
+  const appJson = appJsonPath
+    ? asRecord(await readJsonFile(path.join(projectRoot, "app.json")))
+    : null;
+  const expoConfig = appJson ? (asRecord(appJson.expo) ?? appJson) : null;
   const appConfigSummary = await readExpoConfigSummary(projectRoot);
-  const easJson = await pathExists(path.join(projectRoot, "eas.json"))
+  const easJson = (await pathExists(path.join(projectRoot, "eas.json")))
     ? asRecord(await readJsonFile(path.join(projectRoot, "eas.json")))
     : null;
 
@@ -180,7 +192,8 @@ export function buildUpstreamDependencyReport(
       id: "expo-public-api",
       ecosystem: "expo",
       packageName: "expo",
-      integrationPoint: "Expo config, dev-client, expo/devtools plugin APIs, and public package exports.",
+      integrationPoint:
+        "Expo config, dev-client, expo/devtools plugin APIs, and public package exports.",
       classification: "public-api",
       usage: "direct-dependency",
       directDependency: expoVersion.present,
@@ -196,24 +209,33 @@ export function buildUpstreamDependencyReport(
       id: "metro-inspector-http",
       ecosystem: "metro",
       packageName: "metro",
-      integrationPoint: "Metro /status, /json/list, /json/version, /symbolicate, and /message HTTP/WebSocket surfaces.",
+      integrationPoint:
+        "Metro /status, /json/list, /json/version, /symbolicate, and /message HTTP/WebSocket surfaces.",
       classification: "documented-unstable-api",
       usage: "optional-compatibility-shim",
       directDependency: metroVersion.present,
       declaredVersion: metroVersion.declaredVersion,
       resolvedVersion: metroVersion.resolvedVersion,
-      status: metroVersion.present ? dependencyStatus(metroVersion) : expoVersion.present ? "inferred-transitive" : "missing",
+      status: metroVersion.present
+        ? dependencyStatus(metroVersion)
+        : expoVersion.present
+          ? "inferred-transitive"
+          : "missing",
       compatibility: {
         state: metroVersion.present || expoVersion.present ? "discoverable-at-runtime" : "missing",
-        expected: "Metro inspector endpoints are discovered over local HTTP at runtime; direct internal imports are not required.",
+        expected:
+          "Metro inspector endpoints are discovered over local HTTP at runtime; direct internal imports are not required.",
       },
-      notes: ["The CLI may probe Metro's local HTTP endpoints, but Metro server internals are reference-only unless isolated by a shim."],
+      notes: [
+        "The CLI may probe Metro's local HTTP endpoints, but Metro server internals are reference-only unless isolated by a shim.",
+      ],
     },
     {
       id: "hermes-react-native-cdp",
       ecosystem: "hermes-react-native",
       packageName: "react-native",
-      integrationPoint: "Hermes inspector Chrome DevTools Protocol websocket exposed by React Native/Metro.",
+      integrationPoint:
+        "Hermes inspector Chrome DevTools Protocol websocket exposed by React Native/Metro.",
       classification: "optional-compatibility-shim",
       usage: "optional-compatibility-shim",
       directDependency: reactNativeVersion.present,
@@ -221,30 +243,41 @@ export function buildUpstreamDependencyReport(
       resolvedVersion: reactNativeVersion.resolvedVersion,
       status: dependencyStatus(reactNativeVersion),
       compatibility: expoRnCompatibility.forReactNative,
-      notes: ["CDP method calls must stay behind the expo98 CDP client because Hermes/RN can expose implementation-specific methods."],
+      notes: [
+        "CDP method calls must stay behind the expo98 CDP client because Hermes/RN can expose implementation-specific methods.",
+      ],
     },
     {
       id: "react-native-devtools",
       ecosystem: "react-native-devtools",
       packageName: "@react-native/dev-middleware",
-      integrationPoint: "React Native DevTools launch metadata, panel discovery, and machine-readable domains where available.",
+      integrationPoint:
+        "React Native DevTools launch metadata, panel discovery, and machine-readable domains where available.",
       classification: "documented-unstable-api",
       usage: "internal-reference-only",
       directDependency: devMiddlewareVersion.present,
       declaredVersion: devMiddlewareVersion.declaredVersion,
       resolvedVersion: devMiddlewareVersion.resolvedVersion,
-      status: devMiddlewareVersion.present ? dependencyStatus(devMiddlewareVersion) : reactNativeVersion.present ? "reference-only" : "missing",
+      status: devMiddlewareVersion.present
+        ? dependencyStatus(devMiddlewareVersion)
+        : reactNativeVersion.present
+          ? "reference-only"
+          : "missing",
       compatibility: {
         state: reactNativeVersion.present ? "runtime-target-required" : "missing",
-        expected: "React Native DevTools capabilities are confirmed from Metro target metadata before use.",
+        expected:
+          "React Native DevTools capabilities are confirmed from Metro target metadata before use.",
       },
-      notes: ["React Native DevTools internals can inform local wrappers, but command code must not depend on private build paths."],
+      notes: [
+        "React Native DevTools internals can inform local wrappers, but command code must not depend on private build paths.",
+      ],
     },
     {
       id: "expo-devtools-plugin",
       ecosystem: "expo-devtools-plugin",
       packageName: "expo",
-      integrationPoint: "expo/devtools and useDevToolsPluginClient two-way development plugin APIs.",
+      integrationPoint:
+        "expo/devtools and useDevToolsPluginClient two-way development plugin APIs.",
       classification: "public-api",
       usage: "direct-dependency",
       directDependency: expoVersion.present,
@@ -253,28 +286,49 @@ export function buildUpstreamDependencyReport(
       status: dependencyStatus(expoVersion),
       compatibility: {
         state: expoVersion.present ? "available-when-app-registers" : "missing",
-        expected: "Plugin domains still require a live development build to register the app-side bridge.",
+        expected:
+          "Plugin domains still require a live development build to register the app-side bridge.",
       },
-      notes: ["Plugin bridge installation and mutation remain explicit-user-permission operations."],
+      notes: [
+        "Plugin bridge installation and mutation remain explicit-user-permission operations.",
+      ],
     },
     {
       id: "rozenite-devtools-bridge",
       ecosystem: "rozenite",
-      packageName: rozenitePackages.length > 0 ? rozenitePackages.map((item) => item.name).join(", ") : "rozenite/@rozenite/*",
-      integrationPoint: "Rozenite bridge, agent, React Navigation, network, storage, controls, and performance integrations.",
+      packageName:
+        rozenitePackages.length > 0
+          ? rozenitePackages.map((item) => item.name).join(", ")
+          : "rozenite/@rozenite/*",
+      integrationPoint:
+        "Rozenite bridge, agent, React Navigation, network, storage, controls, and performance integrations.",
       classification: "optional-compatibility-shim",
       usage: "optional-compatibility-shim",
       directDependency: rozenitePackages.length > 0,
-      declaredVersion: rozenitePackages.length > 0 ? rozenitePackages.map((item) => `${item.name}@${item.declaredVersion}`).join(", ") : null,
-      resolvedVersion: rozenitePackages.length > 0 ? rozenitePackages.map((item) => `${item.name}@${item.resolvedVersion ?? item.declaredVersion}`).join(", ") : null,
-      status: rozenitePackages.length > 0
-        ? (rozenitePackages.some((item) => item.unresolved) ? "declared-unresolved" : "present")
-        : "missing",
+      declaredVersion:
+        rozenitePackages.length > 0
+          ? rozenitePackages.map((item) => `${item.name}@${item.declaredVersion}`).join(", ")
+          : null,
+      resolvedVersion:
+        rozenitePackages.length > 0
+          ? rozenitePackages
+              .map((item) => `${item.name}@${item.resolvedVersion ?? item.declaredVersion}`)
+              .join(", ")
+          : null,
+      status:
+        rozenitePackages.length > 0
+          ? rozenitePackages.some((item) => item.unresolved)
+            ? "declared-unresolved"
+            : "present"
+          : "missing",
       compatibility: {
         state: rozenitePackages.length > 0 ? "optional-present" : "optional-missing",
-        expected: "Rozenite-backed domains are preferred only when installed and registered by the app.",
+        expected:
+          "Rozenite-backed domains are preferred only when installed and registered by the app.",
       },
-      notes: ["Rozenite is optional; absence must produce structured unavailable data, not a CLI failure."],
+      notes: [
+        "Rozenite is optional; absence must produce structured unavailable data, not a CLI failure.",
+      ],
     },
     {
       id: "expo-cli-internals",
@@ -291,7 +345,9 @@ export function buildUpstreamDependencyReport(
         state: "reference-only",
         expected: "Private Expo CLI build paths must not be imported by command handlers.",
       },
-      notes: ["If an internal path is ever needed, it must be wrapped by an optional compatibility shim with fallback behavior."],
+      notes: [
+        "If an internal path is ever needed, it must be wrapped by an optional compatibility shim with fallback behavior.",
+      ],
     },
   ];
   return {
@@ -323,7 +379,9 @@ export function dependencyInfo(allDeps: Record<string, string>, name: string): D
     present: typeof declaredVersion === "string" && declaredVersion.length > 0,
     declaredVersion,
     resolvedVersion: parseVersionLike(declaredVersion),
-    unresolved: typeof declaredVersion === "string" && /^(catalog|workspace|file|link|portal):/.test(declaredVersion),
+    unresolved:
+      typeof declaredVersion === "string" &&
+      /^(catalog|workspace|file|link|portal):/.test(declaredVersion),
   };
 }
 
@@ -336,7 +394,7 @@ export function dependencyStatus(info: DependencyInfo): string {
 export function parseVersionLike(version: unknown): string | null {
   if (typeof version !== "string") return null;
   const match = version.match(/\d+\.\d+(?:\.\d+)?/);
-  return match ? match[0] ?? null : null;
+  return match ? (match[0] ?? null) : null;
 }
 
 export function classifyExpoReactNativeCompatibility(
@@ -353,7 +411,8 @@ export function classifyExpoReactNativeCompatibility(
   if (expoVersion.unresolved || reactNativeVersion.unresolved) {
     const unresolved = {
       state: "declared-unresolved",
-      expected: "Resolve catalog/workspace dependency versions before treating compatibility as proven.",
+      expected:
+        "Resolve catalog/workspace dependency versions before treating compatibility as proven.",
       expo: expoVersion.declaredVersion,
       reactNative: reactNativeVersion.declaredVersion,
     };
@@ -365,7 +424,8 @@ export function classifyExpoReactNativeCompatibility(
   if (!expected) {
     const unknown = {
       state: "unknown",
-      expected: "This Expo SDK is not in expo98's compatibility table; verify with the project dependency source.",
+      expected:
+        "This Expo SDK is not in expo98's compatibility table; verify with the project dependency source.",
       expo: expoVersion.declaredVersion,
       reactNative: reactNativeVersion.declaredVersion,
     };
@@ -426,7 +486,10 @@ export async function firstExisting(root: string, names: string[]): Promise<stri
 }
 
 export async function pathExists(file: string): Promise<boolean> {
-  return fs.access(file).then(() => true, () => false);
+  return fs.access(file).then(
+    () => true,
+    () => false,
+  );
 }
 
 export async function readExpoConfigSummary(projectRoot: string): Promise<unknown> {
@@ -445,7 +508,12 @@ export async function readExpoConfigSummary(projectRoot: string): Promise<unknow
       userInterfaceStyle: expo.userInterfaceStyle ?? null,
     };
   }
-  const configPath = await firstExisting(projectRoot, ["app.config.ts", "app.config.js", "app.config.mjs", "app.config.cjs"]);
+  const configPath = await firstExisting(projectRoot, [
+    "app.config.ts",
+    "app.config.js",
+    "app.config.mjs",
+    "app.config.cjs",
+  ]);
   if (!configPath) return null;
   const text = await fs.readFile(configPath, "utf8");
   return {
@@ -476,7 +544,9 @@ export function projectInfoAppConfigSummary(summary: Record<string, unknown>): u
   return payload;
 }
 
-export function resolveExpoStateRoot(args: { cwd?: string; root?: string; stateDir?: string } = {}): string {
+export function resolveExpoStateRoot(
+  args: { cwd?: string; root?: string; stateDir?: string } = {},
+): string {
   if (args.stateDir) {
     const resolved = path.resolve(args.stateDir);
     return path.basename(resolved) === "runs" ? path.dirname(resolved) : resolved;
@@ -523,17 +593,26 @@ function execFilePromise(
   file: string,
   args: string[],
   options: { timeout?: number; rejectOnError?: boolean } = {},
-): Promise<{ stdout: string; stderr: string; error: { message: string; code?: string | number; signal?: string | null } | null }> {
+): Promise<{
+  stdout: string;
+  stderr: string;
+  error: { message: string; code?: string | number; signal?: string | null } | null;
+}> {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: options.timeout }, (error: any, stdout: unknown, stderr: unknown) => {
-      const result = {
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
-      };
-      if (error && options.rejectOnError !== false) reject(Object.assign(error, result));
-      else resolve(result);
-    });
+    execFile(
+      file,
+      args,
+      { timeout: options.timeout },
+      (error: any, stdout: unknown, stderr: unknown) => {
+        const result = {
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
+        };
+        if (error && options.rejectOnError !== false) reject(Object.assign(error, result));
+        else resolve(result);
+      },
+    );
   });
 }
 
@@ -547,14 +626,18 @@ function shellArg(value: string): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function asStringRecord(value: unknown): Record<string, string> {
   const record = asRecord(value);
   if (!record) return {};
   return Object.fromEntries(
-    Object.entries(record).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    Object.entries(record).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
 }
 
@@ -586,11 +669,21 @@ function summarizeUpstreamDependencies(dependencies: Array<Record<string, any>>)
   }
   return {
     total: dependencies.length,
-    directDependencies: dependencies.filter((dependency) => dependency.usage === "direct-dependency").length,
-    internalReferenceOnly: dependencies.filter((dependency) => dependency.classification === "internal-reference-only").length,
-    optionalCompatibilityShims: dependencies.filter((dependency) => dependency.classification === "optional-compatibility-shim").length,
+    directDependencies: dependencies.filter(
+      (dependency) => dependency.usage === "direct-dependency",
+    ).length,
+    internalReferenceOnly: dependencies.filter(
+      (dependency) => dependency.classification === "internal-reference-only",
+    ).length,
+    optionalCompatibilityShims: dependencies.filter(
+      (dependency) => dependency.classification === "optional-compatibility-shim",
+    ).length,
     statuses,
-    mismatched: dependencies.filter((dependency) => dependency.compatibility?.state === "mismatched").map((dependency) => dependency.id),
-    missing: dependencies.filter((dependency) => dependency.status === "missing").map((dependency) => dependency.id),
+    mismatched: dependencies
+      .filter((dependency) => dependency.compatibility?.state === "mismatched")
+      .map((dependency) => dependency.id),
+    missing: dependencies
+      .filter((dependency) => dependency.status === "missing")
+      .map((dependency) => dependency.id),
   };
 }

@@ -1,5 +1,5 @@
-import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 
 export interface DevtoolsTarget {
   id?: string | null;
@@ -86,7 +86,9 @@ export interface HermesEvaluationResult {
 }
 
 export interface DevtoolsDiagnosticsDependencies {
-  metroStatusPayload?: (args: Record<string, unknown>) => Promise<MetroStatusLike> | MetroStatusLike;
+  metroStatusPayload?: (
+    args: Record<string, unknown>,
+  ) => Promise<MetroStatusLike> | MetroStatusLike;
   resolveExpoStateRoot?: (args: Record<string, unknown>) => string;
   now?: () => string;
   mkdir?: (dir: string, options?: { recursive: boolean }) => Promise<unknown> | unknown;
@@ -99,7 +101,9 @@ export interface DevtoolsDiagnosticsDependencies {
   ) => Promise<ExecResult> | ExecResult;
   fetch?: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
   redactValue?: (value: unknown) => unknown;
-  targetDiscovery?: MetroTargetsResult | ((metroPort: number) => Promise<MetroTargetsResult> | MetroTargetsResult);
+  targetDiscovery?:
+    | MetroTargetsResult
+    | ((metroPort: number) => Promise<MetroTargetsResult> | MetroTargetsResult);
   evaluateHermesExpression?: (
     webSocketDebuggerUrl: string,
     expression: string,
@@ -170,8 +174,11 @@ export function targetSummary(target: DevtoolsTarget | null | undefined): Target
     webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
     reactNative: target.reactNative ?? null,
     capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      hermesRuntime:
+        typeof target.webSocketDebuggerUrl === "string" &&
+        target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend:
+        typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
       reactNative: Boolean(target.reactNative),
     },
   };
@@ -182,7 +189,8 @@ export async function devtoolsCommand(
   deps: DevtoolsDiagnosticsDependencies = defaultDevtoolsDiagnosticsDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "capabilities", "action");
-  if (action === "status" || action === "panels") return sanitizedToolJson(await devtoolsStatusPayload(args, action, deps));
+  if (action === "status" || action === "panels")
+    return sanitizedToolJson(await devtoolsStatusPayload(args, action, deps));
   if (action === "open") return sanitizedToolJson(await devtoolsOpenPayload(args, deps));
   if (action === "events") return sanitizedToolJson(await devtoolsEventsPayload(args, deps));
   if (action !== "capabilities") throw new Error(`Unknown devtools action: ${action}`);
@@ -208,9 +216,13 @@ export async function devtoolsCommand(
         readCommands: ["metro status", "target list", "devtools capabilities"],
         writeCommands: [],
         artifactTypes: ["json"],
-        repairHints: metro.available ? [] : ["Start Metro for the Maddie Native app and rerun with the correct --metro-port."],
+        repairHints: metro.available
+          ? []
+          : ["Start Metro for the Maddie Native app and rerun with the correct --metro-port."],
         limitations: metro.available
-          ? ["Reports Metro server and target discovery only; it does not prove the app UI is ready."]
+          ? [
+              "Reports Metro server and target discovery only; it does not prove the app UI is ready.",
+            ]
           : ["Metro was not reachable on the requested port."],
       }),
       capabilityRecord({
@@ -223,7 +235,9 @@ export async function devtoolsCommand(
         readCommands: ["metro symbolicate"],
         writeCommands: [],
         artifactTypes: ["json"],
-        repairHints: metro.symbolication.available ? [] : ["Confirm Metro is serving the current bundle and source maps."],
+        repairHints: metro.symbolication.available
+          ? []
+          : ["Confirm Metro is serving the current bundle and source maps."],
         limitations: metro.symbolication.available
           ? ["Symbolication quality depends on source maps for the current bundle."]
           : ["The Metro /symbolicate endpoint did not accept a probe request."],
@@ -234,14 +248,28 @@ export async function devtoolsCommand(
         transport: "websocket",
         available: hasRuntime,
         confidence: hasRuntime ? "medium" : "low",
-        reason: hasRuntime ? null : (hasTarget ? "No target exposes a websocket debugger URL." : "No Metro inspector target."),
+        reason: hasRuntime
+          ? null
+          : hasTarget
+            ? "No target exposes a websocket debugger URL."
+            : "No Metro inspector target.",
         readCommands: ["console", "errors", "rn tree", "trace --action read"],
-        writeCommands: ["trace --action start", "trace --action stop", "inspector install-comment-menu"],
+        writeCommands: [
+          "trace --action start",
+          "trace --action stop",
+          "inspector install-comment-menu",
+        ],
         artifactTypes: ["json", "run-record"],
-        repairHints: hasRuntime ? [] : ["Open Maddie Native in a debuggable development build and confirm /json/list includes webSocketDebuggerUrl."],
+        repairHints: hasRuntime
+          ? []
+          : [
+              "Open Maddie Native in a debuggable development build and confirm /json/list includes webSocketDebuggerUrl.",
+            ],
         limitations: hasRuntime
           ? ["Runtime signals are unavailable in disconnected, production, or non-Hermes targets."]
-          : ["Console, errors, React tree, and runtime globals cannot be read without an inspector websocket."],
+          : [
+              "Console, errors, React tree, and runtime globals cannot be read without an inspector websocket.",
+            ],
       }),
       capabilityRecord({
         name: "react-native-devtools",
@@ -249,13 +277,19 @@ export async function devtoolsCommand(
         transport: "metro-http",
         available: hasDevtoolsFrontend,
         confidence: hasDevtoolsFrontend ? "medium" : "low",
-        reason: hasDevtoolsFrontend ? null : "No target advertises a React Native DevTools frontend URL.",
+        reason: hasDevtoolsFrontend
+          ? null
+          : "No target advertises a React Native DevTools frontend URL.",
         readCommands: ["devtools status", "devtools panels", "devtools open"],
         writeCommands: ["devtools open"],
         artifactTypes: ["json"],
-        repairHints: hasDevtoolsFrontend ? [] : ["Connect a React Native target to Metro that advertises devtoolsFrontendUrl."],
+        repairHints: hasDevtoolsFrontend
+          ? []
+          : ["Connect a React Native target to Metro that advertises devtoolsFrontendUrl."],
         limitations: hasDevtoolsFrontend
-          ? ["The CLI can open and report the DevTools frontend; interactive panel state remains owned by React Native DevTools."]
+          ? [
+              "The CLI can open and report the DevTools frontend; interactive panel state remains owned by React Native DevTools.",
+            ]
           : ["React Native DevTools cannot be opened without a Metro target frontend URL."],
       }),
       capabilityRecord({
@@ -264,14 +298,24 @@ export async function devtoolsCommand(
         transport: "metro-http",
         available: hasNetworkPanel,
         confidence: hasNetworkPanel ? "medium" : "low",
-        reason: hasNetworkPanel ? null : "No target advertises unstable_enableNetworkPanel=true in its DevTools frontend URL.",
+        reason: hasNetworkPanel
+          ? null
+          : "No target advertises unstable_enableNetworkPanel=true in its DevTools frontend URL.",
         readCommands: ["devtools panels", "devtools open"],
         writeCommands: [],
         artifactTypes: ["human-visible-panel"],
-        repairHints: hasNetworkPanel ? [] : ["Enable or connect a React Native DevTools target whose frontend URL includes unstable_enableNetworkPanel=true."],
+        repairHints: hasNetworkPanel
+          ? []
+          : [
+              "Enable or connect a React Native DevTools target whose frontend URL includes unstable_enableNetworkPanel=true.",
+            ],
         limitations: hasNetworkPanel
-          ? ["The panel is an interactive DevTools UI surface; command-line HAR/export still uses app bridge evidence."]
-          : ["Use the app network bridge for CLI-readable request evidence when the DevTools network panel is absent."],
+          ? [
+              "The panel is an interactive DevTools UI surface; command-line HAR/export still uses app bridge evidence.",
+            ]
+          : [
+              "Use the app network bridge for CLI-readable request evidence when the DevTools network panel is absent.",
+            ],
       }),
       capabilityRecord({
         name: "console",
@@ -283,7 +327,11 @@ export async function devtoolsCommand(
         readCommands: ["console"],
         writeCommands: [],
         artifactTypes: ["json", "run-record"],
-        repairHints: hasRuntime ? [] : ["Connect Hermes runtime and install diagnostics instrumentation if the buffer is empty."],
+        repairHints: hasRuntime
+          ? []
+          : [
+              "Connect Hermes runtime and install diagnostics instrumentation if the buffer is empty.",
+            ],
         limitations: [
           "JS console diagnostics require app/runtime instrumentation or a readable runtime buffer.",
           "Native device logs are a different evidence stream; use logs for those.",
@@ -299,7 +347,9 @@ export async function devtoolsCommand(
         readCommands: ["errors"],
         writeCommands: [],
         artifactTypes: ["json", "run-record"],
-        repairHints: hasRuntime ? [] : ["Connect Hermes runtime and verify the app exposes bounded error diagnostics."],
+        repairHints: hasRuntime
+          ? []
+          : ["Connect Hermes runtime and verify the app exposes bounded error diagnostics."],
         limitations: [
           "Error diagnostics depend on runtime buffers and may not include native crashes.",
           "Use logs and trace evidence for lower-level failures.",
@@ -314,11 +364,13 @@ export async function devtoolsStatusPayload(
   args: Record<string, unknown> = {},
   action = "status",
   deps: DevtoolsDiagnosticsDependencies = {},
-): Promise<Record<string, unknown> & {
-  panels: DevtoolsPanel[];
-  machineReadableDomains: DevtoolsPanel[];
-  humanVisiblePanels: DevtoolsPanel[];
-}> {
+): Promise<
+  Record<string, unknown> & {
+    panels: DevtoolsPanel[];
+    machineReadableDomains: DevtoolsPanel[];
+    humanVisiblePanels: DevtoolsPanel[];
+  }
+> {
   const metro = await metroStatusPayload(args, deps);
   const reactNativeDevTools = reactNativeDevToolsReport(metro);
   const panels = reactNativeDevTools.panels;
@@ -347,9 +399,10 @@ export function reactNativeDevToolsReport(metro: MetroStatusLike): ReactNativeDe
   const attachmentRisk = {
     level: hasRuntime || frontendUrl ? "medium" : "low",
     mayDetachHumanDebugger: Boolean(hasRuntime || frontendUrl),
-    reason: hasRuntime || frontendUrl
-      ? "Opening React Native DevTools can attach to the selected target and may affect an existing human debugger session."
-      : "No debuggable React Native target is available.",
+    reason:
+      hasRuntime || frontendUrl
+        ? "Opening React Native DevTools can attach to the selected target and may affect an existing human debugger session."
+        : "No debuggable React Native target is available.",
   };
   const panels = [
     devtoolsPanelRecord({
@@ -362,7 +415,9 @@ export function reactNativeDevToolsReport(metro: MetroStatusLike): ReactNativeDe
       writeCommands: ["devtools open"],
       artifactTypes: ["human-visible-panel"],
       limitations: ["Interactive debugger state is owned by React Native DevTools."],
-      repairHints: frontendUrl ? [] : ["Connect a Metro target that advertises devtoolsFrontendUrl."],
+      repairHints: frontendUrl
+        ? []
+        : ["Connect a Metro target that advertises devtoolsFrontendUrl."],
     }),
     devtoolsPanelRecord({
       name: "network",
@@ -373,8 +428,12 @@ export function reactNativeDevToolsReport(metro: MetroStatusLike): ReactNativeDe
       readCommands: ["devtools panels", "devtools open"],
       writeCommands: [],
       artifactTypes: ["human-visible-panel"],
-      limitations: ["The network panel is human-visible; CLI-readable HAR still requires network bridge evidence."],
-      repairHints: hasNetworkPanel ? [] : ["Use the app network bridge or connect a target with unstable_enableNetworkPanel=true."],
+      limitations: [
+        "The network panel is human-visible; CLI-readable HAR still requires network bridge evidence.",
+      ],
+      repairHints: hasNetworkPanel
+        ? []
+        : ["Use the app network bridge or connect a target with unstable_enableNetworkPanel=true."],
     }),
     devtoolsPanelRecord({
       name: "console",
@@ -386,7 +445,9 @@ export function reactNativeDevToolsReport(metro: MetroStatusLike): ReactNativeDe
       writeCommands: [],
       artifactTypes: ["json", "run-record"],
       limitations: ["Requires a readable runtime diagnostics buffer for bounded CLI output."],
-      repairHints: hasRuntime ? [] : ["Connect Hermes runtime and enable app diagnostics instrumentation."],
+      repairHints: hasRuntime
+        ? []
+        : ["Connect Hermes runtime and enable app diagnostics instrumentation."],
     }),
     devtoolsPanelRecord({
       name: "errors",
@@ -398,7 +459,9 @@ export function reactNativeDevToolsReport(metro: MetroStatusLike): ReactNativeDe
       writeCommands: [],
       artifactTypes: ["json", "run-record"],
       limitations: ["Runtime JS errors are separate from native crash reports."],
-      repairHints: hasRuntime ? [] : ["Connect Hermes runtime and use logs/crash reports for native failures."],
+      repairHints: hasRuntime
+        ? []
+        : ["Connect Hermes runtime and use logs/crash reports for native failures."],
     }),
     devtoolsPanelRecord({
       name: "react-components",
@@ -409,13 +472,21 @@ export function reactNativeDevToolsReport(metro: MetroStatusLike): ReactNativeDe
       readCommands: ["rn tree", "rn inspect", "snapshot"],
       writeCommands: [],
       artifactTypes: ["json", "run-record"],
-      limitations: ["Component tree evidence depends on development runtime hooks and may omit private fiber details."],
-      repairHints: hasRuntime ? [] : ["Connect Hermes runtime and confirm React DevTools hook availability."],
+      limitations: [
+        "Component tree evidence depends on development runtime hooks and may omit private fiber details.",
+      ],
+      repairHints: hasRuntime
+        ? []
+        : ["Connect Hermes runtime and confirm React DevTools hook availability."],
     }),
   ];
   return sanitizePayload({
     target,
-    frontend: { available: Boolean(frontendUrl), url: frontendUrl, launchPath: frontendUrl ? "metro-devtools-frontend-url" : null },
+    frontend: {
+      available: Boolean(frontendUrl),
+      url: frontendUrl,
+      launchPath: frontendUrl ? "metro-devtools-frontend-url" : null,
+    },
     attachmentState,
     attachmentRisk,
     panels,
@@ -467,13 +538,16 @@ export async function devtoolsEventsPayload(
   limitations: string[];
 }> {
   const subaction = requireString(args.subaction ?? "read", "subaction");
-  if (!["start", "read", "stop"].includes(subaction)) throw new Error(`Unknown devtools events action: ${subaction}`);
+  if (!["start", "read", "stop"].includes(subaction))
+    throw new Error(`Unknown devtools events action: ${subaction}`);
   const stateRoot = resolveExpoStateRoot(args, deps);
   const eventsDir = joinPath(stateRoot, "artifacts", "devtools-events");
   await mkdir(deps, eventsDir, { recursive: true });
   const file = joinPath(eventsDir, "events.json");
   const existing = await readJsonFile(deps, file).catch(() => ({ events: [] }));
-  const previousEvents = Array.isArray(asRecord(existing)?.events) ? asRecord(existing)?.events as Array<Record<string, unknown>> : [];
+  const previousEvents = Array.isArray(asRecord(existing)?.events)
+    ? (asRecord(existing)?.events as Array<Record<string, unknown>>)
+    : [];
   const event = {
     type: `devtools.${subaction}`,
     timestamp: now(deps),
@@ -530,10 +604,20 @@ export async function diagnosticMessagesCommand(
     });
   }
   if (action === "clear") {
-    const result = await evaluateHermesExpression(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5000 });
+    const result = await evaluateHermesExpression(
+      deps,
+      webSocketDebuggerUrl,
+      clearDiagnosticsExpression(kind),
+      { timeoutMs: 5000 },
+    );
     const value = valueFromHermes(result);
     return sanitizedToolJson({
-      ...(value && typeof value === "object" && !Array.isArray(value) ? value : { available: false, reason: result?.error ?? "Runtime diagnostics did not return a value." }),
+      ...(value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {
+            available: false,
+            reason: result?.error ?? "Runtime diagnostics did not return a value.",
+          }),
       kind,
       action,
       metroPort,
@@ -541,7 +625,12 @@ export async function diagnosticMessagesCommand(
       cdp: result?.diagnostics ?? result?.cdp ?? null,
     });
   }
-  const result = await evaluateHermesExpression(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5000 });
+  const result = await evaluateHermesExpression(
+    deps,
+    webSocketDebuggerUrl,
+    diagnosticsExpression({ kind, limit }),
+    { timeoutMs: 5000 },
+  );
   const value = valueFromHermes(result);
   if (!value) {
     return sanitizedToolJson({
@@ -621,13 +710,23 @@ export function capabilityRecord(args: {
   };
 }
 
-export function detectDevToolsAttachmentState(target: DevtoolsTarget | null | undefined): Record<string, unknown> {
+export function detectDevToolsAttachmentState(
+  target: DevtoolsTarget | null | undefined,
+): Record<string, unknown> {
   if (!target) return { state: "unavailable", detectable: false, reason: "No Metro target." };
   const raw = target.reactNative ?? {};
-  const attached = raw.debuggerFrontendConnected ?? raw.debuggerConnected ?? raw.isDebuggerConnected ?? target.attached;
+  const attached =
+    raw.debuggerFrontendConnected ??
+    raw.debuggerConnected ??
+    raw.isDebuggerConnected ??
+    target.attached;
   if (attached === true) return { state: "attached", detectable: true };
   if (attached === false) return { state: "not-attached", detectable: true };
-  return { state: "unknown", detectable: false, reason: "Metro target metadata did not expose debugger attachment state." };
+  return {
+    state: "unknown",
+    detectable: false,
+    reason: "Metro target metadata did not expose debugger attachment state.",
+  };
 }
 
 export function targetHasDevtoolsNetworkPanel(target: DevtoolsTarget | null | undefined): boolean {
@@ -708,7 +807,7 @@ async function metroStatusPayload(
     status: "available",
     statusText: status.text,
     version: asRecord(version)?.__error ? null : version,
-    versionError: asRecord(version)?.__error as string | undefined ?? null,
+    versionError: (asRecord(version)?.__error as string | undefined) ?? null,
     symbolication,
     targetCount: targetDiscovery.targets.length,
     targets: targetDiscovery.targets,
@@ -716,20 +815,33 @@ async function metroStatusPayload(
   };
 }
 
-async function fetchMetroTargets(deps: DevtoolsDiagnosticsDependencies, metroPort: number): Promise<MetroTargetsResult> {
-  const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch((error) => ({
-    __error: formatError(error),
-  }));
+async function fetchMetroTargets(
+  deps: DevtoolsDiagnosticsDependencies,
+  metroPort: number,
+): Promise<MetroTargetsResult> {
+  const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch(
+    (error) => ({
+      __error: formatError(error),
+    }),
+  );
   const error = asRecord(raw)?.__error;
   if (typeof error === "string") {
-    return { available: false, endpoint: "/json/list", targets: [], malformedTargets: [], reason: error };
+    return {
+      available: false,
+      endpoint: "/json/list",
+      targets: [],
+      malformedTargets: [],
+      reason: error,
+    };
   }
   if (!Array.isArray(raw)) {
     return {
       available: false,
       endpoint: "/json/list",
       targets: [],
-      malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) }],
+      malformedTargets: [
+        { index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) },
+      ],
       reason: "Metro target list was malformed.",
     };
   }
@@ -749,7 +861,10 @@ async function fetchMetroTargets(deps: DevtoolsDiagnosticsDependencies, metroPor
   };
 }
 
-async function metroTargetDiscovery(metroPort: number, deps: DevtoolsDiagnosticsDependencies): Promise<MetroTargetsResult> {
+async function metroTargetDiscovery(
+  metroPort: number,
+  deps: DevtoolsDiagnosticsDependencies,
+): Promise<MetroTargetsResult> {
   if (typeof deps.targetDiscovery === "function") return deps.targetDiscovery(metroPort);
   if (deps.targetDiscovery) return deps.targetDiscovery;
   return fetchMetroTargets(deps, metroPort);
@@ -797,14 +912,24 @@ async function execFile(
   });
 }
 
-function resolveExpoStateRoot(args: Record<string, unknown>, deps: DevtoolsDiagnosticsDependencies): string {
+function resolveExpoStateRoot(
+  args: Record<string, unknown>,
+  deps: DevtoolsDiagnosticsDependencies,
+): string {
   if (deps.resolveExpoStateRoot) return deps.resolveExpoStateRoot(args);
-  const explicit = typeof args.stateDir === "string" && args.stateDir.length > 0 ? args.stateDir : null;
+  const explicit =
+    typeof args.stateDir === "string" && args.stateDir.length > 0 ? args.stateDir : null;
   if (explicit?.endsWith("/runs")) return explicit.slice(0, -"/runs".length);
-  return explicit ?? joinPath(typeof args.root === "string" ? args.root : ".", ".scratch", "expo98");
+  return (
+    explicit ?? joinPath(typeof args.root === "string" ? args.root : ".", ".scratch", "expo98")
+  );
 }
 
-async function mkdir(deps: DevtoolsDiagnosticsDependencies, dir: string, options: { recursive: boolean }): Promise<unknown> {
+async function mkdir(
+  deps: DevtoolsDiagnosticsDependencies,
+  dir: string,
+  options: { recursive: boolean },
+): Promise<unknown> {
   if (deps.mkdir) return deps.mkdir(dir, options);
   const fs = await import("node:fs/promises");
   return fs.mkdir(dir, options);
@@ -818,7 +943,11 @@ async function readJsonFile(deps: DevtoolsDiagnosticsDependencies, file: string)
   return deps.readJsonFile(file);
 }
 
-async function writeJsonFile(deps: DevtoolsDiagnosticsDependencies, file: string, payload: unknown): Promise<unknown> {
+async function writeJsonFile(
+  deps: DevtoolsDiagnosticsDependencies,
+  file: string,
+  payload: unknown,
+): Promise<unknown> {
   const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(payload) : payload);
   if (!deps.writeJsonFile) {
     const fs = await import("node:fs/promises");
@@ -842,20 +971,29 @@ function joinPath(...parts: string[]): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 async function probeMetroSymbolication(
   deps: DevtoolsDiagnosticsDependencies,
   metroPort: number,
-): Promise<{ available: boolean; endpoint: "/symbolicate"; status: number | null; reason: string | null }> {
+): Promise<{
+  available: boolean;
+  endpoint: "/symbolicate";
+  status: number | null;
+  reason: string | null;
+}> {
   try {
-    const response = asFetchResponse(await fetchWithTimeout(deps, `http://127.0.0.1:${metroPort}/symbolicate`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stack: [] }),
-      timeoutMs: 1500,
-    }));
+    const response = asFetchResponse(
+      await fetchWithTimeout(deps, `http://127.0.0.1:${metroPort}/symbolicate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stack: [] }),
+        timeoutMs: 1500,
+      }),
+    );
     return {
       available: response.ok,
       endpoint: "/symbolicate",
@@ -874,13 +1012,21 @@ async function fetchText(
 ): Promise<{ available: boolean; text: string | null; error: string | null }> {
   try {
     const response = asFetchResponse(await fetchWithTimeout(deps, url, { timeoutMs }));
-    return { available: response.ok, text: await response.text(), error: response.ok ? null : `HTTP ${response.status}` };
+    return {
+      available: response.ok,
+      text: await response.text(),
+      error: response.ok ? null : `HTTP ${response.status}`,
+    };
   } catch (error) {
     return { available: false, text: null, error: formatError(error) };
   }
 }
 
-async function fetchJson(deps: DevtoolsDiagnosticsDependencies, url: string, timeoutMs: number): Promise<unknown> {
+async function fetchJson(
+  deps: DevtoolsDiagnosticsDependencies,
+  url: string,
+  timeoutMs: number,
+): Promise<unknown> {
   const response = asFetchResponse(await fetchWithTimeout(deps, url, { timeoutMs }));
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
@@ -891,7 +1037,9 @@ async function fetchWithTimeout(
   url: string,
   options: Record<string, unknown>,
 ): Promise<unknown> {
-  const fetcher = deps.fetch ?? (globalThis as unknown as { fetch?: DevtoolsDiagnosticsDependencies["fetch"] }).fetch;
+  const fetcher =
+    deps.fetch ??
+    (globalThis as unknown as { fetch?: DevtoolsDiagnosticsDependencies["fetch"] }).fetch;
   if (!fetcher) throw new Error("fetch is not available in this runtime.");
   const timeoutMs = Number(options.timeoutMs ?? 1500);
   const controller = new AbortController();
@@ -924,10 +1072,16 @@ function asFetchResponse(value: unknown): {
   };
 }
 
-function normalizeMetroTarget(value: unknown, index: number): { target: DevtoolsTarget | null; error: unknown | null } {
+function normalizeMetroTarget(
+  value: unknown,
+  index: number,
+): { target: DevtoolsTarget | null; error: unknown | null } {
   const record = asRecord(value);
   if (!record) {
-    return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape(value) } };
+    return {
+      target: null,
+      error: { index, reason: "Target was not an object.", shape: responseShape(value) },
+    };
   }
   const target = {
     id: optionalString(record.id),
@@ -943,7 +1097,11 @@ function normalizeMetroTarget(value: unknown, index: number): { target: Devtools
   if (!target.id && !target.title && !target.webSocketDebuggerUrl && !target.devtoolsFrontendUrl) {
     return {
       target: null,
-      error: { index, reason: "Target did not include any stable identifying metadata.", shape: responseShape(value) },
+      error: {
+        index,
+        reason: "Target did not include any stable identifying metadata.",
+        shape: responseShape(value),
+      },
     };
   }
   return { target, error: null };
@@ -955,7 +1113,8 @@ function optionalString(value: unknown): string | null {
 
 function responseShape(value: unknown): unknown {
   if (Array.isArray(value)) return { type: "array", length: value.length };
-  if (value && typeof value === "object") return { type: "object", keys: Object.keys(value).slice(0, 20) };
+  if (value && typeof value === "object")
+    return { type: "object", keys: Object.keys(value).slice(0, 20) };
   return { type: typeof value };
 }
 
@@ -968,7 +1127,9 @@ function boundValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
   const record = asRecord(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]),
+  );
 }
 
 function redactValue(value: unknown): unknown {
@@ -976,10 +1137,12 @@ function redactValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactValue);
   const record = asRecord(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
-    key,
-    isSensitiveKey(key) ? "[redacted]" : redactValue(nested),
-  ]));
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [
+      key,
+      isSensitiveKey(key) ? "[redacted]" : redactValue(nested),
+    ]),
+  );
 }
 
 function redactString(value: string): string {
@@ -994,7 +1157,10 @@ function redactString(value: string): string {
     }
     return changed ? parsed.toString() : value;
   } catch {
-    return value.replace(/([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi, "$1[redacted]");
+    return value.replace(
+      /([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi,
+      "$1[redacted]",
+    );
   }
 }
 

@@ -18,17 +18,8 @@ export type {
   SidecarRecord,
   SidecarStatus,
 } from "./domain.js";
-export {
-  createSessionId,
-  createRunId,
-  randomBase36Suffix,
-  systemClock,
-} from "./ids.js";
-export {
-  resolveExpoStateRoot,
-  sessionDirectory,
-  sessionJsonPath,
-} from "./paths.js";
+export { createSessionId, createRunId, randomBase36Suffix, systemClock } from "./ids.js";
+export { resolveExpoStateRoot, sessionDirectory, sessionJsonPath } from "./paths.js";
 export {
   cleanSessions,
   closeSession,
@@ -41,19 +32,11 @@ export {
   showSession,
   toolJson,
 } from "./session-service.js";
-export {
-  startRunRecord,
-  summarizeRunPayload,
-} from "./run-recorder.js";
+export { startRunRecord, summarizeRunPayload } from "./run-recorder.js";
 export {
   CliUsageError,
   errorCodeForExitCode,
   exitCodeForError,
   validateOutputMode,
 } from "./error-classification.js";
-export {
-  formatError,
-  redactValue,
-  sanitizeErrorMessage,
-  truncateOutput,
-} from "./redaction.js";
+export { formatError, redactValue, sanitizeErrorMessage, truncateOutput } from "./redaction.js";

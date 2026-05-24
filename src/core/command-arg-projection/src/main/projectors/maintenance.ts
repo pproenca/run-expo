@@ -15,20 +15,56 @@ export const maintenanceCommandProjectors: Record<string, CommandProjector> = {
   "live-backlog": projectLiveBacklogArgs,
 };
 
-function projectDashboardArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "status", outputPath: args.outputPath, port: args.port, cwd, root: globals.root, stateDir: globals.stateDir });
+function projectDashboardArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "status",
+    outputPath: args.outputPath,
+    port: args.port,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir,
+  });
 }
 
-function projectInspectHighlightArgs({ args, globals, cwd, common }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ ...common, ref: args.ref ?? args._[0], durationMs: args.durationMs, outputPath: args.outputPath, cwd, root: globals.root, stateDir: globals.stateDir });
+function projectInspectHighlightArgs({
+  args,
+  globals,
+  cwd,
+  common,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    ...common,
+    ref: args.ref ?? args._[0],
+    durationMs: args.durationMs,
+    outputPath: args.outputPath,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir,
+  });
 }
 
 function projectReviewArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0], outputPath: args.outputPath, cwd, root: globals.root, stateDir: globals.stateDir });
+  return pickDefined({
+    action: args.action ?? args._[0],
+    outputPath: args.outputPath,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir,
+  });
 }
 
 function projectPolicyArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0], subject: args.subject ?? args._[1], name: args.name ?? args._[2], actionPolicy: args.actionPolicy ?? globals.actionPolicy, cwd });
+  return pickDefined({
+    action: args.action ?? args._[0],
+    subject: args.subject ?? args._[1],
+    name: args.name ?? args._[2],
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    cwd,
+  });
 }
 
 function projectRedactArgs({ args }: CommandProjectionContext): ProjectedCommandArgs {
@@ -47,7 +83,11 @@ function projectReleaseArgs({ args, cwd }: CommandProjectionContext): ProjectedC
   return pickDefined({ action: args.action ?? args._[0] ?? "check", cwd });
 }
 
-function projectLiveBacklogArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectLiveBacklogArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     action: args.action ?? args._[0] ?? "matrix",
     cwd,

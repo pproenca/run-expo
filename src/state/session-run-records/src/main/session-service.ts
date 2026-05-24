@@ -1,8 +1,14 @@
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-
 import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import type { CleanSessionsResult, Clock, RandomSuffix, SessionActionResult, SessionRecord, ToolTextResult } from "./domain.js";
+import type {
+  CleanSessionsResult,
+  Clock,
+  RandomSuffix,
+  SessionActionResult,
+  SessionRecord,
+  ToolTextResult,
+} from "./domain.js";
 import { createSessionId, randomBase36Suffix, systemClock } from "./ids.js";
 import { readJsonFile, writeJsonFile } from "./json-store.js";
 import { resolveExpoStateRoot, sessionDirectory, sessionJsonPath } from "./paths.js";
@@ -25,23 +31,38 @@ export async function sessionCommand(
   }
   const stateRoot = resolveExpoStateRoot(args);
   if (action === "list") {
-    return toolJson({ available: true, action, stateRoot, sessions: await listSessions(stateRoot) });
+    return toolJson({
+      available: true,
+      action,
+      stateRoot,
+      sessions: await listSessions(stateRoot),
+    });
   }
   if (action === "show") {
     return toolJson(await showSession({ stateRoot, name: requireOptionalString(args.name) }));
   }
   if (action === "close") {
-    return toolJson(await closeSession({ stateRoot, name: requireOptionalString(args.name), now: deps.now }));
+    return toolJson(
+      await closeSession({ stateRoot, name: requireOptionalString(args.name), now: deps.now }),
+    );
   }
   if (action === "clean") {
-    return toolJson(await cleanSessions({ stateRoot, olderThan: requireOptionalString(args.olderThan) ?? undefined, now: deps.now }));
+    return toolJson(
+      await cleanSessions({
+        stateRoot,
+        olderThan: requireOptionalString(args.olderThan) ?? undefined,
+        now: deps.now,
+      }),
+    );
   }
-  return toolJson(await createSession({
-    stateRoot,
-    name: requireOptionalString(args.name) ?? undefined,
-    now: deps.now,
-    randomSuffix: deps.randomSuffix,
-  }));
+  return toolJson(
+    await createSession({
+      stateRoot,
+      name: requireOptionalString(args.name) ?? undefined,
+      now: deps.now,
+      randomSuffix: deps.randomSuffix,
+    }),
+  );
 }
 
 export function parseDurationMs(value: unknown): number {
@@ -51,7 +72,7 @@ export function parseDurationMs(value: unknown): number {
   }
   const amount = Number(match[1]);
   const unit = match[2] as "s" | "m" | "h" | "d";
-  return amount * ({ s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit]);
+  return amount * { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit];
 }
 
 export function normalizeSessionName(value: unknown): string {
@@ -107,16 +128,23 @@ export async function listSessions(stateRoot: string): Promise<SessionRecord[]> 
     if (!entry.isDirectory()) {
       continue;
     }
-    const record = await readJsonFile<SessionRecord>(join(sessionsDir, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile<SessionRecord>(
+      join(sessionsDir, entry.name, "session.json"),
+    ).catch(() => null);
     if (record) {
       sessions.push(record);
     }
   }
 
-  return sessions.sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")));
+  return sessions.sort((left, right) =>
+    String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")),
+  );
 }
 
-export async function showSession(input: { stateRoot: string; name?: string | null }): Promise<SessionActionResult> {
+export async function showSession(input: {
+  stateRoot: string;
+  name?: string | null;
+}): Promise<SessionActionResult> {
   const sessions = await listSessions(input.stateRoot);
   const requested = requireOptionalString(input.name);
   const session = requested
@@ -165,7 +193,10 @@ export async function cleanSessions(input: {
   for (const session of sessions) {
     const created = Date.parse(session.createdAt ?? session.updatedAt ?? "0");
     if (Number.isFinite(created) && created < cutoff) {
-      await rm(sessionDirectory(input.stateRoot, session.sessionId), { recursive: true, force: true });
+      await rm(sessionDirectory(input.stateRoot, session.sessionId), {
+        recursive: true,
+        force: true,
+      });
       removed.push(session.sessionId);
     }
   }
@@ -182,12 +213,18 @@ export async function readLatestSession(stateRoot: string): Promise<SessionRecor
     if (!entry.isDirectory()) {
       continue;
     }
-    const record = await readJsonFile<SessionRecord>(join(sessionsDir, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile<SessionRecord>(
+      join(sessionsDir, entry.name, "session.json"),
+    ).catch(() => null);
     if (record) {
       sessions.push(record);
     }
   }
 
-  sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+  sessions.sort((left, right) =>
+    String(right.updatedAt ?? right.createdAt).localeCompare(
+      String(left.updatedAt ?? left.createdAt),
+    ),
+  );
   return sessions[0] ?? null;
 }

@@ -99,4 +99,8 @@ export type TargetCurrentResult =
   | { available: true; sessionId: string; target: TargetRecord }
   | TargetUnavailableResult;
 
-export type TargetCommandResult = TargetListResult | TargetRecord | TargetCurrentResult | TargetUnavailableResult;
+export type TargetCommandResult =
+  | TargetListResult
+  | TargetRecord
+  | TargetCurrentResult
+  | TargetUnavailableResult;

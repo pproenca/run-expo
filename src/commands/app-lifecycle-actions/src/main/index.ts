@@ -2,7 +2,6 @@ import { execFile as nodeExecFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { homedir } from "node:os";
 import { join as joinPath, resolve as resolvePath } from "node:path";
-
 import { policyDeniedPayload as sharedPolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
 
 const MAX_OUTPUT = 40_000;
@@ -68,10 +67,17 @@ export type DiagnosticReportEntry = {
 
 export type AppLifecycleDependencies = {
   execFile(file: string, args: string[], options: ExecOptions): Promise<ExecResult>;
-  resolveIosDevice(requested: string | undefined, options: { preferBooted: true }): Promise<IosDevice>;
+  resolveIosDevice(
+    requested: string | undefined,
+    options: { preferBooted: true },
+  ): Promise<IosDevice>;
   wait(ms: number): Promise<void>;
   now(): number;
-  policyDecision(args: Record<string, unknown>, action: string, sideEffect: "device"): Promise<ActionPolicyDecision>;
+  policyDecision(
+    args: Record<string, unknown>,
+    action: string,
+    sideEffect: "device",
+  ): Promise<ActionPolicyDecision>;
   runtimeSummary(cwd: string): Promise<RuntimeSummary | null>;
   listDiagnosticReports(): Promise<DiagnosticReportEntry[]>;
 };
@@ -143,7 +149,9 @@ export async function launchApp(
   }
 
   const bundleId = requireString(args.bundleId ?? args.packageName, "bundleId");
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   const startedAt = deps.now();
   const result = await deps.execFile("xcrun", ["simctl", "launch", device.udid, bundleId], {
     timeout: 30_000,
@@ -185,10 +193,14 @@ export async function terminateApp(
   }
 
   if (platform === "android") {
-    const result = await deps.execFile("adb", androidDeviceArgs(args.device, ["shell", "am", "force-stop", bundleId]), {
-      timeout: 20_000,
-      rejectOnError: false,
-    });
+    const result = await deps.execFile(
+      "adb",
+      androidDeviceArgs(args.device, ["shell", "am", "force-stop", bundleId]),
+      {
+        timeout: 20_000,
+        rejectOnError: false,
+      },
+    );
     return {
       available: !result.error,
       action: "terminate-app",
@@ -200,7 +212,9 @@ export async function terminateApp(
     };
   }
 
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   const result = await deps.execFile("xcrun", ["simctl", "terminate", device.udid, bundleId], {
     timeout: 20_000,
     rejectOnError: false,
@@ -304,7 +318,8 @@ export async function matchingIosCrashReports(
     const metadataBundle = stringFrom(metadata?.bundleID ?? metadata?.bundleId);
     const metadataName = stringFrom(metadata?.app_name ?? metadata?.name ?? metadata?.procName);
     const nameMatches = wantedProcess
-      ? report.name.toLowerCase().includes(wantedProcess) || (metadataName?.toLowerCase() === wantedProcess)
+      ? report.name.toLowerCase().includes(wantedProcess) ||
+        metadataName?.toLowerCase() === wantedProcess
       : false;
 
     if ((bundleId && metadataBundle === bundleId) || nameMatches) {
@@ -343,10 +358,14 @@ export async function installApp(
   }
 
   if (platform === "android") {
-    const result = await deps.execFile("adb", androidDeviceArgs(args.device, ["install", "-r", appPath]), {
-      timeout: 120_000,
-      rejectOnError: false,
-    });
+    const result = await deps.execFile(
+      "adb",
+      androidDeviceArgs(args.device, ["install", "-r", appPath]),
+      {
+        timeout: 120_000,
+        rejectOnError: false,
+      },
+    );
     return {
       available: !result.error,
       action: "install-app",
@@ -359,7 +378,9 @@ export async function installApp(
     };
   }
 
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   const result = await deps.execFile("xcrun", ["simctl", "install", device.udid, appPath], {
     timeout: 120_000,
     rejectOnError: false,
@@ -390,10 +411,14 @@ export async function uninstallApp(
   }
 
   if (platform === "android") {
-    const result = await deps.execFile("adb", androidDeviceArgs(args.device, ["uninstall", bundleId]), {
-      timeout: 60_000,
-      rejectOnError: false,
-    });
+    const result = await deps.execFile(
+      "adb",
+      androidDeviceArgs(args.device, ["uninstall", bundleId]),
+      {
+        timeout: 60_000,
+        rejectOnError: false,
+      },
+    );
     return {
       available: !result.error,
       action: "uninstall-app",
@@ -406,7 +431,9 @@ export async function uninstallApp(
     };
   }
 
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   const result = await deps.execFile("xcrun", ["simctl", "uninstall", device.udid, bundleId], {
     timeout: 60_000,
     rejectOnError: false,
@@ -433,7 +460,9 @@ export async function resolveBundleId(
 
   const cwd = optionalString(args.cwd) ?? ".";
   const summary = await deps.runtimeSummary(cwd).catch(() => null);
-  const inferred = optionalString(summary?.appConfig?.iosBundleIdentifier ?? summary?.appConfig?.androidPackage);
+  const inferred = optionalString(
+    summary?.appConfig?.iosBundleIdentifier ?? summary?.appConfig?.androidPackage,
+  );
   if (!inferred) throw new Error("bundleId must be provided or inferable from Expo app config.");
   return inferred;
 }
@@ -446,11 +475,15 @@ export async function collectAppLogs(
   if (platform === "android") {
     const device = optionalString(args.device);
     const lines = String(clampNumber(args.lines ?? 500, 1, 5000));
-    const result = await deps.execFile("adb", androidDeviceArgs(device, ["logcat", "-d", "-t", lines]), {
-      timeout: 30_000,
-      maxBuffer: 4 * 1024 * 1024,
-      rejectOnError: false,
-    });
+    const result = await deps.execFile(
+      "adb",
+      androidDeviceArgs(device, ["logcat", "-d", "-t", lines]),
+      {
+        timeout: 30_000,
+        maxBuffer: 4 * 1024 * 1024,
+        rejectOnError: false,
+      },
+    );
     return {
       platform,
       device: device ?? null,
@@ -459,11 +492,23 @@ export async function collectAppLogs(
     };
   }
 
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   const last = optionalString(args.last) ?? "2m";
   if (!/^\d+[smhd]$/.test(last)) throw new Error("last must look like 30s, 2m, 1h, or 1d.");
   const predicate = optionalString(args.predicate) ?? iosLogPredicate(args);
-  const commandArgs = ["simctl", "spawn", device.udid, "log", "show", "--style", "compact", "--last", last];
+  const commandArgs = [
+    "simctl",
+    "spawn",
+    device.udid,
+    "log",
+    "show",
+    "--style",
+    "compact",
+    "--last",
+    last,
+  ];
   if (predicate) commandArgs.push("--predicate", predicate);
   const result = await deps.execFile("xcrun", commandArgs, {
     timeout: 45_000,
@@ -490,23 +535,32 @@ export function iosLogPredicate(args: AppActionArgs): string | null {
   return inferredProcess ? `process CONTAINS "${escapePredicateValue(inferredProcess)}"` : null;
 }
 
-function defaultExecFile(file: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
+function defaultExecFile(
+  file: string,
+  args: string[],
+  options: ExecOptions = {},
+): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
-    nodeExecFile(file, args, {
-      timeout: options.timeout,
-      maxBuffer: options.maxBuffer ?? MAX_OUTPUT,
-    }, (error, stdout, stderr) => {
-      if (error && options.rejectOnError !== false) {
-        Object.assign(error, { stdout, stderr });
-        reject(error);
-        return;
-      }
-      resolve({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
-      });
-    });
+    nodeExecFile(
+      file,
+      args,
+      {
+        timeout: options.timeout,
+        maxBuffer: options.maxBuffer ?? MAX_OUTPUT,
+      },
+      (error, stdout, stderr) => {
+        if (error && options.rejectOnError !== false) {
+          Object.assign(error, { stdout, stderr });
+          reject(error);
+          return;
+        }
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
+        });
+      },
+    );
   });
 }
 
@@ -515,28 +569,36 @@ async function defaultResolveIosDevice(requested: string | undefined): Promise<I
     return { udid: requested, name: requested, state: "unknown" };
   }
 
-  const { stdout } = await defaultExecFile("xcrun", ["simctl", "list", "devices", "available", "--json"], {
-    timeout: 20_000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
+  const { stdout } = await defaultExecFile(
+    "xcrun",
+    ["simctl", "list", "devices", "available", "--json"],
+    {
+      timeout: 20_000,
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  );
   const parsed = JSON.parse(String(stdout ?? "{}")) as { devices?: Record<string, unknown[]> };
-  const devices = Object.entries(parsed.devices ?? {}).flatMap(([runtime, runtimeDevices]) =>
-    (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
-      const record = isRecord(device) ? device : {};
-      return {
-        udid: String(record.udid ?? ""),
-        name: String(record.name ?? ""),
-        state: stringFrom(record.state) ?? undefined,
-        runtime,
-        isAvailable: record.isAvailable === undefined ? undefined : Boolean(record.isAvailable),
-      };
-    }),
-  ).filter((device) => device.udid && device.name);
+  const devices = Object.entries(parsed.devices ?? {})
+    .flatMap(([runtime, runtimeDevices]) =>
+      (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
+        const record = isRecord(device) ? device : {};
+        return {
+          udid: String(record.udid ?? ""),
+          name: String(record.name ?? ""),
+          state: stringFrom(record.state) ?? undefined,
+          runtime,
+          isAvailable: record.isAvailable === undefined ? undefined : Boolean(record.isAvailable),
+        };
+      }),
+    )
+    .filter((device) => device.udid && device.name);
 
   if (requested) {
     const exact = devices.find((device) => device.udid === requested || device.name === requested);
     if (exact) return exact;
-    const partial = devices.find((device) => device.name.toLowerCase().includes(requested.toLowerCase()));
+    const partial = devices.find((device) =>
+      device.name.toLowerCase().includes(requested.toLowerCase()),
+    );
     if (partial) return partial;
     throw new Error(`No available iOS simulator matched: ${requested}`);
   }
@@ -570,9 +632,10 @@ async function defaultPolicyDecision(
     allow?: unknown;
     actions?: Record<string, unknown>;
   };
-  const allowed = (Array.isArray(policy.allow) && policy.allow.includes(action))
-    || policy.actions?.[action] === true
-    || policy.actions?.[action] === "allow";
+  const allowed =
+    (Array.isArray(policy.allow) && policy.allow.includes(action)) ||
+    policy.actions?.[action] === true ||
+    policy.actions?.[action] === "allow";
   return {
     checked: true,
     action,
@@ -602,20 +665,22 @@ async function defaultRuntimeSummary(cwd: string): Promise<RuntimeSummary | null
 async function defaultListDiagnosticReports(): Promise<DiagnosticReportEntry[]> {
   const directory = joinPath(homedir(), "Library", "Logs", "DiagnosticReports");
   const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
-  const reports = await Promise.all(entries
-    .filter((entry) => entry.isFile() && /\.(ips|crash)$/.test(entry.name))
-    .map(async (entry) => {
-      const file = joinPath(directory, entry.name);
-      const stat = await fs.stat(file);
-      return {
-        name: entry.name,
-        path: file,
-        isFile: true,
-        mtimeMs: stat.mtimeMs,
-        mtimeIso: stat.mtime.toISOString(),
-        content: await fs.readFile(file, "utf8").catch(() => ""),
-      };
-    }));
+  const reports = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && /\.(ips|crash)$/.test(entry.name))
+      .map(async (entry) => {
+        const file = joinPath(directory, entry.name);
+        const stat = await fs.stat(file);
+        return {
+          name: entry.name,
+          path: file,
+          isFile: true,
+          mtimeMs: stat.mtimeMs,
+          mtimeIso: stat.mtime.toISOString(),
+          content: await fs.readFile(file, "utf8").catch(() => ""),
+        };
+      }),
+  );
   return reports;
 }
 
@@ -636,7 +701,7 @@ function clampNumber(value: unknown, min: number, max: number): number {
 }
 
 function escapePredicateValue(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

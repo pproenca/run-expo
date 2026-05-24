@@ -18,22 +18,30 @@ export function handlerSymbolByTool(toolName: string): string | null {
 }
 
 export function toolsForHandlerSymbol(handlerSymbol: string): string[] {
-  return TOOL_HANDLER_BINDINGS
-    .filter(([, candidate]) => candidate === handlerSymbol)
-    .map(([toolName]) => toolName);
+  return TOOL_HANDLER_BINDINGS.filter(([, candidate]) => candidate === handlerSymbol).map(
+    ([toolName]) => toolName,
+  );
 }
 
-export function bindHandlers(implementations: ToolHandlerImplementations): Record<string, ToolHandler> {
-  const missing = handlerSymbols().filter((handlerSymbol) => implementations[handlerSymbol] === undefined);
+export function bindHandlers(
+  implementations: ToolHandlerImplementations,
+): Record<string, ToolHandler> {
+  const missing = handlerSymbols().filter(
+    (handlerSymbol) => implementations[handlerSymbol] === undefined,
+  );
   if (missing.length > 0) {
     throw new Error(`Missing handler implementations: ${missing.join(", ")}`);
   }
-  const nonFunctions = handlerSymbols().filter((handlerSymbol) => typeof implementations[handlerSymbol] !== "function");
+  const nonFunctions = handlerSymbols().filter(
+    (handlerSymbol) => typeof implementations[handlerSymbol] !== "function",
+  );
   if (nonFunctions.length > 0) {
     throw new Error(`Handler implementations must be functions: ${nonFunctions.join(", ")}`);
   }
-  return Object.fromEntries(TOOL_HANDLER_BINDINGS.map(([toolName, handlerSymbol]) => [
-    toolName,
-    implementations[handlerSymbol] as ToolHandler,
-  ]));
+  return Object.fromEntries(
+    TOOL_HANDLER_BINDINGS.map(([toolName, handlerSymbol]) => [
+      toolName,
+      implementations[handlerSymbol] as ToolHandler,
+    ]),
+  );
 }

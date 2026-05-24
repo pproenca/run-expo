@@ -16,17 +16,8 @@ export type {
   TargetRecord,
   TargetUnavailableResult,
 } from "./domain.js";
-export {
-  normalizeMetroTargets,
-  normalizeSimulatorDevices,
-  discoverTargets,
-} from "./discovery.js";
-export {
-  getCurrentTarget,
-  listTargets,
-  selectTarget,
-  targetCommand,
-} from "./target-service.js";
+export { normalizeMetroTargets, normalizeSimulatorDevices, discoverTargets } from "./discovery.js";
+export { getCurrentTarget, listTargets, selectTarget, targetCommand } from "./target-service.js";
 export {
   clampMetroPort,
   normalizeDeviceState,

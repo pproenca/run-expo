@@ -1,7 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface DirentLike {
   name: string;
@@ -89,7 +91,10 @@ export function routeFromFile(
   return { kind: "route", route: `/${segments.join("/")}`.replace(/\/$/, "") || "/", segments };
 }
 
-export async function walkFiles(root: string, dependencies: RouterSitemapDependencies = {}): Promise<string[]> {
+export async function walkFiles(
+  root: string,
+  dependencies: RouterSitemapDependencies = {},
+): Promise<string[]> {
   const deps = resolveDependencies(dependencies);
   const entries = await deps.fs.readdir(root, { withFileTypes: true });
   const result: string[] = [];
@@ -97,7 +102,7 @@ export async function walkFiles(root: string, dependencies: RouterSitemapDepende
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const full = deps.path.join(root, entry.name);
     if (entry.isDirectory()) {
-      result.push(...await walkFiles(full, dependencies));
+      result.push(...(await walkFiles(full, dependencies)));
     } else if (entry.isFile()) {
       result.push(full);
     }
@@ -112,7 +117,7 @@ export async function expoRouterSitemap(
   const deps = resolveDependencies(dependencies);
   const cwd = await normalizeCwd(args.cwd, deps);
   const appDir = deps.path.resolve(cwd, args.appDir ?? "app");
-  if (!await deps.fs.pathExists(appDir)) {
+  if (!(await deps.fs.pathExists(appDir))) {
     return toolJson({
       cwd,
       appDir,
@@ -133,7 +138,9 @@ export async function expoRouteContext(
   const deps = resolveDependencies(dependencies);
   const appDir = deps.path.join(cwd, "app");
   const appExists = await deps.fs.pathExists(appDir);
-  const { routes, specialFiles } = appExists ? await collectRoutes(appDir, deps) : { routes: [], specialFiles: [] };
+  const { routes, specialFiles } = appExists
+    ? await collectRoutes(appDir, deps)
+    : { routes: [], specialFiles: [] };
   const typedRoutesPath = deps.path.join(cwd, ".expo", "types", "router.d.ts");
   const hasTypedRoutes = await deps.fs.pathExists(typedRoutesPath);
   const typedRoutes = hasTypedRoutes
@@ -149,7 +156,11 @@ export async function expoRouteContext(
   };
 }
 
-async function collectRoutes(appDir: string, deps: RequiredRouterDependencies, options: { sortSpecialFiles?: boolean } = {}): Promise<{
+async function collectRoutes(
+  appDir: string,
+  deps: RequiredRouterDependencies,
+  options: { sortSpecialFiles?: boolean } = {},
+): Promise<{
   routes: RouteEntry[];
   specialFiles: SpecialFileEntry[];
 }> {
@@ -178,10 +189,19 @@ function formatRouteSegment(segment: string): string {
 }
 
 function parseTypedRoutes(source: string): string[] {
-  return [...new Set(source.match(/pathname:\s*`([^`]+)`/g)?.map((match) => match.replace(/^pathname:\s*`|`$/g, "")) ?? [])].sort();
+  return [
+    ...new Set(
+      source
+        .match(/pathname:\s*`([^`]+)`/g)
+        ?.map((match) => match.replace(/^pathname:\s*`|`$/g, "")) ?? [],
+    ),
+  ].sort();
 }
 
-async function normalizeCwd(cwd: string | undefined, deps: RequiredRouterDependencies): Promise<string> {
+async function normalizeCwd(
+  cwd: string | undefined,
+  deps: RequiredRouterDependencies,
+): Promise<string> {
   const resolved = deps.path.resolve(cwd ?? deps.processCwd);
   const stat = await deps.fs.stat(resolved);
   if (!stat?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
@@ -220,10 +240,16 @@ async function defaultStat(filePath: string): Promise<{ isDirectory(): boolean }
 }
 
 async function defaultPathExists(filePath: string): Promise<boolean> {
-  return fs.access(filePath).then(() => true, () => false);
+  return fs.access(filePath).then(
+    () => true,
+    () => false,
+  );
 }
 
-async function defaultReaddir(dirPath: string, options: { withFileTypes: true }): Promise<DirentLike[]> {
+async function defaultReaddir(
+  dirPath: string,
+  options: { withFileTypes: true },
+): Promise<DirentLike[]> {
   return fs.readdir(dirPath, options);
 }
 

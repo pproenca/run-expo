@@ -4,7 +4,9 @@ export function redactPerfValue(value: any): any {
   const result: Record<string, any> = {};
   for (const [key, item] of Object.entries(value)) {
     if (/body|postData/i.test(key)) continue;
-    result[key] = /token|authorization|cookie|password|secret|apikey/i.test(key) ? "[redacted]" : redactPerfValue(item);
+    result[key] = /token|authorization|cookie|password|secret|apikey/i.test(key)
+      ? "[redacted]"
+      : redactPerfValue(item);
   }
   return result;
 }

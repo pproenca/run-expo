@@ -1,7 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 declare const process: { cwd(): string };
 
@@ -45,8 +48,14 @@ export type BridgeCommandArgs = {
 };
 
 export type BridgeCommandDependencies = {
-  normalizeProjectCwd?: (cwd: string | undefined, options: { allowMissingPackageJson: true }) => Promise<string> | string;
-  bridgeHealthPayload?: (args: BridgeCommandArgs, context: { action: "health" | "domains"; status: BridgeInstallStatus; plan: BridgeInstallPlan }) => Promise<unknown> | unknown;
+  normalizeProjectCwd?: (
+    cwd: string | undefined,
+    options: { allowMissingPackageJson: true },
+  ) => Promise<string> | string;
+  bridgeHealthPayload?: (
+    args: BridgeCommandArgs,
+    context: { action: "health" | "domains"; status: BridgeInstallStatus; plan: BridgeInstallPlan },
+  ) => Promise<unknown> | unknown;
   readJsonFile?: (file: string) => Promise<unknown> | unknown;
   pathExists?: (file: string) => Promise<boolean> | boolean;
   mkdir?: (file: string, options: { recursive: true }) => Promise<unknown> | unknown;
@@ -86,7 +95,7 @@ export interface BridgeMetadata {
 
 export async function bridgeCommand(
   args: BridgeCommandArgs = {},
-  dependencies: BridgeCommandDependencies = {}
+  dependencies: BridgeCommandDependencies = {},
 ) {
   const action = requireBridgeAction(args.action ?? "status");
   const io = bridgeCommandIo(dependencies);
@@ -95,7 +104,14 @@ export async function bridgeCommand(
   const plan = bridgeInstallPlan(status);
 
   if (action === "status") return toolJson({ available: true, action, ...status });
-  if (action === "plan") return toolJson({ available: true, action, status: status.state, projectRoot: status.projectRoot, plan });
+  if (action === "plan")
+    return toolJson({
+      available: true,
+      action,
+      status: status.state,
+      projectRoot: status.projectRoot,
+      plan,
+    });
   if (action === "health" || action === "domains") {
     return toolJson(await io.bridgeHealthPayload(args, { action, status, plan }));
   }
@@ -109,7 +125,7 @@ export async function bridgeCommand(
       projectRoot: status.projectRoot,
       reason: `Refusing to mutate app files without explicit --confirm-actions ${permission}.`,
       requiredConfirmation: permission,
-      plan
+      plan,
     });
   }
 
@@ -118,19 +134,35 @@ export async function bridgeCommand(
     await io.mkdir(io.joinPath(cwd, "src"), { recursive: true });
     await io.writeJsonFile(io.joinPath(cwd, BRIDGE_DIR, "bridge.json"), bridgeMetadata());
     await io.writeFile(io.joinPath(cwd, "src", BRIDGE_SOURCE_FILE), bridgeSource(), "utf8");
-    return toolJson({ available: true, action, projectRoot: cwd, installed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
+    return toolJson({
+      available: true,
+      action,
+      projectRoot: cwd,
+      installed: true,
+      status: (await bridgeInstallStatus(cwd, io)).state,
+      plan,
+    });
   }
 
   await removeIgnoringErrors(io, io.joinPath(cwd, BRIDGE_DIR, "bridge.json"));
   await removeIgnoringErrors(io, io.joinPath(cwd, LEGACY_BRIDGE_DIR, "bridge.json"));
   await removeIgnoringErrors(io, io.joinPath(cwd, "src", BRIDGE_SOURCE_FILE));
   await removeIgnoringErrors(io, io.joinPath(cwd, "src", LEGACY_BRIDGE_SOURCE_FILE));
-  return toolJson({ available: true, action, projectRoot: cwd, removed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
+  return toolJson({
+    available: true,
+    action,
+    projectRoot: cwd,
+    removed: true,
+    status: (await bridgeInstallStatus(cwd, io)).state,
+    plan,
+  });
 }
 
 export async function bridgeInstallStatus(
   projectRoot: string,
-  dependencies: Pick<Required<BridgeCommandDependencies>, "readJsonFile" | "pathExists" | "joinPath"> | BridgeCommandDependencies = {}
+  dependencies:
+    | Pick<Required<BridgeCommandDependencies>, "readJsonFile" | "pathExists" | "joinPath">
+    | BridgeCommandDependencies = {},
 ): Promise<BridgeInstallStatus> {
   const io = bridgeCommandIo(dependencies);
   const packageJsonPath = io.joinPath(projectRoot, "package.json");
@@ -140,10 +172,12 @@ export async function bridgeInstallStatus(
   const sourcePath = io.joinPath(projectRoot, "src", BRIDGE_SOURCE_FILE);
   const legacyMetadataPath = io.joinPath(projectRoot, LEGACY_BRIDGE_DIR, "bridge.json");
   const legacySourcePath = io.joinPath(projectRoot, "src", LEGACY_BRIDGE_SOURCE_FILE);
-  const metadata = await readJsonOrNull(io.readJsonFile, metadataPath)
-    ?? await readJsonOrNull(io.readJsonFile, legacyMetadataPath);
-  const sourceExists = await Promise.resolve(io.pathExists(sourcePath))
-    || await Promise.resolve(io.pathExists(legacySourcePath));
+  const metadata =
+    (await readJsonOrNull(io.readJsonFile, metadataPath)) ??
+    (await readJsonOrNull(io.readJsonFile, legacyMetadataPath));
+  const sourceExists =
+    (await Promise.resolve(io.pathExists(sourcePath))) ||
+    (await Promise.resolve(io.pathExists(legacySourcePath)));
   const hasExpo = typeof deps.expo === "string";
   const rozenitePackages = Object.keys(deps)
     .filter((name) => name === "rozenite" || name.startsWith("@rozenite/"))
@@ -155,26 +189,30 @@ export async function bridgeInstallStatus(
     state = "incompatible";
     issues.push({
       code: "missing-expo",
-      message: "The project does not declare expo, so an Expo DevTools bridge cannot be installed safely."
+      message:
+        "The project does not declare expo, so an Expo DevTools bridge cannot be installed safely.",
     });
   } else if (metadata || sourceExists) {
     if (!metadata || !sourceExists) {
       state = "stale";
       issues.push({
         code: "partial-install",
-        message: "Bridge metadata and source file are not both present."
+        message: "Bridge metadata and source file are not both present.",
       });
-    } else if (metadataProperty(metadata, "bridgeVersion") !== EXPO_IOS_BRIDGE_VERSION || metadataProperty(metadata, "schemaVersion") !== BRIDGE_SCHEMA_VERSION) {
+    } else if (
+      metadataProperty(metadata, "bridgeVersion") !== EXPO_IOS_BRIDGE_VERSION ||
+      metadataProperty(metadata, "schemaVersion") !== BRIDGE_SCHEMA_VERSION
+    ) {
       state = "stale";
       issues.push({
         code: "version-mismatch",
-        message: `Bridge version ${String(metadataProperty(metadata, "bridgeVersion") ?? "unknown")} does not match ${EXPO_IOS_BRIDGE_VERSION}.`
+        message: `Bridge version ${String(metadataProperty(metadata, "bridgeVersion") ?? "unknown")} does not match ${EXPO_IOS_BRIDGE_VERSION}.`,
       });
     } else if (metadataProperty(metadata, "developmentOnly") !== true) {
       state = "incompatible";
       issues.push({
         code: "not-development-only",
-        message: "Bridge metadata must declare developmentOnly: true."
+        message: "Bridge metadata must declare developmentOnly: true.",
       });
     } else {
       state = "present";
@@ -192,9 +230,9 @@ export async function bridgeInstallStatus(
     files: { metadata: Boolean(metadata), source: sourceExists },
     dependencies: {
       expo: deps.expo ?? null,
-      rozenite: rozenitePackages.map((name) => ({ name, version: deps[name] }))
+      rozenite: rozenitePackages.map((name) => ({ name, version: deps[name] })),
     },
-    issues
+    issues,
   };
 }
 
@@ -205,33 +243,33 @@ export function bridgeInstallPlan(status: BridgeInstallStatus): BridgeInstallPla
     developmentOnly: true,
     productionExclusion: [
       "Bridge code must be imported only from development-only app entrypoints or guarded by __DEV__.",
-      `Production/release builds must not import src/${BRIDGE_SOURCE_FILE}.`
+      `Production/release builds must not import src/${BRIDGE_SOURCE_FILE}.`,
     ],
     filesToAddOrChange: [
       {
         path: status.metadataPath,
         action: status.files.metadata ? "update" : "add",
-        purpose: "Versioned bridge metadata for stale/incompatible detection and removal."
+        purpose: "Versioned bridge metadata for stale/incompatible detection and removal.",
       },
       {
         path: status.sourcePath,
         action: status.files.source ? "update" : "add",
-        purpose: "Development-only Expo/Rozenite bridge registration shim."
-      }
+        purpose: "Development-only Expo/Rozenite bridge registration shim.",
+      },
     ],
     removalPlan: [
       { path: status.metadataPath, action: "delete" },
-      { path: status.sourcePath, action: "delete" }
+      { path: status.sourcePath, action: "delete" },
     ],
     runtimeHealthCheckExpectations: [
       "Metro target is available.",
       "Hermes inspector is available.",
       "Bridge metadata version matches CLI expected version.",
       "App registers readable and writable domains separately.",
-      "Mutation domains remain action-policy gated."
+      "Mutation domains remain action-policy gated.",
     ],
     status: status.state,
-    issues: status.issues
+    issues: status.issues,
   };
 }
 
@@ -241,7 +279,7 @@ export function bridgeMetadata(): BridgeMetadata {
     bridgeVersion: EXPO_IOS_BRIDGE_VERSION,
     developmentOnly: true,
     generatedBy: "expo98",
-    domains: ["navigation", "network", "storage", "controls", "performance", "snapshot"]
+    domains: ["navigation", "network", "storage", "controls", "performance", "snapshot"],
   };
 }
 
@@ -276,14 +314,20 @@ export function requireString(value: unknown, field: string): string {
   return value.trim();
 }
 
-export function hasExplicitConfirmation(value: string | null | undefined, required: string): boolean {
+export function hasExplicitConfirmation(
+  value: string | null | undefined,
+  required: string,
+): boolean {
   return String(value ?? "")
     .split(",")
     .map((item) => item.trim())
     .includes(required);
 }
 
-export async function normalizeProjectCwd(cwd?: string, options: { allowMissingPackageJson?: boolean } = {}): Promise<string> {
+export async function normalizeProjectCwd(
+  cwd?: string,
+  options: { allowMissingPackageJson?: boolean } = {},
+): Promise<string> {
   const resolved = path.resolve(cwd ?? process.cwd());
   const stat = await fs.stat(resolved).catch(() => null);
   if (!stat?.isDirectory()) {
@@ -298,14 +342,19 @@ export async function readJsonFile(file: string): Promise<unknown> {
 }
 
 export async function pathExists(file: string): Promise<boolean> {
-  return fs.access(file).then(() => true, () => false);
+  return fs.access(file).then(
+    () => true,
+    () => false,
+  );
 }
 
 export async function writeJsonFile(file: string, value: unknown): Promise<void> {
   await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function bridgeCommandIo(dependencies: BridgeCommandDependencies): Required<BridgeCommandDependencies> {
+function bridgeCommandIo(
+  dependencies: BridgeCommandDependencies,
+): Required<BridgeCommandDependencies> {
   return {
     normalizeProjectCwd: dependencies.normalizeProjectCwd ?? normalizeProjectCwd,
     bridgeHealthPayload: dependencies.bridgeHealthPayload ?? defaultBridgeHealthPayload,
@@ -317,11 +366,14 @@ function bridgeCommandIo(dependencies: BridgeCommandDependencies): Required<Brid
     rm: dependencies.rm ?? fs.rm,
     joinPath: dependencies.joinPath ?? path.join,
     resolvePath: dependencies.resolvePath ?? path.resolve,
-    currentCwd: dependencies.currentCwd ?? process.cwd
+    currentCwd: dependencies.currentCwd ?? process.cwd,
   };
 }
 
-async function resolveProjectCwd(cwd: string | undefined, io: Required<BridgeCommandDependencies>): Promise<string> {
+async function resolveProjectCwd(
+  cwd: string | undefined,
+  io: Required<BridgeCommandDependencies>,
+): Promise<string> {
   try {
     return await io.normalizeProjectCwd(cwd, { allowMissingPackageJson: true });
   } catch {
@@ -333,11 +385,14 @@ async function defaultBridgeHealthPayload() {
   return {
     available: false,
     health: "unavailable",
-    reason: "Bridge health payload dependency was not provided."
+    reason: "Bridge health payload dependency was not provided.",
   };
 }
 
-async function removeIgnoringErrors(io: Required<BridgeCommandDependencies>, file: string): Promise<void> {
+async function removeIgnoringErrors(
+  io: Required<BridgeCommandDependencies>,
+  file: string,
+): Promise<void> {
   try {
     await io.rm(file, { force: true });
   } catch {
@@ -355,7 +410,10 @@ function isBridgeAction(action: string): action is BridgeAction {
   return ["status", "plan", "health", "domains", "install", "remove"].includes(action);
 }
 
-async function readJsonOrNull(read: (file: string) => Promise<unknown> | unknown, file: string): Promise<unknown | null> {
+async function readJsonOrNull(
+  read: (file: string) => Promise<unknown> | unknown,
+  file: string,
+): Promise<unknown | null> {
   try {
     return await read(file);
   } catch {
@@ -367,7 +425,7 @@ function dependencyMap(packageJson: unknown): Record<string, unknown> {
   const record = asRecord(packageJson);
   return {
     ...asRecord(record?.dependencies),
-    ...asRecord(record?.devDependencies)
+    ...asRecord(record?.devDependencies),
   };
 }
 
@@ -376,5 +434,7 @@ function metadataProperty(metadata: unknown, key: string): unknown {
 }
 
 function asRecord(value: unknown): JsonRecord | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : undefined;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : undefined;
 }

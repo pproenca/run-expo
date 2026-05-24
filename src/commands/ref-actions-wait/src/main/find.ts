@@ -1,6 +1,12 @@
-import type { RefActionDependencies, RefRecord, ToolTextResult } from "./domain.js";
-import { clampNumber, normalizeFinderText, requireString, toolJson, unwrapToolJson } from "./common.js";
+import {
+  clampNumber,
+  normalizeFinderText,
+  requireString,
+  toolJson,
+  unwrapToolJson,
+} from "./common.js";
 import { defaultRefActionDependencies } from "./defaults.js";
+import type { RefActionDependencies, RefRecord, ToolTextResult } from "./domain.js";
 
 /**
  * RULE-008: finder operations only use the latest cached refs and can attach
@@ -51,17 +57,27 @@ export async function finderActionResult(
     return unwrapToolJson(toolJson(await planUnavailable(action)));
   }
   if (action === "inspect") {
-    return { available: false, reason: "Inspect action is not wired in this module.", ref: args.ref };
+    return {
+      available: false,
+      reason: "Inspect action is not wired in this module.",
+      ref: args.ref,
+    };
   }
   return { available: false, reason: `Unsupported finder action: ${action}`, action };
 }
 
-export function findMatches(refs: RefRecord[], kind: string, value: unknown, name?: unknown): RefRecord[] {
+export function findMatches(
+  refs: RefRecord[],
+  kind: string,
+  value: unknown,
+  name?: unknown,
+): RefRecord[] {
   if (kind === "first") {
-    const match = refs.find((record) =>
-      refMatches(record, "source", value, name)
-      || refMatches(record, "text", value, name)
-      || refMatches(record, "label", value, name)
+    const match = refs.find(
+      (record) =>
+        refMatches(record, "source", value, name) ||
+        refMatches(record, "text", value, name) ||
+        refMatches(record, "label", value, name),
     );
     return match ? [match] : [];
   }
@@ -69,10 +85,11 @@ export function findMatches(refs: RefRecord[], kind: string, value: unknown, nam
   if (kind === "nth") {
     const index = clampNumber(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
     const needle = requireString(name, "name");
-    const matches = refs.filter((record) =>
-      refMatches(record, "source", needle)
-      || refMatches(record, "text", needle)
-      || refMatches(record, "label", needle)
+    const matches = refs.filter(
+      (record) =>
+        refMatches(record, "source", needle) ||
+        refMatches(record, "text", needle) ||
+        refMatches(record, "label", needle),
     );
     return matches[index] ? [matches[index]] : [];
   }
@@ -85,15 +102,20 @@ function refMatches(record: RefRecord, kind: string, value: unknown, name?: unkn
   if (kind === "role") {
     if (normalizeFinderText(record.role) !== expected) return false;
     if (!name) return true;
-    const accessibleName = normalizeFinderText([record.label, record.text].filter(Boolean).join(" "));
+    const accessibleName = normalizeFinderText(
+      [record.label, record.text].filter(Boolean).join(" "),
+    );
     return accessibleName.includes(normalizeFinderText(name));
   }
   if (kind === "text") return normalizeFinderText(record.text ?? record.label).includes(expected);
   if (kind === "label") return normalizeFinderText(record.label).includes(expected);
   if (kind === "placeholder") return normalizeFinderText(record.placeholder).includes(expected);
-  if (kind === "testid") return normalizeFinderText(record.testID ?? record.nativeID).includes(expected);
+  if (kind === "testid")
+    return normalizeFinderText(record.testID ?? record.nativeID).includes(expected);
   if (kind === "source") {
-    return normalizeFinderText([record.component, record.source?.file].filter(Boolean).join(" ")).includes(expected);
+    return normalizeFinderText(
+      [record.component, record.source?.file].filter(Boolean).join(" "),
+    ).includes(expected);
   }
   throw new Error(`Unknown finder kind: ${kind}`);
 }

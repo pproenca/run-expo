@@ -1,5 +1,5 @@
-import type { RefActionDependencies, RefBox, RefRecord } from "./domain.js";
 import { clampNumber, requireString } from "./common.js";
+import type { RefActionDependencies, RefBox, RefRecord } from "./domain.js";
 
 export async function planRefActionWithDeps(
   args: Record<string, unknown>,
@@ -67,11 +67,13 @@ export async function scrollPlanWithDeps(
 ): Promise<Record<string, unknown>> {
   const maybeRef = /^@e\d+$/.test(String(args.ref ?? "")) ? args.ref : null;
   const direction = requireString(
-    maybeRef ? args.targetRef ?? args.direction : args.direction ?? args.ref,
+    maybeRef ? (args.targetRef ?? args.direction) : (args.direction ?? args.ref),
     "direction",
   ).toLowerCase();
   const amount = clampNumber(args.amount ?? args.text ?? 600, 1, 5000);
-  const origin = maybeRef ? await readRefPoint(maybeRef, args, deps) : { available: true, point: { x: 200, y: 700 } };
+  const origin = maybeRef
+    ? await readRefPoint(maybeRef, args, deps)
+    : { available: true, point: { x: 200, y: 700 } };
   if (origin.available === false) {
     return origin;
   }
@@ -104,16 +106,24 @@ async function readRefRecord(
   ref: string,
   deps: RefActionDependencies,
   args?: Record<string, unknown>,
-): Promise<{ available: true; record: RefRecord } | { available: false; reason: string; ref: string }> {
+): Promise<
+  { available: true; record: RefRecord } | { available: false; reason: string; ref: string }
+> {
   const cache = await deps.readLatestRefCache(args);
-  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
+  if (!cache)
+    return { available: false, reason: "No snapshot exists for the current session.", ref };
   const record = cache.refs.find((item) => item.ref === ref);
   if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
-  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  if (record.stale)
+    return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
   return { available: true, record };
 }
 
-async function readRefPoint(refValue: unknown, args: Record<string, unknown>, deps: RefActionDependencies): Promise<Record<string, unknown>> {
+async function readRefPoint(
+  refValue: unknown,
+  args: Record<string, unknown>,
+  deps: RefActionDependencies,
+): Promise<Record<string, unknown>> {
   const ref = requireString(refValue, "ref");
   const found = await readRefRecord(ref, deps, args);
   if (found.available === false) {

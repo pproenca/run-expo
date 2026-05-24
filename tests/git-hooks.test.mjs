@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  mkdtempSync,
-  mkdirSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { configurePrepareGitHooks } from "../scripts/prepare-git-hooks.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,7 +36,10 @@ function writeExecutable(dir, name, contents) {
 function installPreCommitFixture(dir) {
   mkdirSync(path.join(dir, "git-hooks"), { recursive: true });
   mkdirSync(path.join(dir, "scripts", "pre-commit"), { recursive: true });
-  symlinkSync(path.join(repoRoot, "git-hooks", "pre-commit"), path.join(dir, "git-hooks", "pre-commit"));
+  symlinkSync(
+    path.join(repoRoot, "git-hooks", "pre-commit"),
+    path.join(dir, "git-hooks", "pre-commit"),
+  );
   writeFileSync(
     path.join(dir, "scripts", "pre-commit", "run-node-tool.sh"),
     "#!/usr/bin/env bash\nexit 0\n",

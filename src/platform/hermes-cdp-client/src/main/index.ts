@@ -12,10 +12,17 @@ export async function evaluateHermesExpression(
   expression: string,
   options: { timeoutMs: number },
 ): Promise<HermesEvaluationResult> {
-  return cdpCall(webSocketDebuggerUrl, [
-    { method: "Runtime.enable", params: {} },
-    { method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } },
-  ], options.timeoutMs);
+  return cdpCall(
+    webSocketDebuggerUrl,
+    [
+      { method: "Runtime.enable", params: {} },
+      {
+        method: "Runtime.evaluate",
+        params: { expression, returnByValue: true, awaitPromise: true },
+      },
+    ],
+    options.timeoutMs,
+  );
 }
 
 export async function cdpCall(
@@ -125,7 +132,12 @@ function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
   });
 }
 
-function waitForMessage(ws: WebSocket, id: number, method: string, timeoutMs: number): Promise<Record<string, unknown>> {
+function waitForMessage(
+  ws: WebSocket,
+  id: number,
+  method: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup();
@@ -138,7 +150,11 @@ function waitForMessage(ws: WebSocket, id: number, method: string, timeoutMs: nu
         parsed = JSON.parse(raw);
       } catch (error) {
         cleanup();
-        reject(new Error(`Malformed CDP JSON response for ${method}#${id}: ${truncate(raw, 1_000)}`, { cause: error }));
+        reject(
+          new Error(`Malformed CDP JSON response for ${method}#${id}: ${truncate(raw, 1_000)}`, {
+            cause: error,
+          }),
+        );
         return;
       }
       if (!isRecord(parsed) || parsed.id !== id) return;

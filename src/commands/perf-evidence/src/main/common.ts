@@ -1,5 +1,4 @@
 import { basename, join, resolve } from "node:path";
-
 import type { StateRootArgs } from "./types.js";
 
 export function resolveExpoStateRoot(args: StateRootArgs = {}): string {
@@ -12,7 +11,8 @@ export function resolveExpoStateRoot(args: StateRootArgs = {}): string {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 

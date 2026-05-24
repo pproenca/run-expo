@@ -1,11 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
-import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
-import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
-import { policyDecision as bridgePolicyDecision } from "../../../bridge-domain-actions/src/main/index.ts";
 import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
+import { policyDecision as bridgePolicyDecision } from "../../../bridge-domain-actions/src/main/index.ts";
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 
 export interface ModalBridgeTarget {
   id?: string | null;
@@ -102,7 +101,10 @@ export async function dialogCommand(
   args: Record<string, unknown> = {},
   deps: ModalBridgeDependencies = defaultModalBridgeDependencies,
 ): Promise<ToolTextResult> {
-  return modalBridgeCommand({ args, domain: "dialog", actions: ["status", "accept", "dismiss"] }, deps);
+  return modalBridgeCommand(
+    { args, domain: "dialog", actions: ["status", "accept", "dismiss"] },
+    deps,
+  );
 }
 
 export async function sheetCommand(
@@ -127,19 +129,30 @@ async function modalBridgeCommand(
   const action = requireString(input.args.action ?? positionals[0] ?? "status", "action");
   if (!input.actions.includes(action)) throw new Error(`Unknown ${input.domain} action: ${action}`);
   const sideEffect = action === "status" ? "read" : "device";
-  const policy = await bridgePolicyDecision(input.args, `${input.domain}.${action}`, sideEffect, deps);
-  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: input.domain, action, policy }));
-  return boundedToolJson(await bridgeDomainCommand({
-    args: input.args,
-    domain: input.domain,
-    action,
-    expression: modalExpression({
-      domain: input.domain,
-      action,
-      text: input.args.text ?? positionals[1],
-    }),
-    policy,
-  }, deps));
+  const policy = await bridgePolicyDecision(
+    input.args,
+    `${input.domain}.${action}`,
+    sideEffect,
+    deps,
+  );
+  if (!policy.allowed)
+    return boundedToolJson(policyDeniedPayload({ domain: input.domain, action, policy }));
+  return boundedToolJson(
+    await bridgeDomainCommand(
+      {
+        args: input.args,
+        domain: input.domain,
+        action,
+        expression: modalExpression({
+          domain: input.domain,
+          action,
+          text: input.args.text ?? positionals[1],
+        }),
+        policy,
+      },
+      deps,
+    ),
+  );
 }
 
 async function bridgeDomainCommand(
@@ -171,7 +184,9 @@ async function bridgeDomainCommand(
       policy: input.policy,
     });
   }
-  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, input.expression, { timeoutMs: 5000 });
+  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, input.expression, {
+    timeoutMs: 5000,
+  });
   const value = result?.result?.result?.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return domainUnavailable({
@@ -181,18 +196,29 @@ async function bridgeDomainCommand(
       code: "transport-failure",
       reason: result?.error ?? `${input.domain} bridge did not return a value.`,
       target: targetSummary(target),
-      transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
+      transport: bridgeRuntimeTransport(
+        metroPort,
+        target,
+        result?.diagnostics ?? result?.cdp ?? null,
+      ),
       policy: input.policy,
     });
   }
-  const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(value) : value) as Record<string, any>;
+  const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(value) : value) as Record<
+    string,
+    any
+  >;
   return sanitizePayload({
     ...redacted,
     domain: input.domain,
     action: input.action,
     metroPort,
     target: targetSummary(target),
-    transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
+    transport: bridgeRuntimeTransport(
+      metroPort,
+      target,
+      result?.diagnostics ?? result?.cdp ?? null,
+    ),
     evidenceSource: typeof redacted.source === "string" ? redacted.source : "unknown",
     policy: input.policy,
   }) as Record<string, any>;
@@ -238,8 +264,13 @@ export function bridgeRuntimeTransport(
   }) as BridgeRuntimeTransport;
 }
 
-function modalExpression(args: { domain: "dialog" | "sheet"; action: unknown; text?: unknown }): string {
-  const globalName = args.domain === "dialog" ? "__EXPO_IOS_DIALOG_BRIDGE__" : "__EXPO_IOS_SHEET_BRIDGE__";
+function modalExpression(args: {
+  domain: "dialog" | "sheet";
+  action: unknown;
+  text?: unknown;
+}): string {
+  const globalName =
+    args.domain === "dialog" ? "__EXPO_IOS_DIALOG_BRIDGE__" : "__EXPO_IOS_SHEET_BRIDGE__";
   return `(() => {
     const action = ${JSON.stringify(args.action)};
     const text = ${JSON.stringify(args.text ?? null)};
@@ -253,7 +284,9 @@ function modalExpression(args: { domain: "dialog" | "sheet"; action: unknown; te
   })()`;
 }
 
-export function targetSummary(target: ModalBridgeTarget | TargetSummary | null | undefined): TargetSummary | null {
+export function targetSummary(
+  target: ModalBridgeTarget | TargetSummary | null | undefined,
+): TargetSummary | null {
   if (!target) return null;
   return sanitizePayload({
     id: target.id ?? null,
@@ -265,8 +298,11 @@ export function targetSummary(target: ModalBridgeTarget | TargetSummary | null |
     webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
     reactNative: target.reactNative ?? null,
     capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      hermesRuntime:
+        typeof target.webSocketDebuggerUrl === "string" &&
+        target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend:
+        typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
       reactNative: Boolean(target.reactNative),
     },
   }) as TargetSummary;
@@ -279,7 +315,8 @@ export function clampNumber(value: unknown, min: number, max: number): number {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -319,7 +356,9 @@ function boundValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
   const record = asRecord(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]),
+  );
 }
 
 function redactValue(value: unknown): unknown {
@@ -327,10 +366,12 @@ function redactValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactValue);
   const record = asRecord(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
-    key,
-    isSensitiveKey(key) ? "[redacted]" : redactValue(nested),
-  ]));
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [
+      key,
+      isSensitiveKey(key) ? "[redacted]" : redactValue(nested),
+    ]),
+  );
 }
 
 function redactString(value: string): string {
@@ -345,7 +386,10 @@ function redactString(value: string): string {
     }
     return changed ? parsed.toString() : value;
   } catch {
-    return value.replace(/([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi, "$1[redacted]");
+    return value.replace(
+      /([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi,
+      "$1[redacted]",
+    );
   }
 }
 
@@ -360,5 +404,7 @@ function truncate(value: unknown, max = MAX_OUTPUT): string {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }

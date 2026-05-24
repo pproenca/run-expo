@@ -1,5 +1,5 @@
-import { clampNumber } from "./common.js";
 import { writePerfArtifact } from "./artifacts.js";
+import { clampNumber } from "./common.js";
 import { evaluateHermes, listMetroTargets, metroStatus, projectCwd } from "./dependencies.js";
 import {
   normalizePerfBridgePayload,
@@ -11,8 +11,8 @@ import {
   targetSummary,
 } from "./model.js";
 import { redactPerfValue } from "./redaction.js";
-import { perfValidation } from "./validation.js";
 import { EXPO_IOS_BRIDGE_VERSION, type PerfDependencies } from "./types.js";
+import { perfValidation } from "./validation.js";
 
 export interface RuntimeBridgeEvidence {
   metroPort: number;
@@ -34,12 +34,23 @@ export async function collectRuntimeBridgeEvidence(
   const target = targets[0] ?? null;
   const projectRoot = await projectCwd(args.cwd, deps);
   const metro = target
-    ? { available: true, metroPort, status: "available", statusText: null, targetCount: targets.length, targets: targets.map(targetSummary) }
+    ? {
+        available: true,
+        metroPort,
+        status: "available",
+        statusText: null,
+        targetCount: targets.length,
+        targets: targets.map(targetSummary),
+      }
     : await metroStatus({ metroPort }, deps);
   let bridgePayload = null;
   let diagnostics = null;
   if (target?.webSocketDebuggerUrl) {
-    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression(expression), deps);
+    const result = await evaluateHermes(
+      String(target.webSocketDebuggerUrl),
+      perfExpression(expression),
+      deps,
+    );
     bridgePayload = result?.result?.result?.value ?? null;
     diagnostics = result?.diagnostics ?? null;
   }
@@ -55,31 +66,50 @@ export async function writeRuntimePerfArtifact(
     normalizeAction: string;
     label?: unknown;
     unavailableReason?: string;
-    extraFields?: (basePayload: Record<string, any>, evidence: RuntimeBridgeEvidence) => Record<string, any>;
+    extraFields?: (
+      basePayload: Record<string, any>,
+      evidence: RuntimeBridgeEvidence,
+    ) => Record<string, any>;
   },
 ): Promise<Record<string, any>> {
-  const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: options.bridgeAction, label: options.label });
-  const basePayload = evidence.bridgePayload && typeof evidence.bridgePayload === "object"
-    ? normalizePerfBridgePayload(redactPerfValue(evidence.bridgePayload), options.normalizeAction)
-    : {
-        available: false,
-        sources: ["runtime", "app-instrumentation"],
-        metrics: [],
-        code: evidence.target ? "malformed-payload" : "no-runtime-target",
-        reason: evidence.target ? options.unavailableReason ?? "Performance bridge did not return a value." : "No Metro inspector target.",
-      };
+  const evidence = await collectRuntimeBridgeEvidence(args, deps, {
+    action: options.bridgeAction,
+    label: options.label,
+  });
+  const basePayload =
+    evidence.bridgePayload && typeof evidence.bridgePayload === "object"
+      ? normalizePerfBridgePayload(redactPerfValue(evidence.bridgePayload), options.normalizeAction)
+      : {
+          available: false,
+          sources: ["runtime", "app-instrumentation"],
+          metrics: [],
+          code: evidence.target ? "malformed-payload" : "no-runtime-target",
+          reason: evidence.target
+            ? (options.unavailableReason ?? "Performance bridge did not return a value.")
+            : "No Metro inspector target.",
+        };
   const payload = {
     ...basePayload,
     action: options.artifactAction,
     ...(options.extraFields?.(basePayload, evidence) ?? {}),
     mode: "development",
-    context: await perfContext({ args, projectRoot: evidence.projectRoot, metro: evidence.metro, target: evidence.target }),
+    context: await perfContext({
+      args,
+      projectRoot: evidence.projectRoot,
+      metro: evidence.metro,
+      target: evidence.target,
+    }),
     transport: perfTransport(evidence.metroPort, evidence.target, evidence.diagnostics),
     evidenceSource: perfEvidenceSource(basePayload),
     confidence: perfOverallConfidence(basePayload.metrics ?? []),
     limitations: perfDevelopmentLimitations(basePayload.limitations),
   };
-  return writePerfArtifact(args, options.artifactAction, { ...payload, realValidation: perfValidation(payload, options.artifactAction) }, deps);
+  return writePerfArtifact(
+    args,
+    options.artifactAction,
+    { ...payload, realValidation: perfValidation(payload, options.artifactAction) },
+    deps,
+  );
 }
 
 export function perfBridgeAction(action: string, subaction?: string | null): string {

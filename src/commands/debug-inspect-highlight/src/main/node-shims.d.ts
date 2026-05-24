@@ -4,7 +4,10 @@ declare const process: {
 
 declare module "node:fs/promises" {
   export function mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
-  export function readdir(path: string, options?: { withFileTypes?: boolean }): Promise<Array<{ name: string; isDirectory(): boolean }>>;
+  export function readdir(
+    path: string,
+    options?: { withFileTypes?: boolean },
+  ): Promise<Array<{ name: string; isDirectory(): boolean }>>;
   export function readFile(path: string, encoding: "utf8"): Promise<string>;
   export function writeFile(path: string, data: string, encoding: "utf8"): Promise<void>;
 }

@@ -81,14 +81,25 @@ export type GesturePlan = {
 export type InteractionDependencies = {
   commandPath(command: string): Promise<string | null>;
   execFile(file: string, args: string[], options: ExecOptions): Promise<ExecResult>;
-  resolveIosDevice(requested: string | undefined, options: { preferBooted: true }): Promise<IosDevice>;
+  resolveIosDevice(
+    requested: string | undefined,
+    options: { preferBooted: true },
+  ): Promise<IosDevice>;
   planRefAction(args: Record<string, unknown>): Promise<Record<string, unknown>>;
   readRefRecord(ref: unknown, args: Record<string, unknown>): Promise<Record<string, unknown>>;
   refPoint(ref: unknown, args: Record<string, unknown>): Promise<Record<string, unknown>>;
   scrollPlan(args: Record<string, unknown>): Promise<Record<string, unknown>>;
-  policyDecision(args: Record<string, unknown>, action: string, sideEffect: "device"): Promise<ActionPolicyDecision>;
-  captureScreenshot(args: Record<string, unknown>): Promise<ToolTextResult | Record<string, unknown>>;
-  traceInteraction(args: Record<string, unknown>): Promise<ToolTextResult | Record<string, unknown>>;
+  policyDecision(
+    args: Record<string, unknown>,
+    action: string,
+    sideEffect: "device",
+  ): Promise<ActionPolicyDecision>;
+  captureScreenshot(
+    args: Record<string, unknown>,
+  ): Promise<ToolTextResult | Record<string, unknown>>;
+  traceInteraction(
+    args: Record<string, unknown>,
+  ): Promise<ToolTextResult | Record<string, unknown>>;
   wait(ms: number): Promise<void>;
   now(): Date;
   tmpdir(): string;
@@ -101,9 +112,15 @@ export type RefActionAdapterDependencies = {
 };
 
 export type RefActionModule = {
-  planRefAction(args: Record<string, unknown>, deps: RefActionAdapterDependencies): Promise<Record<string, unknown>>;
+  planRefAction(
+    args: Record<string, unknown>,
+    deps: RefActionAdapterDependencies,
+  ): Promise<Record<string, unknown>>;
   refPoint(ref: unknown, deps: RefActionAdapterDependencies): Promise<Record<string, unknown>>;
-  scrollPlan(args: Record<string, unknown>, deps: RefActionAdapterDependencies): Promise<Record<string, unknown>>;
+  scrollPlan(
+    args: Record<string, unknown>,
+    deps: RefActionAdapterDependencies,
+  ): Promise<Record<string, unknown>>;
 };
 
 export type InteractionArgs = Record<string, unknown>;

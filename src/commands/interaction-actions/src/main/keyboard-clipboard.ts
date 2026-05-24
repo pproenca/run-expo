@@ -7,31 +7,74 @@ export async function clipboardCommand(
   deps: InteractionDependencies = defaultInteractionDependencies,
 ): Promise<InteractionPayload> {
   const action = requireString(args.action ?? "read", "action");
-  if (!["read", "write", "paste"].includes(action)) throw new Error(`Unknown clipboard action: ${action}`);
+  if (!["read", "write", "paste"].includes(action))
+    throw new Error(`Unknown clipboard action: ${action}`);
   if (action !== "read") {
     const policyDenied = await policyGate(args, `clipboard.${action}`, "clipboard", deps);
     if (policyDenied) return policyDenied;
   }
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: `clipboard.${action}`, device };
   }
   if (action === "read") {
-    const result = await deps.execFile("xcrun", ["simctl", "pbpaste", device.udid], { timeout: 10_000, rejectOnError: false });
-    return { available: !result.error, action, device, text: result.stdout, stderr: truncate(result.stderr), error: result.error ?? null };
+    const result = await deps.execFile("xcrun", ["simctl", "pbpaste", device.udid], {
+      timeout: 10_000,
+      rejectOnError: false,
+    });
+    return {
+      available: !result.error,
+      action,
+      device,
+      text: result.stdout,
+      stderr: truncate(result.stderr),
+      error: result.error ?? null,
+    };
   }
   if (action === "write") {
     const text = requireString(args.text, "text");
-    const result = await deps.execFile("xcrun", ["simctl", "pbcopy", device.udid], { input: text, timeout: 10_000, rejectOnError: false });
-    return { available: !result.error, action, device, textLength: text.length, stdout: truncate(result.stdout), stderr: truncate(result.stderr), error: result.error ?? null };
+    const result = await deps.execFile("xcrun", ["simctl", "pbcopy", device.udid], {
+      input: text,
+      timeout: 10_000,
+      rejectOnError: false,
+    });
+    return {
+      available: !result.error,
+      action,
+      device,
+      textLength: text.length,
+      stdout: truncate(result.stdout),
+      stderr: truncate(result.stderr),
+      error: result.error ?? null,
+    };
   }
   const axe = await deps.commandPath("axe");
-  if (!axe) return { available: false, action, reason: "clipboard paste requires axe key-combo support.", device };
-  const result = await deps.execFile(axe, ["key-combo", "--modifiers", "227", "--key", "25", "--udid", device.udid], {
-    timeout: 10_000,
-    rejectOnError: false,
-  });
-  return { available: !result.error, action, device, tool: "axe", stdout: truncate(result.stdout), stderr: truncate(result.stderr), error: result.error ?? null };
+  if (!axe)
+    return {
+      available: false,
+      action,
+      reason: "clipboard paste requires axe key-combo support.",
+      device,
+    };
+  const result = await deps.execFile(
+    axe,
+    ["key-combo", "--modifiers", "227", "--key", "25", "--udid", device.udid],
+    {
+      timeout: 10_000,
+      rejectOnError: false,
+    },
+  );
+  return {
+    available: !result.error,
+    action,
+    device,
+    tool: "axe",
+    stdout: truncate(result.stdout),
+    stderr: truncate(result.stderr),
+    error: result.error ?? null,
+  };
 }
 
 export async function keyboardCommand(
@@ -42,21 +85,49 @@ export async function keyboardCommand(
   if (!["type", "press"].includes(action)) throw new Error(`Unknown keyboard action: ${action}`);
   const policyDenied = await policyGate(args, `keyboard.${action}`, "keyboard", deps);
   if (policyDenied) return policyDenied;
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
   const axe = await deps.commandPath("axe");
-  if (!axe) return { available: false, action, reason: "keyboard commands require the axe CLI.", device };
+  if (!axe)
+    return { available: false, action, reason: "keyboard commands require the axe CLI.", device };
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: `keyboard.${action}`, device, tool: "axe" };
   }
   if (action === "type") {
     const text = requireString(args.text, "text");
-    const result = await deps.execFile(axe, ["type", text, "--udid", device.udid], { timeout: 20_000, rejectOnError: false });
-    return { available: !result.error, action, device, tool: "axe", textLength: text.length, stdout: truncate(result.stdout), stderr: truncate(result.stderr), error: result.error ?? null };
+    const result = await deps.execFile(axe, ["type", text, "--udid", device.udid], {
+      timeout: 20_000,
+      rejectOnError: false,
+    });
+    return {
+      available: !result.error,
+      action,
+      device,
+      tool: "axe",
+      textLength: text.length,
+      stdout: truncate(result.stdout),
+      stderr: truncate(result.stderr),
+      error: result.error ?? null,
+    };
   }
   const key = requireString(args.key, "key");
   const keycode = keyCodeFor(key);
-  const result = await deps.execFile(axe, ["key", String(keycode), "--udid", device.udid], { timeout: 10_000, rejectOnError: false });
-  return { available: !result.error, action, device, tool: "axe", key, keycode, stdout: truncate(result.stdout), stderr: truncate(result.stderr), error: result.error ?? null };
+  const result = await deps.execFile(axe, ["key", String(keycode), "--udid", device.udid], {
+    timeout: 10_000,
+    rejectOnError: false,
+  });
+  return {
+    available: !result.error,
+    action,
+    device,
+    tool: "axe",
+    key,
+    keycode,
+    stdout: truncate(result.stdout),
+    stderr: truncate(result.stderr),
+    error: result.error ?? null,
+  };
 }
 
 export function keyCodeFor(key: unknown): number {

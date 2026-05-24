@@ -1,7 +1,9 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface StateRootArgs extends Record<string, unknown> {
   stateDir?: string | null;
@@ -18,19 +20,28 @@ export interface DashboardSession {
   path: string;
 }
 
-const DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
+const DASHBOARD_LIMITATION =
+  "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
 
-export async function dashboardCommand(args: Record<string, unknown> = {}): Promise<ToolTextResult> {
+export async function dashboardCommand(
+  args: Record<string, unknown> = {},
+): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "status", "action");
-  if (!["start", "status", "stop"].includes(action)) throw new Error(`Unknown dashboard action: ${action}`);
+  if (!["start", "status", "stop"].includes(action))
+    throw new Error(`Unknown dashboard action: ${action}`);
   const stateRoot = resolveExpoStateRoot(args);
   const dashboardDir = join(stateRoot, "dashboard");
   const statePath = join(dashboardDir, "dashboard-state.json");
   await mkdir(dashboardDir, { recursive: true });
   const previous = asRecord(await readJsonFile(statePath).catch(() => null));
   const previousArtifacts = asRecord(previous?.artifacts);
-  const status = action === "start" ? "running" : action === "stop" ? "stopped" : previous?.status ?? "stopped";
+  const status =
+    action === "start"
+      ? "running"
+      : action === "stop"
+        ? "stopped"
+        : (previous?.status ?? "stopped");
   const payload = {
     available: true,
     action,
@@ -39,7 +50,9 @@ export async function dashboardCommand(args: Record<string, unknown> = {}): Prom
     stateRoot,
     sessions: await dashboardSessions(stateRoot),
     artifacts: {
-      json: resolve(String(args.outputPath ?? previousArtifacts?.json ?? join(dashboardDir, "dashboard.json"))),
+      json: resolve(
+        String(args.outputPath ?? previousArtifacts?.json ?? join(dashboardDir, "dashboard.json")),
+      ),
       html: String(previousArtifacts?.html ?? join(dashboardDir, "index.html")),
     },
     limitations: [DASHBOARD_LIMITATION],
@@ -71,9 +84,14 @@ export async function dashboardSessions(stateRoot: string): Promise<DashboardSes
   return sessions;
 }
 
-export async function writeDashboardHtml(file: string, payload: { status: unknown; sessions: unknown[] }): Promise<void> {
+export async function writeDashboardHtml(
+  file: string,
+  payload: { status: unknown; sessions: unknown[] },
+): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `<!doctype html>
+  await writeFile(
+    file,
+    `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>expo98 dashboard</title></head>
 <body>
@@ -83,7 +101,9 @@ export async function writeDashboardHtml(file: string, payload: { status: unknow
 <pre>${escapeHtml(JSON.stringify(payload.sessions, null, 2))}</pre>
 </body>
 </html>
-`, "utf8");
+`,
+    "utf8",
+  );
 }
 
 export function resolveExpoStateRoot(args: StateRootArgs = {}): string {
@@ -119,10 +139,13 @@ export function clampNumber(value: unknown, min: number, max: number): number {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }

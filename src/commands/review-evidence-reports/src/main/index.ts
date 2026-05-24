@@ -1,13 +1,18 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 import { captureScreenshot } from "../../../screenshot-capture/src/main/index.ts";
 
 export interface ReviewDiffDependencies {
   openExpoRoute?: (args: Record<string, unknown>) => Promise<ToolTextResult> | ToolTextResult;
-  captureScreenshot?: (args: Record<string, unknown>) => Promise<{ outputPath?: string | null } | null> | { outputPath?: string | null } | null;
+  captureScreenshot?: (
+    args: Record<string, unknown>,
+  ) => Promise<{ outputPath?: string | null } | null> | { outputPath?: string | null } | null;
   now?: () => Date;
   nowMs?: () => number;
 }
@@ -28,8 +33,10 @@ export interface RunSummary {
   summary: unknown;
 }
 
-const REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
-const ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
+const REVIEW_LIMITATION =
+  "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
+const ROUTE_DIFF_LIMITATION =
+  "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
 
 export async function reviewCommand(
   args: Record<string, unknown> = {},
@@ -40,13 +47,18 @@ export async function reviewCommand(
   if (!["report", "matrix"].includes(action)) throw new Error(`Unknown review action: ${action}`);
   const stateRoot = resolveExpoStateRoot(args);
   const session = await readLatestSession(stateRoot);
-  const outputPath = resolve(String(args.outputPath ?? join(stateRoot, "artifacts", `review-${action}-${isoStamp(deps)}.json`)));
+  const outputPath = resolve(
+    String(
+      args.outputPath ?? join(stateRoot, "artifacts", `review-${action}-${isoStamp(deps)}.json`),
+    ),
+  );
   await mkdir(dirname(outputPath), { recursive: true });
   const runs = await listRunRecords(stateRoot);
   const latestRefs = await readLatestRefCache(args);
-  const payload = action === "matrix"
-    ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath })
-    : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
+  const payload =
+    action === "matrix"
+      ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath })
+      : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
   await writeJsonFile(outputPath, payload);
   return toolJson(payload);
 }
@@ -57,7 +69,8 @@ export async function diffCommand(
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const kind = requireString(args.kind ?? positionals[0], "kind");
-  if (!["snapshot", "screenshot", "route"].includes(kind)) throw new Error(`Unknown diff kind: ${kind}`);
+  if (!["snapshot", "screenshot", "route"].includes(kind))
+    throw new Error(`Unknown diff kind: ${kind}`);
   const normalizedArgs: Record<string, unknown> = {
     ...args,
     kind,
@@ -68,13 +81,19 @@ export async function diffCommand(
   };
   const stateRoot = resolveExpoStateRoot(normalizedArgs);
   const session = await readLatestSession(stateRoot);
-  const outputPath = resolve(String(normalizedArgs.outputPath ?? join(stateRoot, "artifacts", `diff-${kind}-${isoStamp(deps)}.json`)));
+  const outputPath = resolve(
+    String(
+      normalizedArgs.outputPath ??
+        join(stateRoot, "artifacts", `diff-${kind}-${isoStamp(deps)}.json`),
+    ),
+  );
   await mkdir(dirname(outputPath), { recursive: true });
-  const diff = kind === "snapshot"
-    ? await snapshotDiffPayload(normalizedArgs)
-    : kind === "route"
-    ? await routeDiffPayload(normalizedArgs, deps)
-    : await screenshotDiffPayload(normalizedArgs);
+  const diff =
+    kind === "snapshot"
+      ? await snapshotDiffPayload(normalizedArgs)
+      : kind === "route"
+        ? await routeDiffPayload(normalizedArgs, deps)
+        : await screenshotDiffPayload(normalizedArgs);
   const payload = {
     ...diff,
     kind,
@@ -128,13 +147,41 @@ export function reviewMatrixPayload(args: {
   const session = asRecord(args.session);
   const commands = new Set(args.runs.map((run) => run.command).filter(Boolean));
   const checks = [
-    { name: "session", passed: Boolean(session), evidence: session ? sessionDirectory(args.stateRoot, String(session.sessionId)) : null },
-    { name: "target", passed: Boolean(session?.activeTargetId), evidence: session?.activeTargetId ?? null },
-    { name: "snapshot", passed: Boolean(args.latestRefs?.snapshotId), evidence: args.latestRefs?.snapshotId ?? null },
-    { name: "screenshot", passed: commands.has("screenshot") || commands.has("annotate-screen"), evidence: "run-records" },
-    { name: "runtime", passed: commands.has("devtools") || commands.has("inspector") || commands.has("ux-context"), evidence: "run-records" },
-    { name: "diagnostics", passed: commands.has("console") || commands.has("errors") || commands.has("logs"), evidence: "run-records" },
-    { name: "interaction", passed: commands.has("tap") || commands.has("gesture") || commands.has("fill"), evidence: "run-records" },
+    {
+      name: "session",
+      passed: Boolean(session),
+      evidence: session ? sessionDirectory(args.stateRoot, String(session.sessionId)) : null,
+    },
+    {
+      name: "target",
+      passed: Boolean(session?.activeTargetId),
+      evidence: session?.activeTargetId ?? null,
+    },
+    {
+      name: "snapshot",
+      passed: Boolean(args.latestRefs?.snapshotId),
+      evidence: args.latestRefs?.snapshotId ?? null,
+    },
+    {
+      name: "screenshot",
+      passed: commands.has("screenshot") || commands.has("annotate-screen"),
+      evidence: "run-records",
+    },
+    {
+      name: "runtime",
+      passed: commands.has("devtools") || commands.has("inspector") || commands.has("ux-context"),
+      evidence: "run-records",
+    },
+    {
+      name: "diagnostics",
+      passed: commands.has("console") || commands.has("errors") || commands.has("logs"),
+      evidence: "run-records",
+    },
+    {
+      name: "interaction",
+      passed: commands.has("tap") || commands.has("gesture") || commands.has("fill"),
+      evidence: "run-records",
+    },
   ];
   return {
     available: true,
@@ -155,7 +202,8 @@ export async function routeDiffPayload(
   const routeA = requireString(args.routeA, "routeA");
   const routeB = requireString(args.routeB, "routeB");
   const screenshot = args.screenshot === true;
-  if (!deps.openExpoRoute) return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
+  if (!deps.openExpoRoute)
+    return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
   const openedA = unwrapToolJson(await deps.openExpoRoute({ ...args, route: routeA }));
   const shotA = screenshot
     ? await captureRouteScreenshot(args, deps, `route-a-${nowMs(deps)}.png`)
@@ -170,17 +218,22 @@ export async function routeDiffPayload(
     routeB,
     openedA,
     openedB,
-    screenshots: screenshot ? { before: shotA?.outputPath ?? null, after: shotB?.outputPath ?? null } : null,
+    screenshots: screenshot
+      ? { before: shotA?.outputPath ?? null, after: shotB?.outputPath ?? null }
+      : null,
     limitations: [ROUTE_DIFF_LIMITATION],
   };
 }
 
-export async function snapshotDiffPayload(args: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+export async function snapshotDiffPayload(
+  args: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
   const baseline = await readJsonFile(resolve(requireString(args.baseline, "baseline")));
   const current = args.current
     ? await readJsonFile(resolve(requireString(args.current, "current")))
     : await latestSnapshotJson(args);
-  if (!current) return { available: false, reason: "No current snapshot exists for the current session." };
+  if (!current)
+    return { available: false, reason: "No current snapshot exists for the current session." };
   const beforeRefs = new Set(refsFromSnapshot(baseline));
   const afterRefs = new Set(refsFromSnapshot(current));
   return {
@@ -194,7 +247,9 @@ export async function snapshotDiffPayload(args: Record<string, unknown> = {}): P
   };
 }
 
-export async function screenshotDiffPayload(args: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+export async function screenshotDiffPayload(
+  args: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
   const baseline = resolve(requireString(args.baseline, "baseline"));
   const current = resolve(requireString(args.current, "current"));
   const [before, after] = await Promise.all([stat(baseline), stat(current)]);
@@ -207,14 +262,18 @@ export async function screenshotDiffPayload(args: Record<string, unknown> = {}):
   };
 }
 
-export async function latestSnapshotJson(args: Record<string, unknown> = {}): Promise<unknown | null> {
+export async function latestSnapshotJson(
+  args: Record<string, unknown> = {},
+): Promise<unknown | null> {
   const cache = await readLatestRefCache(args);
   if (!cache?.snapshotId) return null;
   const stateRoot = resolveExpoStateRoot(args);
   const session = await readLatestSession(stateRoot);
   const sessionId = asRecord(session)?.sessionId;
   if (!sessionId) return cache;
-  return readJsonFile(join(sessionDirectory(stateRoot, String(sessionId)), "snapshots", `${cache.snapshotId}.json`)).catch(() => cache);
+  return readJsonFile(
+    join(sessionDirectory(stateRoot, String(sessionId)), "snapshots", `${cache.snapshotId}.json`),
+  ).catch(() => cache);
 }
 
 export async function readLatestSession(stateRoot: string): Promise<unknown | null> {
@@ -223,18 +282,28 @@ export async function readLatestSession(stateRoot: string): Promise<unknown | nu
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(
+      () => null,
+    );
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt)));
+  sessions.sort((a, b) =>
+    String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(
+      String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt),
+    ),
+  );
   return sessions[0] ?? null;
 }
 
-export async function readLatestRefCache(args: Record<string, unknown> = {}): Promise<Record<string, any> | null> {
+export async function readLatestRefCache(
+  args: Record<string, unknown> = {},
+): Promise<Record<string, any> | null> {
   const stateRoot = resolveExpoStateRoot(args);
   const session = asRecord(await readLatestSession(stateRoot));
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null) as Promise<Record<string, any> | null>;
+  return readJsonFile(
+    join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json"),
+  ).catch(() => null) as Promise<Record<string, any> | null>;
 }
 
 export async function listRunRecords(stateRoot: string): Promise<Array<Record<string, any>>> {
@@ -247,7 +316,11 @@ export async function listRunRecords(stateRoot: string): Promise<Array<Record<st
     const record = asRecord(await readJsonFile(file).catch(() => null));
     if (record) records.push({ ...record, path: file });
   }
-  records.sort((a, b) => String(a.startedAt ?? a.createdAt ?? "").localeCompare(String(b.startedAt ?? b.createdAt ?? "")));
+  records.sort((a, b) =>
+    String(a.startedAt ?? a.createdAt ?? "").localeCompare(
+      String(b.startedAt ?? b.createdAt ?? ""),
+    ),
+  );
   return records;
 }
 
@@ -293,14 +366,17 @@ export async function writeJsonFile(file: string, value: unknown): Promise<void>
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
 function refsFromSnapshot(snapshot: unknown): string[] {
   const refs = asRecord(snapshot)?.refs;
   if (!Array.isArray(refs)) return [];
-  return refs.map((record) => asRecord(record)?.ref).filter((ref): ref is string => typeof ref === "string");
+  return refs
+    .map((record) => asRecord(record)?.ref)
+    .filter((ref): ref is string => typeof ref === "string");
 }
 
 async function captureRouteScreenshot(
@@ -322,5 +398,7 @@ function nowMs(deps: ReviewDiffDependencies): number {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }

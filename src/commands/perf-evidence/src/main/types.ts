@@ -4,14 +4,37 @@ export type { ToolTextResult };
 
 export const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 
-export const PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph", "interaction", "report"];
+export const PERF_ACTIONS = [
+  "summary",
+  "startup",
+  "action",
+  "bundle",
+  "mark",
+  "measure",
+  "compare",
+  "budget",
+  "js-thread",
+  "frames",
+  "memory",
+  "ettrace",
+  "memgraph",
+  "interaction",
+  "report",
+];
 
 export interface PerfDependencies {
-  normalizeProjectCwd?: (cwd: unknown, options: { allowMissingPackageJson: true }) => Promise<string> | string;
+  normalizeProjectCwd?: (
+    cwd: unknown,
+    options: { allowMissingPackageJson: true },
+  ) => Promise<string> | string;
   expoProjectRuntimeSummary?: (cwd: string) => Promise<PerfProjectSummary> | PerfProjectSummary;
   metroStatusPayload?: (args: { metroPort: number }) => Promise<PerfMetroStatus> | PerfMetroStatus;
   metroTargets?: (metroPort: number) => Promise<PerfMetroTarget[]> | PerfMetroTarget[];
-  evaluateHermesExpression?: (url: string, expression: string, options: { timeoutMs: number }) => Promise<PerfHermesEvaluation> | PerfHermesEvaluation;
+  evaluateHermesExpression?: (
+    url: string,
+    expression: string,
+    options: { timeoutMs: number },
+  ) => Promise<PerfHermesEvaluation> | PerfHermesEvaluation;
   findUp?: (cwd: string, name: string) => Promise<string | null> | string | null;
   readJsonFile?: (file: string) => Promise<unknown> | unknown;
   writeFile?: (file: string, data: string, encoding: "utf8") => Promise<void> | void;
@@ -105,7 +128,11 @@ export interface PerfPayload extends Record<string, unknown> {
 export interface PerfRuntimePayload extends Record<string, unknown> {
   network?: { requests?: PerfNetworkRequest[] };
   renders?: { commits?: PerfRenderCommit[] };
-  frames?: { samples?: PerfFrameSample[]; droppedFrameCount?: number; worstFrameMs?: number | null };
+  frames?: {
+    samples?: PerfFrameSample[];
+    droppedFrameCount?: number;
+    worstFrameMs?: number | null;
+  };
 }
 
 export interface PerfNetworkRequest extends Record<string, unknown> {

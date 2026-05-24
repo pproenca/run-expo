@@ -16,5 +16,7 @@ export function clampNumber(value: unknown, min: number, max: number): number {
 }
 
 export function normalizeFinderText(value: unknown): string {
-  return String(value ?? "").toLowerCase().trim();
+  return String(value ?? "")
+    .toLowerCase()
+    .trim();
 }

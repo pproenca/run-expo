@@ -1,6 +1,6 @@
+import { defaultInteractionDependencies } from "./dependencies.js";
 import { automationGestureInternal } from "./gestures.js";
 import { keyboardCommand } from "./keyboard-clipboard.js";
-import { defaultInteractionDependencies } from "./dependencies.js";
 import {
   androidDeviceArgs,
   asRecord,
@@ -44,28 +44,53 @@ async function automationTapInternal(
   const y = String(clampNumber(args.y, 0, Number.MAX_SAFE_INTEGER));
   if (args.dryRun === true) {
     const iosTool = platform === "ios" ? await resolveIosInteractionTool(deps) : null;
-    const iosCommand = iosTool?.tool === "axe"
-      ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString(args.device) ?? "<booted-device>"]
-      : ["idb", "ui", "tap", x, y, "--udid", optionalString(args.device) ?? "<booted-device>"];
+    const iosCommand =
+      iosTool?.tool === "axe"
+        ? [
+            "axe",
+            "tap",
+            "-x",
+            x,
+            "-y",
+            y,
+            "--udid",
+            optionalString(args.device) ?? "<booted-device>",
+          ]
+        : ["idb", "ui", "tap", x, y, "--udid", optionalString(args.device) ?? "<booted-device>"];
     return {
       available: true,
       dryRun: true,
       platform,
       device: optionalString(args.device),
-      tool: platform === "android" ? "adb" : iosTool?.tool ?? "idb",
+      tool: platform === "android" ? "adb" : (iosTool?.tool ?? "idb"),
       point: { x: Number(x), y: Number(y) },
-      command: platform === "android"
-        ? ["adb", ...androidDeviceArgs(optionalString(args.device), ["shell", "input", "tap", x, y])]
-        : iosCommand,
+      command:
+        platform === "android"
+          ? [
+              "adb",
+              ...androidDeviceArgs(optionalString(args.device), ["shell", "input", "tap", x, y]),
+            ]
+          : iosCommand,
     };
   }
 
   if (platform === "android") {
-    const result = await deps.execFile("adb", androidDeviceArgs(optionalString(args.device), ["shell", "input", "tap", x, y]), {
-      timeout: 20_000,
-      rejectOnError: false,
-    });
-    return { platform, device: optionalString(args.device), x: Number(x), y: Number(y), stdout: truncate(result.stdout), stderr: truncate(result.stderr) };
+    const result = await deps.execFile(
+      "adb",
+      androidDeviceArgs(optionalString(args.device), ["shell", "input", "tap", x, y]),
+      {
+        timeout: 20_000,
+        rejectOnError: false,
+      },
+    );
+    return {
+      platform,
+      device: optionalString(args.device),
+      x: Number(x),
+      y: Number(y),
+      stdout: truncate(result.stdout),
+      stderr: truncate(result.stderr),
+    };
   }
 
   const tool = await resolveIosInteractionTool(deps);
@@ -74,12 +99,23 @@ async function automationTapInternal(
       "iOS coordinate taps require the idb or axe CLI, but neither is installed or on PATH. Install idb or axe for iOS coordinate automation.",
     );
   }
-  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, { preferBooted: true });
-  const command = tool.tool === "axe"
-    ? ["tap", "-x", x, "-y", y, "--udid", device.udid]
-    : ["ui", "tap", x, y, "--udid", device.udid];
+  const device = await deps.resolveIosDevice(optionalString(args.device) ?? undefined, {
+    preferBooted: true,
+  });
+  const command =
+    tool.tool === "axe"
+      ? ["tap", "-x", x, "-y", y, "--udid", device.udid]
+      : ["ui", "tap", x, y, "--udid", device.udid];
   const result = await deps.execFile(tool.path, command, { timeout: 20_000, rejectOnError: false });
-  return { platform, device, tool: tool.tool, x: Number(x), y: Number(y), stdout: truncate(result.stdout), stderr: truncate(result.stderr) };
+  return {
+    platform,
+    device,
+    tool: tool.tool,
+    x: Number(x),
+    y: Number(y),
+    stdout: truncate(result.stdout),
+    stderr: truncate(result.stderr),
+  };
 }
 
 export async function refActionCommand(
@@ -91,7 +127,13 @@ export async function refActionCommand(
     const record = await deps.readRefRecord(args.ref, args);
     return record.available === false
       ? record
-      : { available: true, action: command, ref: args.ref, reason: "Ref is present in the current snapshot.", record: record.record };
+      : {
+          available: true,
+          action: command,
+          ref: args.ref,
+          reason: "Ref is present in the current snapshot.",
+          record: record.record,
+        };
   }
   if (command === "blur") {
     const policyDenied = await policyGate(args, "ref.blur", "ref", deps);
@@ -101,7 +143,11 @@ export async function refActionCommand(
   if (["focus", "check", "uncheck", "select"].includes(command)) {
     const policyDenied = await policyGate(args, `ref.${command}`, "ref", deps);
     if (policyDenied) return policyDenied;
-    const tapped = await automationTapInternal({ ...args, ref: args.ref, dryRun: args.dryRun }, deps, true);
+    const tapped = await automationTapInternal(
+      { ...args, ref: args.ref, dryRun: args.dryRun },
+      deps,
+      true,
+    );
     return { ...tapped, action: command, ref: args.ref, value: args.text ?? null };
   }
   if (command === "fill") {
@@ -110,7 +156,14 @@ export async function refActionCommand(
     const ref = requireString(args.ref, "ref");
     const text = requireString(args.text, "text");
     if (args.dryRun === true) {
-      return { available: true, dryRun: true, action: command, ref, textLength: text.length, steps: ["tap ref", "type text"] };
+      return {
+        available: true,
+        dryRun: true,
+        action: command,
+        ref,
+        textLength: text.length,
+        steps: ["tap ref", "type text"],
+      };
     }
     const tapped = await automationTapInternal({ ...args, ref }, deps, true);
     if (tapped.available === false) return { ...tapped, action: command, ref };
@@ -123,14 +176,18 @@ export async function refActionCommand(
     const point = await deps.refPoint(args.ref, args);
     if (point.available === false) return point;
     const coordinates = asRecord(point.point);
-    return automationGestureInternal({
-      ...args,
-      gesture: command === "long-press" ? "long-press" : "tap",
-      x: coordinates.x,
-      y: coordinates.y,
-      repeat: command === "dbltap" ? 2 : 1,
-      intervalMs: command === "dbltap" ? 80 : args.intervalMs,
-    }, deps, true);
+    return automationGestureInternal(
+      {
+        ...args,
+        gesture: command === "long-press" ? "long-press" : "tap",
+        x: coordinates.x,
+        y: coordinates.y,
+        repeat: command === "dbltap" ? 2 : 1,
+        intervalMs: command === "dbltap" ? 80 : args.intervalMs,
+      },
+      deps,
+      true,
+    );
   }
   if (command === "drag") {
     const policyDenied = await policyGate(args, "ref.drag", "ref", deps);
@@ -139,22 +196,35 @@ export async function refActionCommand(
     const end = await deps.refPoint(args.targetRef, args);
     if (start.available === false) return start;
     if (end.available === false) return { ...end, role: "targetRef" };
-    return automationGestureInternal({
-      ...args,
-      gesture: "drag",
-      startX: asRecord(start.point).x,
-      startY: asRecord(start.point).y,
-      endX: asRecord(end.point).x,
-      endY: asRecord(end.point).y,
-      durationMs: args.durationMs ?? 600,
-    }, deps, true);
+    return automationGestureInternal(
+      {
+        ...args,
+        gesture: "drag",
+        startX: asRecord(start.point).x,
+        startY: asRecord(start.point).y,
+        endX: asRecord(end.point).x,
+        endY: asRecord(end.point).y,
+        durationMs: args.durationMs ?? 600,
+      },
+      deps,
+      true,
+    );
   }
   if (command === "scroll") {
     const policyDenied = await policyGate(args, "ref.scroll", "ref", deps);
     if (policyDenied) return policyDenied;
     const plan = await deps.scrollPlan(args);
     if (plan.available === false || args.dryRun === true) return plan;
-    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
+    return automationGestureInternal(
+      {
+        ...args,
+        gesture: "swipe",
+        ...asRecord(plan.coordinates),
+        durationMs: args.durationMs ?? 250,
+      },
+      deps,
+      true,
+    );
   }
   throw new Error(`Unknown ref action command: ${command}`);
 }

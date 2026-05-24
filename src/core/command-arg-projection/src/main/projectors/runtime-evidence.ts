@@ -23,7 +23,11 @@ export const runtimeEvidenceCommandProjectors: Record<string, CommandProjector> 
   profiler: projectPerfArgs,
 };
 
-function projectDevtoolsArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectDevtoolsArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     action: args.action ?? args._[0],
     subaction: args.subaction ?? (args._[0] === "events" ? args._[1] : undefined),
@@ -35,14 +39,28 @@ function projectDevtoolsArgs({ args, globals, cwd }: CommandProjectionContext): 
 }
 
 function projectDiagnosticsArgs({ args, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.clear === true ? "clear" : args.action ?? args._[0], limit: args.limit, metroPort: args.metroPort, cwd });
+  return pickDefined({
+    action: args.clear === true ? "clear" : (args.action ?? args._[0]),
+    limit: args.limit,
+    metroPort: args.metroPort,
+    cwd,
+  });
 }
 
 function projectMetroArgs({ args, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0], stackFile: args.stackFile ?? args.file ?? args._[1], metroPort: args.metroPort, cwd });
+  return pickDefined({
+    action: args.action ?? args._[0],
+    stackFile: args.stackFile ?? args.file ?? args._[1],
+    metroPort: args.metroPort,
+    cwd,
+  });
 }
 
-function projectNavigationArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectNavigationArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     action: args.action ?? args._[0],
     tab: args.tab ?? args._[1],
@@ -59,12 +77,17 @@ function projectNavigationArgs({ args, globals, cwd }: CommandProjectionContext)
   });
 }
 
-function projectNetworkArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectNetworkArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     action: args.action ?? args._[0],
     harAction: args.harAction ?? (args._[0] === "har" ? args._[1] : undefined),
     requestId: args.requestId ?? (args._[0] === "request" ? args._[1] : undefined),
-    outputPath: args.outputPath ?? (args._[0] === "har" && args._[1] === "stop" ? args._[2] : undefined),
+    outputPath:
+      args.outputPath ?? (args._[0] === "har" && args._[1] === "stop" ? args._[2] : undefined),
     limit: args.limit,
     metroPort: args.metroPort,
     cwd,
@@ -73,7 +96,11 @@ function projectNetworkArgs({ args, globals, cwd }: CommandProjectionContext): P
   });
 }
 
-function projectStorageArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectStorageArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     store: args.store ?? args._[0],
     action: args.action ?? args._[1] ?? "list",
@@ -87,11 +114,27 @@ function projectStorageArgs({ args, globals, cwd }: CommandProjectionContext): P
 }
 
 function projectStateArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "list", name: args.name ?? args._[1], metroPort: args.metroPort, actionPolicy: args.actionPolicy ?? globals.actionPolicy, cwd });
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "list",
+    name: args.name ?? args._[1],
+    metroPort: args.metroPort,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    cwd,
+  });
 }
 
-function projectControlsArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "list", name: args.name ?? args._[1], metroPort: args.metroPort, actionPolicy: args.actionPolicy ?? globals.actionPolicy, cwd });
+function projectControlsArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "list",
+    name: args.name ?? args._[1],
+    metroPort: args.metroPort,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    cwd,
+  });
 }
 
 function projectBridgeArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
@@ -106,20 +149,48 @@ function projectBridgeArgs({ args, globals, cwd }: CommandProjectionContext): Pr
   });
 }
 
-function projectAccessibilityArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "tree", ref: args.ref ?? args._[1], device: args.device, metroPort: args.metroPort, dryRun: args.dryRun, cwd, root: globals.root, stateDir: globals.stateDir });
+function projectAccessibilityArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "tree",
+    ref: args.ref ?? args._[1],
+    device: args.device,
+    metroPort: args.metroPort,
+    dryRun: args.dryRun,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir,
+  });
 }
 
 function projectDialogArgs({ args, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "status", text: args.text ?? args._[1], metroPort: args.metroPort, cwd });
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "status",
+    text: args.text ?? args._[1],
+    metroPort: args.metroPort,
+    cwd,
+  });
 }
 
 function projectSheetArgs({ args, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "status", metroPort: args.metroPort, cwd });
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "status",
+    metroPort: args.metroPort,
+    cwd,
+  });
 }
 
 function projectRecordArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ action: args.action ?? args._[0] ?? "start", outputPath: args.outputPath ?? args._[1], cwd, root: globals.root, stateDir: globals.stateDir });
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "start",
+    outputPath: args.outputPath ?? args._[1],
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir,
+  });
 }
 
 function projectDiffArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
@@ -155,19 +226,42 @@ function projectRnArgs({ args, globals, cwd }: CommandProjectionContext): Projec
   });
 }
 
-function projectPerfArgs({ command, args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectPerfArgs({
+  command,
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
-    action: command === "profiler" ? "ettrace" : args.action ?? args._[0] ?? "summary",
-    subaction: command === "profiler"
-      ? args.subaction ?? args.action ?? args._[0] ?? "start"
-      : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph", "interaction"].includes(String(args._[0])) ? args._[1] : undefined),
-    label: args.label ?? (args._[0] === "action" ? args._[1] : ["measure", "interaction"].includes(String(args._[0])) ? args._[2] : undefined),
+    action: command === "profiler" ? "ettrace" : (args.action ?? args._[0] ?? "summary"),
+    subaction:
+      command === "profiler"
+        ? (args.subaction ?? args.action ?? args._[0] ?? "start")
+        : (args.subaction ??
+          (["mark", "measure", "budget", "ettrace", "memgraph", "interaction"].includes(
+            String(args._[0]),
+          )
+            ? args._[1]
+            : undefined)),
+    label:
+      args.label ??
+      (args._[0] === "action"
+        ? args._[1]
+        : ["measure", "interaction"].includes(String(args._[0]))
+          ? args._[2]
+          : undefined),
     interaction: args.interaction ?? (args._[0] === "report" ? args._[1] : undefined),
     bundleArtifact: args.bundleArtifact ?? (args._[0] === "bundle" ? args._[1] : undefined),
     baseline: args.baseline,
     candidate: args.candidate,
     file: args.file,
-    nativeArtifact: args.nativeArtifact ?? (command === "profiler" ? args._[1] : ["ettrace", "memgraph"].includes(String(args._[0])) ? args._[2] : undefined),
+    nativeArtifact:
+      args.nativeArtifact ??
+      (command === "profiler"
+        ? args._[1]
+        : ["ettrace", "memgraph"].includes(String(args._[0]))
+          ? args._[2]
+          : undefined),
     outputPath: args.outputPath,
     buildKind: args.buildKind,
     samples: args.samples,

@@ -1,14 +1,25 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-
-import type { RefRecord, ScreenBox, SemanticBridgeSnapshot, SnapshotArgs, SnapshotCommandDependencies, SnapshotFilters, SnapshotResult } from "./domain.js";
+import { evaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
+import { randomBase36Suffix } from "../../../../state/session-run-records/src/main/ids.js";
+import {
+  resolveExpoStateRoot,
+  sessionDirectory,
+  sessionJsonPath,
+} from "../../../../state/session-run-records/src/main/paths.js";
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+import type {
+  RefRecord,
+  ScreenBox,
+  SemanticBridgeSnapshot,
+  SnapshotArgs,
+  SnapshotCommandDependencies,
+  SnapshotFilters,
+  SnapshotResult,
+} from "./domain.js";
 import { buildSnapshotFilters } from "./filters.js";
 import { persistNativeSnapshot, persistSemanticSnapshot } from "./persistence.js";
-import { evaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
-import { metroTargets } from "../../../metro-probes/src/main/index.ts";
-import { randomBase36Suffix } from "../../../../state/session-run-records/src/main/ids.js";
-import { resolveExpoStateRoot, sessionDirectory, sessionJsonPath } from "../../../../state/session-run-records/src/main/paths.js";
 
 export async function snapshotCommand(
   args: SnapshotArgs = {},
@@ -40,12 +51,14 @@ export async function snapshotCommand(
   }
 
   const filters = buildSnapshotFilters(args);
-  const semanticBridge = await deps.captureSemanticBridge(args, { stateRoot, session, filters }).catch((error: unknown) => ({
-    available: false as const,
-    source: "plugin-bridge-semantic",
-    code: "transport-failure",
-    reason: formatError(error),
-  }));
+  const semanticBridge = await deps
+    .captureSemanticBridge(args, { stateRoot, session, filters })
+    .catch((error: unknown) => ({
+      available: false as const,
+      source: "plugin-bridge-semantic",
+      code: "transport-failure",
+      reason: formatError(error),
+    }));
   if (semanticBridge.available === true) {
     return persistSemanticSnapshot({ stateRoot, session, filters, semanticBridge }, deps);
   }
@@ -72,13 +85,16 @@ export async function snapshotCommand(
     };
   }
 
-  return persistNativeSnapshot({
-    stateRoot,
-    session,
-    filters,
-    semanticBridge,
-    accessibilityTree: JSON.parse(result.stdout || "[]"),
-  }, deps);
+  return persistNativeSnapshot(
+    {
+      stateRoot,
+      session,
+      filters,
+      semanticBridge,
+      accessibilityTree: JSON.parse(result.stdout || "[]"),
+    },
+    deps,
+  );
 }
 
 const defaultSnapshotDependencies: SnapshotCommandDependencies = {
@@ -99,21 +115,33 @@ const defaultSnapshotDependencies: SnapshotCommandDependencies = {
     const sessions = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(
+        () => null,
+      );
       if (record) sessions.push(record as any);
     }
-    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    sessions.sort((left, right) =>
+      String(right.updatedAt ?? right.createdAt).localeCompare(
+        String(left.updatedAt ?? left.createdAt),
+      ),
+    );
     return sessions[0] ?? null;
   },
   readSelectedTarget: async (stateRoot, session) => {
-    return readJson(join(sessionDirectory(stateRoot, session.sessionId), "target.json")).catch(() => null);
+    return readJson(join(sessionDirectory(stateRoot, session.sessionId), "target.json")).catch(
+      () => null,
+    );
   },
   captureSemanticBridge,
   findAxeCli: () => commandPath("axe"),
-  describeNativeUi: (axePath, deviceId) => execFile(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12_000 }),
+  describeNativeUi: (axePath, deviceId) =>
+    execFile(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12_000 }),
 };
 
-async function captureSemanticBridge(args: SnapshotArgs, context: { filters: SnapshotFilters }): Promise<SemanticBridgeSnapshot | { available: false; [key: string]: unknown }> {
+async function captureSemanticBridge(
+  args: SnapshotArgs,
+  context: { filters: SnapshotFilters },
+): Promise<SemanticBridgeSnapshot | { available: false; [key: string]: unknown }> {
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const targets = await metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
@@ -129,7 +157,11 @@ async function captureSemanticBridge(args: SnapshotArgs, context: { filters: Sna
     };
   }
 
-  const result = await evaluateHermesExpression(webSocketDebuggerUrl, semanticBridgeExpression(context.filters), { timeoutMs: 5000 });
+  const result = await evaluateHermesExpression(
+    webSocketDebuggerUrl,
+    semanticBridgeExpression(context.filters),
+    { timeoutMs: 5000 },
+  );
   const value = result.result?.result?.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {
@@ -149,7 +181,9 @@ async function captureSemanticBridge(args: SnapshotArgs, context: { filters: Sna
       available: false,
       source: normalized.source,
       code: "app-bridge-unavailable",
-      reason: normalized.reason ?? "No semantic or React Native bridge data is installed in the app runtime.",
+      reason:
+        normalized.reason ??
+        "No semantic or React Native bridge data is installed in the app runtime.",
       metroPort,
       target,
       transport: result.diagnostics ?? result.cdp ?? null,
@@ -214,7 +248,10 @@ function semanticBridgeExpression(filters: SnapshotFilters): string {
   })()`;
 }
 
-function normalizeSemanticBridgeSnapshot(value: Record<string, any>, filters: SnapshotFilters): {
+function normalizeSemanticBridgeSnapshot(
+  value: Record<string, any>,
+  filters: SnapshotFilters,
+): {
   source: string;
   bridgeVersion: string | null;
   routeHint: string | null;
@@ -224,20 +261,35 @@ function normalizeSemanticBridgeSnapshot(value: Record<string, any>, filters: Sn
   limitations: string[];
 } {
   const source = typeof value.source === "string" ? value.source : "app-instrumentation";
-  const rawRefs = flattenSemanticNodes(firstArray(value.refs, value.tree, value.nodes, value.elements, value.items), filters);
+  const rawRefs = flattenSemanticNodes(
+    firstArray(value.refs, value.tree, value.nodes, value.elements, value.items),
+    filters,
+  );
   const refs = rawRefs
     .map((node) => normalizeSemanticRef(node, filters))
     .filter((node): node is Partial<RefRecord> & { raw?: unknown } => Boolean(node));
   return {
     source,
-    bridgeVersion: typeof value.bridgeVersion === "string" ? value.bridgeVersion : typeof value.version === "string" ? value.version : null,
-    routeHint: typeof value.routeHint === "string" ? value.routeHint : typeof value.route === "string" ? value.route : null,
+    bridgeVersion:
+      typeof value.bridgeVersion === "string"
+        ? value.bridgeVersion
+        : typeof value.version === "string"
+          ? value.version
+          : null,
+    routeHint:
+      typeof value.routeHint === "string"
+        ? value.routeHint
+        : typeof value.route === "string"
+          ? value.route
+          : null,
     refs,
     rawCount: rawRefs.length,
     reason: typeof value.reason === "string" ? value.reason : undefined,
-    limitations: Array.isArray(value.limitations) ? value.limitations.map(String) : [
-      "Semantic snapshot data comes from app-side dev instrumentation exposed through Hermes Runtime.evaluate.",
-    ],
+    limitations: Array.isArray(value.limitations)
+      ? value.limitations.map(String)
+      : [
+          "Semantic snapshot data comes from app-side dev instrumentation exposed through Hermes Runtime.evaluate.",
+        ],
   };
 }
 
@@ -254,25 +306,76 @@ function flattenSemanticNodes(nodes: unknown[], filters: SnapshotFilters): unkno
   return flattened;
 }
 
-function normalizeSemanticRef(node: unknown, filters: SnapshotFilters): (Partial<RefRecord> & { raw?: unknown }) | null {
+function normalizeSemanticRef(
+  node: unknown,
+  filters: SnapshotFilters,
+): (Partial<RefRecord> & { raw?: unknown }) | null {
   const record = asRecord(node);
   if (!record) return null;
   const element = asRecord(record.element);
-  const role = stringOrNull(record.role ?? element?.role ?? record.accessibilityRole ?? element?.accessibilityRole ?? record.type);
-  const explicitActions = actionsFrom(record.actions ?? element?.actions ?? record.accessibilityActions ?? element?.accessibilityActions ?? record.handlers);
-  const component = stringOrNull(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type);
-  const actions = explicitActions.length ? explicitActions : actionsForRoleOrComponent(role, component);
+  const role = stringOrNull(
+    record.role ??
+      element?.role ??
+      record.accessibilityRole ??
+      element?.accessibilityRole ??
+      record.type,
+  );
+  const explicitActions = actionsFrom(
+    record.actions ??
+      element?.actions ??
+      record.accessibilityActions ??
+      element?.accessibilityActions ??
+      record.handlers,
+  );
+  const component = stringOrNull(
+    record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type,
+  );
+  const actions = explicitActions.length
+    ? explicitActions
+    : actionsForRoleOrComponent(role, component);
   if (filters.interactiveOnly && actions.length === 0 && !role) return null;
   return {
     role,
-    label: stringOrNull(record.label ?? element?.label ?? record.accessibilityLabel ?? element?.accessibilityLabel ?? record.title ?? element?.title),
+    label: stringOrNull(
+      record.label ??
+        element?.label ??
+        record.accessibilityLabel ??
+        element?.accessibilityLabel ??
+        record.title ??
+        element?.title,
+    ),
     text: stringOrNull(record.text ?? element?.text ?? record.value ?? element?.value),
-    placeholder: stringOrNull(record.placeholder ?? element?.placeholder ?? record.placeholderText ?? element?.placeholderText),
-    testID: stringOrNull(record.testID ?? element?.testID ?? record.testId ?? element?.testId ?? record.testid),
-    nativeID: stringOrNull(record.nativeID ?? element?.nativeID ?? record.nativeId ?? element?.nativeId),
+    placeholder: stringOrNull(
+      record.placeholder ??
+        element?.placeholder ??
+        record.placeholderText ??
+        element?.placeholderText,
+    ),
+    testID: stringOrNull(
+      record.testID ?? element?.testID ?? record.testId ?? element?.testId ?? record.testid,
+    ),
+    nativeID: stringOrNull(
+      record.nativeID ?? element?.nativeID ?? record.nativeId ?? element?.nativeId,
+    ),
     component,
-    source: record.source ?? element?.source ?? record.sourceLocation ?? element?.sourceLocation ?? record._source ?? element?._source ?? null,
-    box: normalizeBox(record.box ?? element?.box ?? record.bounds ?? element?.bounds ?? record.frame ?? element?.frame ?? record.layout ?? element?.layout),
+    source:
+      record.source ??
+      element?.source ??
+      record.sourceLocation ??
+      element?.sourceLocation ??
+      record._source ??
+      element?._source ??
+      null,
+    box: normalizeBox(
+      record.box ??
+        element?.box ??
+        record.bounds ??
+        element?.bounds ??
+        record.frame ??
+        element?.frame ??
+        record.layout ??
+        element?.layout,
+    ),
     actions,
     disabled: typeof record.disabled === "boolean" ? record.disabled : undefined,
     raw: node,
@@ -297,7 +400,11 @@ function firstArray(...values: unknown[]): unknown[] {
 function actionsFrom(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => typeof item === "string" ? item : stringOrNull(asRecord(item)?.name ?? asRecord(item)?.action))
+    .map((item) =>
+      typeof item === "string"
+        ? item
+        : stringOrNull(asRecord(item)?.name ?? asRecord(item)?.action),
+    )
     .filter((item): item is string => Boolean(item));
 }
 
@@ -327,7 +434,9 @@ function numberOrNull(value: unknown): number | null {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }
 
 function commandPath(command: string): Promise<string | null> {
@@ -344,13 +453,20 @@ function execFile(
   options: { timeout: number },
 ): Promise<{ stdout: string; stderr: string; error?: unknown }> {
   return new Promise((resolve) => {
-    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message, code: error.code, signal: error.signal } : undefined,
-      });
-    });
+    nodeExecFile(
+      file,
+      args,
+      { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: error
+            ? { message: error.message, code: error.code, signal: error.signal }
+            : undefined,
+        });
+      },
+    );
   });
 }
 
@@ -375,5 +491,7 @@ function formatError(error: unknown): string {
 
 function truncate(value: unknown, limit = 4_000): string {
   const text = String(value ?? "");
-  return text.length <= limit ? text : `${text.slice(0, limit)}\n[truncated ${text.length - limit} characters]`;
+  return text.length <= limit
+    ? text
+    : `${text.slice(0, limit)}\n[truncated ${text.length - limit} characters]`;
 }

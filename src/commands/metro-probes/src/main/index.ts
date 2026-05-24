@@ -1,8 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-
+import {
+  toolJson,
+  unwrapToolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
-import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface MetroTarget {
   id: string | null;
@@ -109,7 +112,9 @@ export interface MetroStatusPayload {
     reason: string | null;
     malformedTargets: TargetNormalizationError[];
   };
-  symbolication: ProbeSymbolicationResult | { available: false; reason: "Metro is unavailable."; endpoint: "/symbolicate" };
+  symbolication:
+    | ProbeSymbolicationResult
+    | { available: false; reason: "Metro is unavailable."; endpoint: "/symbolicate" };
   limitations: string[];
 }
 
@@ -148,7 +153,9 @@ export function formatError(error: unknown): string {
   return parts.join("\n\n");
 }
 
-export function targetSummary(target: Partial<MetroTarget> | null | undefined): Partial<MetroTarget> | null {
+export function targetSummary(
+  target: Partial<MetroTarget> | null | undefined,
+): Partial<MetroTarget> | null {
   if (!target) return null;
   return {
     id: target.id ?? null,
@@ -160,8 +167,11 @@ export function targetSummary(target: Partial<MetroTarget> | null | undefined): 
     webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
     reactNative: target.reactNative ?? null,
     capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      hermesRuntime:
+        typeof target.webSocketDebuggerUrl === "string" &&
+        target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend:
+        typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
       reactNative: Boolean(target.reactNative),
     },
   };
@@ -172,12 +182,21 @@ export async function metroCommand(
   deps: MetroCommandDependencies = {},
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "status", "action");
-  if (action === "reload") return toolJson(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
+  if (action === "reload")
+    return toolJson(
+      await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args),
+    );
   if (action === "symbolicate") {
-    return toolJson(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
+    return toolJson(
+      await (
+        deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps))
+      )(args),
+    );
   }
   if (action !== "status") throw new Error(`Unknown metro action: ${action}`);
-  return toolJson(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
+  return toolJson(
+    await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args),
+  );
 }
 
 export async function metroStatusPayload(
@@ -207,9 +226,14 @@ export class MetroInspectorClient {
   private readonly baseUrl: string;
   private readonly fetchLocalText: NonNullable<MetroInspectorClientDependencies["fetchLocalText"]>;
   private readonly fetchLocalJson: NonNullable<MetroInspectorClientDependencies["fetchLocalJson"]>;
-  private readonly fetchLocalLoopback: NonNullable<MetroInspectorClientDependencies["fetchLocalLoopback"]>;
+  private readonly fetchLocalLoopback: NonNullable<
+    MetroInspectorClientDependencies["fetchLocalLoopback"]
+  >;
 
-  constructor(private readonly metroPort: number, deps: MetroInspectorClientDependencies = {}) {
+  constructor(
+    private readonly metroPort: number,
+    deps: MetroInspectorClientDependencies = {},
+  ) {
     this.baseUrl = `http://127.0.0.1:${metroPort}`;
     this.fetchLocalText = deps.fetchLocalText ?? defaultFetchLocalText;
     this.fetchLocalJson = deps.fetchLocalJson ?? defaultFetchLocalJson;
@@ -230,7 +254,12 @@ export class MetroInspectorClient {
       const value = await this.fetchLocalJson(`${this.baseUrl}/json/version`, { timeoutMs: 1500 });
       return { available: true, endpoint: "/json/version", value, error: null };
     } catch (error) {
-      return { available: false, endpoint: "/json/version", value: null, error: formatError(error) };
+      return {
+        available: false,
+        endpoint: "/json/version",
+        value: null,
+        error: formatError(error),
+      };
     }
   }
 
@@ -253,7 +282,9 @@ export class MetroInspectorClient {
         available: false,
         endpoint: "/json/list",
         targets: [],
-        malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) }],
+        malformedTargets: [
+          { index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) },
+        ],
         reason: "Metro target list was malformed.",
       };
     }
@@ -275,10 +306,16 @@ export class MetroInspectorClient {
     };
   }
 
-  normalizeTarget(target: unknown, index = 0): { target: MetroTarget | null; error: TargetNormalizationError | null } {
+  normalizeTarget(
+    target: unknown,
+    index = 0,
+  ): { target: MetroTarget | null; error: TargetNormalizationError | null } {
     const record = asRecord(target);
     if (!record || Array.isArray(target)) {
-      return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape(target) } };
+      return {
+        target: null,
+        error: { index, reason: "Target was not an object.", shape: responseShape(target) },
+      };
     }
 
     const normalized: MetroTarget = {
@@ -289,17 +326,26 @@ export class MetroInspectorClient {
       deviceName: optionalString(record.deviceName),
       devtoolsFrontendUrl: optionalString(record.devtoolsFrontendUrl),
       webSocketDebuggerUrl: optionalString(record.webSocketDebuggerUrl),
-      reactNative: record.reactNative && typeof record.reactNative === "object"
-        ? record.reactNative as Record<string, unknown>
-        : null,
+      reactNative:
+        record.reactNative && typeof record.reactNative === "object"
+          ? (record.reactNative as Record<string, unknown>)
+          : null,
       capabilities: {
-        hermesRuntime: typeof record.webSocketDebuggerUrl === "string" && record.webSocketDebuggerUrl.startsWith("ws"),
-        devtoolsFrontend: typeof record.devtoolsFrontendUrl === "string" && record.devtoolsFrontendUrl.length > 0,
+        hermesRuntime:
+          typeof record.webSocketDebuggerUrl === "string" &&
+          record.webSocketDebuggerUrl.startsWith("ws"),
+        devtoolsFrontend:
+          typeof record.devtoolsFrontendUrl === "string" && record.devtoolsFrontendUrl.length > 0,
         reactNative: Boolean(record.reactNative),
       },
     };
 
-    if (!normalized.id && !normalized.title && !normalized.webSocketDebuggerUrl && !normalized.devtoolsFrontendUrl) {
+    if (
+      !normalized.id &&
+      !normalized.title &&
+      !normalized.webSocketDebuggerUrl &&
+      !normalized.devtoolsFrontendUrl
+    ) {
       return {
         target: null,
         error: {
@@ -355,18 +401,23 @@ export class MetroInspectorClient {
     const targetsResult: MetroTargetsResult = statusResult.available
       ? await this.targets()
       : {
-        available: false,
-        endpoint: "/json/list",
-        targets: [],
-        malformedTargets: [],
-        reason: "Metro is unavailable.",
-      };
+          available: false,
+          endpoint: "/json/list",
+          targets: [],
+          malformedTargets: [],
+          reason: "Metro is unavailable.",
+        };
     const versionResult: MetroEndpointResult = statusResult.available
       ? await this.version()
-      : { available: false, endpoint: "/json/version", value: null, error: "Metro is unavailable." };
+      : {
+          available: false,
+          endpoint: "/json/version",
+          value: null,
+          error: "Metro is unavailable.",
+        };
     const symbolication = statusResult.available
       ? await this.probeSymbolication()
-      : { available: false, reason: "Metro is unavailable.", endpoint: "/symbolicate" } as const;
+      : ({ available: false, reason: "Metro is unavailable.", endpoint: "/symbolicate" } as const);
 
     return {
       available: statusResult.available,
@@ -409,7 +460,8 @@ function responseShape(value: unknown): unknown {
   const record = value as Record<string, unknown>;
   const shape: Record<string, unknown> = { type: "object", keys: Object.keys(record).slice(0, 20) };
   if (typeof record.type === "string") shape.resultType = record.type;
-  if (record.result && typeof record.result === "object") shape.result = responseShape(record.result);
+  if (record.result && typeof record.result === "object")
+    shape.result = responseShape(record.result);
   return shape;
 }
 
@@ -420,10 +472,13 @@ function truncate(value: unknown, limit = MAX_OUTPUT): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
-async function metroReloadPayload(args: Record<string, unknown>, deps: MetroCommandDependencies = {}): Promise<unknown> {
+async function metroReloadPayload(
+  args: Record<string, unknown>,
+  deps: MetroCommandDependencies = {},
+): Promise<unknown> {
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const targets = await metroTargets(metroPort, deps);
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
@@ -431,30 +486,49 @@ async function metroReloadPayload(args: Record<string, unknown>, deps: MetroComm
     return { available: false, action: "reload", reason: "No Metro inspector target.", metroPort };
   }
   const evaluate = deps.evaluateHermesExpression ?? sharedEvaluateHermesExpression;
-  const result = await evaluate(webSocketDebuggerUrl, `(() => {
+  const result = await evaluate(
+    webSocketDebuggerUrl,
+    `(() => {
     const devSettings = globalThis.NativeModules?.DevSettings || globalThis.__fbBatchedBridgeConfig?.remoteModuleConfig?.DevSettings;
     if (globalThis.location && typeof globalThis.location.reload === 'function') { globalThis.location.reload(); return { available: true, strategy: 'location.reload' }; }
     if (devSettings && typeof devSettings.reload === 'function') { devSettings.reload(); return { available: true, strategy: 'DevSettings.reload' }; }
     return { available: false, reason: 'No runtime reload hook was available.' };
-  })()`, { timeoutMs: 3000 });
+  })()`,
+    { timeoutMs: 3000 },
+  );
   const value = result.result?.result?.value;
   return {
-    ...(isPlainObject(value) ? value : { available: false, reason: result.error ?? "Runtime reload did not return a value." }),
+    ...(isPlainObject(value)
+      ? value
+      : { available: false, reason: result.error ?? "Runtime reload did not return a value." }),
     action: "reload",
     metroPort,
     target: targetSummary(targets[0]),
   };
 }
 
-async function metroSymbolicatePayload(args: Record<string, unknown>, deps: MetroCommandDependencies = {}): Promise<unknown> {
-  const stackFile = requireString(args.stackFile ?? positionalArg(args._, 0) ?? args.file, "stackFile");
+async function metroSymbolicatePayload(
+  args: Record<string, unknown>,
+  deps: MetroCommandDependencies = {},
+): Promise<unknown> {
+  const stackFile = requireString(
+    args.stackFile ?? positionalArg(args._, 0) ?? args.file,
+    "stackFile",
+  );
   const resolvePath = deps.resolvePath ?? path.resolve;
   const readTextFile = deps.readTextFile ?? fs.readFile;
   const resolvedStackFile = resolvePath(stackFile);
   const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const result = await postMetroSymbolicate(metroPort, stack, deps);
-  return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
+  return {
+    available: true,
+    action: "symbolicate",
+    metroPort,
+    stackFile: resolvedStackFile,
+    frameCount: stack.length,
+    result,
+  };
 }
 
 function parseComponentStackFrames(stack: string): ComponentStackFrame[] {
@@ -496,13 +570,21 @@ async function defaultFetchLocalText(url: string, options: { timeoutMs: number }
   return response.text();
 }
 
-async function defaultFetchLocalJson(url: string, options: { timeoutMs: number }): Promise<unknown> {
+async function defaultFetchLocalJson(
+  url: string,
+  options: { timeoutMs: number },
+): Promise<unknown> {
   return JSON.parse(await defaultFetchLocalText(url, options));
 }
 
 async function defaultFetchLocalLoopback(
   url: string,
-  options: { method?: "POST"; headers?: Record<string, string>; body?: string; timeoutMs?: number } = {},
+  options: {
+    method?: "POST";
+    headers?: Record<string, string>;
+    body?: string;
+    timeoutMs?: number;
+  } = {},
 ): Promise<Response> {
   const timeoutMs = options.timeoutMs ?? 1500;
   const { timeoutMs: _timeoutMs, ...request } = options;
@@ -537,7 +619,11 @@ function loopbackUrlCandidates(url: string): string[] {
   return candidates;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number,
+  init?: RequestInit,
+): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {

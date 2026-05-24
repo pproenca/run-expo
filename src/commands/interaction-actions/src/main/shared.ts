@@ -1,5 +1,5 @@
-import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { policyDeniedPayload as sharedPolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
+import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import type {
   ActionPolicyDecision,
   GesturePlan,
@@ -16,7 +16,8 @@ import { MAX_OUTPUT } from "./types.js";
 export { toolJson };
 
 export function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim() === "")
+    throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -44,7 +45,15 @@ export function createRefActionAdapter(
   };
 }
 
-export function policyDeniedPayload({ domain, action, policy }: { domain: string; action: string; policy: ActionPolicyDecision }): InteractionPayload {
+export function policyDeniedPayload({
+  domain,
+  action,
+  policy,
+}: {
+  domain: string;
+  action: string;
+  policy: ActionPolicyDecision;
+}): InteractionPayload {
   return sharedPolicyDeniedPayload({ domain, action, policy });
 }
 
@@ -55,10 +64,12 @@ export async function readRefRecordFromCache(
 ): Promise<InteractionPayload> {
   const ref = requireString(refValue, "ref");
   const cache = await deps.readLatestRefCache(args);
-  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
+  if (!cache)
+    return { available: false, reason: "No snapshot exists for the current session.", ref };
   const record = cache.refs.find((item) => item.ref === ref);
   if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
-  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  if (record.stale)
+    return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
   return { available: true, record, cache };
 }
 
@@ -96,7 +107,9 @@ export async function policyGate(
   return policy.allowed ? null : policyDeniedPayload({ domain, action, policy });
 }
 
-export async function resolveIosInteractionTool(deps: InteractionDependencies): Promise<{ tool: "idb" | "axe"; path: string } | null> {
+export async function resolveIosInteractionTool(
+  deps: InteractionDependencies,
+): Promise<{ tool: "idb" | "axe"; path: string } | null> {
   const idb = await deps.commandPath("idb");
   if (idb) return { tool: "idb", path: idb };
   const axe = await deps.commandPath("axe");
@@ -117,7 +130,7 @@ export function optionalString(value: unknown): string | null {
 }
 
 export function asRecord(value: unknown): InteractionPayload {
-  return value && typeof value === "object" ? value as InteractionPayload : {};
+  return value && typeof value === "object" ? (value as InteractionPayload) : {};
 }
 
 export function isFinitePoint(value: InteractionPayload): value is { x: number; y: number } {
@@ -135,7 +148,9 @@ export function asGesturePlan(value: unknown): GesturePlan {
   };
 }
 
-export function unwrapToolPayload(value: ToolTextResult | Record<string, unknown>): InteractionPayload {
+export function unwrapToolPayload(
+  value: ToolTextResult | Record<string, unknown>,
+): InteractionPayload {
   if (value && typeof value === "object" && Array.isArray((value as ToolTextResult).content)) {
     const text = (value as ToolTextResult).content[0]?.text ?? "{}";
     return JSON.parse(text) as InteractionPayload;

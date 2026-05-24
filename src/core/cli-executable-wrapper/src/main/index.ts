@@ -40,8 +40,14 @@ export async function runCliExecutable(deps: CliExecutableDependencies): Promise
   }
 }
 
-export function cliArgv(processArgv: readonly string[], argvOffset = DEFAULT_PROCESS_ARGV_OFFSET): string[] {
-  const offset = Number.isFinite(argvOffset) && argvOffset >= 0 ? Math.floor(argvOffset) : DEFAULT_PROCESS_ARGV_OFFSET;
+export function cliArgv(
+  processArgv: readonly string[],
+  argvOffset = DEFAULT_PROCESS_ARGV_OFFSET,
+): string[] {
+  const offset =
+    Number.isFinite(argvOffset) && argvOffset >= 0
+      ? Math.floor(argvOffset)
+      : DEFAULT_PROCESS_ARGV_OFFSET;
   return processArgv.slice(offset);
 }
 

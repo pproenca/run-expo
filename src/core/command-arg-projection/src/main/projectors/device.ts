@@ -12,8 +12,15 @@ export const deviceCommandProjectors: Record<string, CommandProjector> = {
   "open-dev-menu": projectOpenDevMenuArgs,
 };
 
-function projectBootSimulatorArgs({ args, globals }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ device: args.device, openSimulator: args.openSimulator, actionPolicy: args.actionPolicy ?? globals.actionPolicy });
+function projectBootSimulatorArgs({
+  args,
+  globals,
+}: CommandProjectionContext): ProjectedCommandArgs {
+  return pickDefined({
+    device: args.device,
+    openSimulator: args.openSimulator,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+  });
 }
 
 function projectOpenUrlArgs({ args, globals }: CommandProjectionContext): ProjectedCommandArgs {
@@ -29,7 +36,11 @@ function projectLaunchAppArgs({ args, common }: CommandProjectionContext): Proje
   return pickDefined({ ...common, packageName: args.packageName, activity: args.activity });
 }
 
-function projectAppPackageArgs({ args, globals, common }: CommandProjectionContext): ProjectedCommandArgs {
+function projectAppPackageArgs({
+  args,
+  globals,
+  common,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     ...common,
     appPath: args.appPath ?? args._[0],

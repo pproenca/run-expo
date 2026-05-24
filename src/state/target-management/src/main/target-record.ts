@@ -15,10 +15,12 @@ export function normalizeDeviceState(state: unknown): DeviceState {
 }
 
 export function stableIdPart(value: unknown): string {
-  return String(value ?? "unknown")
-    .toLowerCase()
-    .replace(/[^a-z0-9_.-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "unknown";
+  return (
+    String(value ?? "unknown")
+      .toLowerCase()
+      .replace(/[^a-z0-9_.-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "unknown"
+  );
 }
 
 export function processNameFromBundleId(bundleId: unknown): string | null {
@@ -50,7 +52,9 @@ export function targetRecord(input: {
     input.device.id,
     bundleId ?? input.metroTarget?.id ?? input.metroTarget?.title ?? "no-runtime",
     input.metroTarget ? input.metroPort : "no-metro",
-  ].map(stableIdPart).join(":");
+  ]
+    .map(stableIdPart)
+    .join(":");
 
   return {
     targetId,

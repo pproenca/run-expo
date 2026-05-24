@@ -1,6 +1,8 @@
 import { execFile as nodeExecFile } from "node:child_process";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export type DeviceListingPlatform = "all" | "ios" | "android";
 
@@ -80,7 +82,9 @@ export function clampNumber(value: unknown, min: number, max: number): number {
   return Math.min(Math.max(number, min), max);
 }
 
-export async function safeToolSection<T>(fn: () => T | Promise<T>): Promise<SafeToolSectionResult<T>> {
+export async function safeToolSection<T>(
+  fn: () => T | Promise<T>,
+): Promise<SafeToolSectionResult<T>> {
   try {
     return { ok: true, value: await fn() };
   } catch (error) {
@@ -92,19 +96,31 @@ export async function listIosPhysicalDevices(
   limit: number,
   dependencies: DeviceListingDependencies,
 ): Promise<IosPhysicalDevice[]> {
-  const { stdout } = await dependencies.execFile("xcrun", ["devicectl", "list", "devices", "--json-output", "-"], {
-    timeout: 20_000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
+  const { stdout } = await dependencies.execFile(
+    "xcrun",
+    ["devicectl", "list", "devices", "--json-output", "-"],
+    {
+      timeout: 20_000,
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  );
   const parsed: unknown = JSON.parse(stdout);
   const devices = devicesFromPhysicalPayload(parsed);
   return devices.slice(0, limit).map((device) => ({
     name: stringOrNull(deviceProperty(device, "deviceProperties", "name") ?? device.name),
     identifier: stringOrNull(device.identifier ?? device.udid),
-    platform: stringOrNull(deviceProperty(device, "deviceProperties", "platform") ?? device.platform),
-    model: stringOrNull(deviceProperty(device, "hardwareProperties", "marketingName") ?? device.model),
-    connectionType: stringOrNull(deviceProperty(device, "connectionProperties", "transportType") ?? device.connectionType),
-    state: stringOrNull(deviceProperty(device, "connectionProperties", "pairingState") ?? device.state),
+    platform: stringOrNull(
+      deviceProperty(device, "deviceProperties", "platform") ?? device.platform,
+    ),
+    model: stringOrNull(
+      deviceProperty(device, "hardwareProperties", "marketingName") ?? device.model,
+    ),
+    connectionType: stringOrNull(
+      deviceProperty(device, "connectionProperties", "transportType") ?? device.connectionType,
+    ),
+    state: stringOrNull(
+      deviceProperty(device, "connectionProperties", "pairingState") ?? device.state,
+    ),
   }));
 }
 
@@ -118,7 +134,9 @@ export async function listDevices(
 
   if (platform === "ios" || platform === "all") {
     payload.ios = await safeToolSection(async () => listIosSimulators(limit, dependencies));
-    payload.iosPhysical = await safeToolSection(async () => listIosPhysicalDevices(limit, dependencies));
+    payload.iosPhysical = await safeToolSection(async () =>
+      listIosPhysicalDevices(limit, dependencies),
+    );
   }
   if (platform === "android" || platform === "all") {
     payload.android = await safeToolSection(async () => listAndroidDevices(limit, dependencies));
@@ -128,22 +146,31 @@ export async function listDevices(
 }
 
 const defaultDeviceListingDependencies: DeviceListingDependencies = {
-  execFile: (file, args, options = {}) => new Promise((resolve, reject) => {
-    nodeExecFile(file, args, {
-      timeout: options.timeout,
-      maxBuffer: options.maxBuffer,
-    }, (error, stdout, stderr) => {
-      if (error) {
-        Object.assign(error, { stdout, stderr });
-        reject(error);
-        return;
-      }
-      resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-    });
-  }),
+  execFile: (file, args, options = {}) =>
+    new Promise((resolve, reject) => {
+      nodeExecFile(
+        file,
+        args,
+        {
+          timeout: options.timeout,
+          maxBuffer: options.maxBuffer,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            Object.assign(error, { stdout, stderr });
+            reject(error);
+            return;
+          }
+          resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+        },
+      );
+    }),
 };
 
-async function listAndroidDevices(limit: number, dependencies: DeviceListingDependencies): Promise<AndroidDevice[]> {
+async function listAndroidDevices(
+  limit: number,
+  dependencies: DeviceListingDependencies,
+): Promise<AndroidDevice[]> {
   const { stdout } = await dependencies.execFile("adb", ["devices", "-l"], { timeout: 20_000 });
   return stdout
     .split(/\r?\n/)
@@ -157,11 +184,18 @@ async function listAndroidDevices(limit: number, dependencies: DeviceListingDepe
     .slice(0, limit);
 }
 
-async function listIosSimulators(limit: number, dependencies: DeviceListingDependencies): Promise<IosSimulatorDevice[]> {
-  const { stdout } = await dependencies.execFile("xcrun", ["simctl", "list", "devices", "available", "--json"], {
-    timeout: 20_000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
+async function listIosSimulators(
+  limit: number,
+  dependencies: DeviceListingDependencies,
+): Promise<IosSimulatorDevice[]> {
+  const { stdout } = await dependencies.execFile(
+    "xcrun",
+    ["simctl", "list", "devices", "available", "--json"],
+    {
+      timeout: 20_000,
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  );
   const parsed: unknown = JSON.parse(stdout);
   const devices = isRecord(parsed) && isRecord(parsed.devices) ? parsed.devices : {};
   return Object.entries(devices)
@@ -178,21 +212,27 @@ async function listIosSimulators(limit: number, dependencies: DeviceListingDepen
         };
       });
     })
-    .sort((left, right) =>
-      Number(right.state === "Booted") - Number(left.state === "Booted")
-      || String(left.name).localeCompare(String(right.name))
+    .sort(
+      (left, right) =>
+        Number(right.state === "Booted") - Number(left.state === "Booted") ||
+        String(left.name).localeCompare(String(right.name)),
     )
     .slice(0, limit);
 }
 
-function deviceProperty(device: Record<string, unknown>, objectKey: string, propertyKey: string): unknown {
+function deviceProperty(
+  device: Record<string, unknown>,
+  objectKey: string,
+  propertyKey: string,
+): unknown {
   const parent = device[objectKey];
   return isRecord(parent) ? parent[propertyKey] : undefined;
 }
 
 function devicesFromPhysicalPayload(value: unknown): Array<Record<string, unknown>> {
   if (!isRecord(value)) throw new Error("physical device payload must be an object.");
-  const rawDevices = isRecord(value.result) && "devices" in value.result ? value.result.devices : value.devices;
+  const rawDevices =
+    isRecord(value.result) && "devices" in value.result ? value.result.devices : value.devices;
   if (!Array.isArray(rawDevices)) throw new Error("physical devices must be an array.");
   return rawDevices.map((device) => {
     if (!isRecord(device)) throw new Error("physical device entry must be an object.");

@@ -1,7 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-
-import { CLI_NAME, CLI_VERSION, type Clock, type JsonValue, type RunPayloadSummary, type RunRecorder, type RunningRunRecord } from "./domain.js";
+import {
+  CLI_NAME,
+  CLI_VERSION,
+  type Clock,
+  type JsonValue,
+  type RunPayloadSummary,
+  type RunRecorder,
+  type RunningRunRecord,
+} from "./domain.js";
 import { createRunId, randomBase36Suffix, systemClock } from "./ids.js";
 import { writeJsonFile } from "./json-store.js";
 import { formatError, redactValue, sanitizeErrorMessage } from "./redaction.js";
@@ -28,7 +35,9 @@ export async function startRunRecord(input: StartRunRecordInput): Promise<RunRec
   const startedAt = now().toISOString();
   const runId = createRunId(new Date(startedAt), input.randomSuffix ?? randomBase36Suffix);
   const root = resolve(String(input.globals.root ?? input.args.cwd ?? input.cwd ?? process.cwd()));
-  const stateDir = resolve(String(input.globals.stateDir ?? join(root, ".scratch", "expo98", "runs")));
+  const stateDir = resolve(
+    String(input.globals.stateDir ?? join(root, ".scratch", "expo98", "runs")),
+  );
   const recordPath = join(stateDir, `${runId}.json`);
   const baseRecord: RunningRunRecord = {
     schemaVersion: 1,
@@ -83,5 +92,7 @@ export function summarizeRunPayload(payload: unknown): RunPayloadSummary | null 
 }
 
 function stripUndefined(value: Record<string, JsonValue | undefined>): Record<string, JsonValue> {
-  return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined)) as Record<string, JsonValue>;
+  return Object.fromEntries(
+    Object.entries(value).filter(([, child]) => child !== undefined),
+  ) as Record<string, JsonValue>;
 }

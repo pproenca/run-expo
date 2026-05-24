@@ -3,9 +3,11 @@ import { existsSync } from "node:fs";
 import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-
 import { CURRENT_CLI_NAME } from "../../../../core/cli-identity/src/main/index.ts";
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface ExecResult {
   stdout: string;
@@ -51,11 +53,20 @@ export async function skillsCommand(
   }
   const name = requireString(args.name ?? positionals[1], "name");
   const skill = skills.find((item) => item.name === name);
-  if (!skill) return toolJson({ available: false, action, name, reason: "Skill not found.", pluginVersion: CLI_VERSION });
+  if (!skill)
+    return toolJson({
+      available: false,
+      action,
+      name,
+      reason: "Skill not found.",
+      pluginVersion: CLI_VERSION,
+    });
   return toolJson({ available: true, action, pluginVersion: CLI_VERSION, ...skill });
 }
 
-export async function listBundledSkills(deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {}): Promise<BundledSkill[]> {
+export async function listBundledSkills(
+  deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {},
+): Promise<BundledSkill[]> {
   const skillsRoot = join(pluginRoot(deps), "skills");
   const entries = await readdir(skillsRoot, { withFileTypes: true }).catch(() => []);
   const skills = [];
@@ -122,7 +133,8 @@ export async function upgradeCommand(
     currentVersion: CLI_VERSION,
     latestVersion: CLI_VERSION,
     upgradeAvailable: false,
-    reason: "No packaged remote upgrade source is configured; local plugin version is authoritative.",
+    reason:
+      "No packaged remote upgrade source is configured; local plugin version is authoritative.",
   });
 }
 
@@ -133,17 +145,49 @@ export async function releaseCommand(
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown release action: ${action}`);
-  const outsideCwd = resolve(String(args.cwd ?? await mkdtemp(join(deps.tmpDir ?? tmpdir(), "expo98-release-"))));
+  const outsideCwd = resolve(
+    String(args.cwd ?? (await mkdtemp(join(deps.tmpDir ?? tmpdir(), "expo98-release-")))),
+  );
   await mkdir(outsideCwd, { recursive: true });
   const fixture = join(outsideCwd, "routes-fixture");
   await mkdir(join(fixture, "app"), { recursive: true });
-  await writeJsonFile(join(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
-  await writeFile(join(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
+  await writeJsonFile(join(fixture, "package.json"), {
+    dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" },
+  });
+  await writeFile(
+    join(fixture, "app", "index.tsx"),
+    "export default function Index() { return null; }\n",
+    "utf8",
+  );
   const checks = [
-    await releaseCheck("version", ["--version"], outsideCwd, (result) => result.stdout.trim() === CLI_VERSION, deps),
-    await releaseCheck("help", ["--help"], outsideCwd, (result) => result.stdout.includes("perf") && result.stdout.includes("dashboard"), deps),
-    await releaseCheck("doctor-json", ["--json", "doctor"], outsideCwd, (result) => JSON.parse(result.stdout).ok === true, deps),
-    await releaseCheck("routes-fixture-json", ["--json", "routes", "--cwd", fixture], outsideCwd, (result) => JSON.parse(result.stdout).data.routeCount >= 1, deps),
+    await releaseCheck(
+      "version",
+      ["--version"],
+      outsideCwd,
+      (result) => result.stdout.trim() === CLI_VERSION,
+      deps,
+    ),
+    await releaseCheck(
+      "help",
+      ["--help"],
+      outsideCwd,
+      (result) => result.stdout.includes("perf") && result.stdout.includes("dashboard"),
+      deps,
+    ),
+    await releaseCheck(
+      "doctor-json",
+      ["--json", "doctor"],
+      outsideCwd,
+      (result) => JSON.parse(result.stdout).ok === true,
+      deps,
+    ),
+    await releaseCheck(
+      "routes-fixture-json",
+      ["--json", "routes", "--cwd", fixture],
+      outsideCwd,
+      (result) => JSON.parse(result.stdout).data.routeCount >= 1,
+      deps,
+    ),
   ];
   return toolJson({
     available: checks.every((check) => check.ok),
@@ -151,7 +195,9 @@ export async function releaseCommand(
     cwd: outsideCwd,
     version: CLI_VERSION,
     checks,
-    limitations: ["Release checks verify local CLI packaging behavior; they do not publish or mutate git state."],
+    limitations: [
+      "Release checks verify local CLI packaging behavior; they do not publish or mutate git state.",
+    ],
   });
 }
 
@@ -167,7 +213,8 @@ export async function releaseCheck(
   deps: PluginSelfManagementDependencies = defaultPluginSelfManagementDependencies,
 ): Promise<Record<string, unknown>> {
   try {
-    if (!deps.execFile) return { name, ok: false, exitCode: 1, error: "No subprocess adapter is configured." };
+    if (!deps.execFile)
+      return { name, ok: false, exitCode: 1, error: "No subprocess adapter is configured." };
     const result = await deps.execFile(process.execPath, [cliWrapperPath(deps), ...argv], {
       cwd,
       timeout: 20_000,
@@ -186,18 +233,23 @@ export async function releaseCheck(
   }
 }
 
-export function cliWrapperPath(deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {}): string {
+export function cliWrapperPath(
+  deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {},
+): string {
   return join(pluginRoot(deps), "cli", "expo98.mjs");
 }
 
-export function pluginRoot(deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {}): string {
+export function pluginRoot(
+  deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {},
+): string {
   return resolve(deps.pluginRoot ?? findPackageRoot(dirname(new URL(import.meta.url).pathname)));
 }
 
 function findPackageRoot(start: string): string {
   let current = resolve(start);
   while (true) {
-    if (existsSync(join(current, "package.json")) && existsSync(join(current, "cli"))) return current;
+    if (existsSync(join(current, "package.json")) && existsSync(join(current, "cli")))
+      return current;
     const parent = dirname(current);
     if (parent === current) return resolve(start);
     current = parent;
@@ -219,7 +271,8 @@ export async function writeJsonFile(file: string, value: unknown): Promise<void>
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -234,7 +287,7 @@ export function truncate(value: unknown, max = 40_000): string {
 }
 
 function formatError(error: unknown): string {
-  const record = error && typeof error === "object" ? error as { message?: unknown } : null;
+  const record = error && typeof error === "object" ? (error as { message?: unknown }) : null;
   return record?.message == null ? String(error) : String(record.message);
 }
 
@@ -244,8 +297,13 @@ function execFile(
   options: { cwd: string; timeout: number; rejectOnError: false },
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
-    nodeExecFile(file, argv, { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (_error, stdout, stderr) => {
-      resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-    });
+    nodeExecFile(
+      file,
+      argv,
+      { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 },
+      (_error, stdout, stderr) => {
+        resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      },
+    );
   });
 }

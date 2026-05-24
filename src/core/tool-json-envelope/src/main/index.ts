@@ -4,7 +4,10 @@ export interface ToolTextResult {
 }
 
 export function toolJson(value: unknown): ToolTextResult {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }], isError: false };
+  return {
+    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }],
+    isError: false,
+  };
 }
 
 export function unwrapToolJson(result: unknown): unknown {

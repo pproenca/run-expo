@@ -1,3 +1,8 @@
+import {
+  flattenAccessibilityNodes,
+  refRecordFromNode,
+  snapshotNodeFromAccessibility,
+} from "./accessibility.js";
 import type {
   RefRecord,
   SemanticBridgeSnapshot,
@@ -6,24 +11,28 @@ import type {
   SnapshotPersistenceDependencies,
   SnapshotResult,
 } from "./domain.js";
-import { flattenAccessibilityNodes, refRecordFromNode, snapshotNodeFromAccessibility } from "./accessibility.js";
 import { createSnapshotId } from "./ids.js";
 
 const NATIVE_LIMITATIONS = [
   "Native accessibility snapshots expose semantic UI where available; React component props and private fiber details are not included.",
 ];
 
-export async function persistNativeSnapshot(input: {
-  stateRoot: string;
-  session: SessionRecord;
-  filters: SnapshotFilters;
-  semanticBridge: unknown;
-  accessibilityTree: unknown;
-}, deps: SnapshotPersistenceDependencies): Promise<SnapshotResult> {
+export async function persistNativeSnapshot(
+  input: {
+    stateRoot: string;
+    session: SessionRecord;
+    filters: SnapshotFilters;
+    semanticBridge: unknown;
+    accessibilityTree: unknown;
+  },
+  deps: SnapshotPersistenceDependencies,
+): Promise<SnapshotResult> {
   const snapshotId = createSnapshotId(deps.now(), deps.randomSuffix());
   const targetId = input.session.activeTargetId ?? "";
   const nodes = flattenAccessibilityNodes(input.accessibilityTree, input.filters);
-  const refs = nodes.map((node, index) => refRecordFromNode(node, index + 1, snapshotId, targetId, input.filters));
+  const refs = nodes.map((node, index) =>
+    refRecordFromNode(node, index + 1, snapshotId, targetId, input.filters),
+  );
   const snapshotPath = snapshotJsonPath(input.stateRoot, input.session.sessionId, snapshotId);
   const generatedAt = deps.now().toISOString();
   const snapshot: SnapshotResult = {
@@ -35,7 +44,9 @@ export async function persistNativeSnapshot(input: {
     generatedAt,
     filters: input.filters,
     refs,
-    tree: nodes.map((node, index) => snapshotNodeFromAccessibility(node, `@e${index + 1}`, input.filters)),
+    tree: nodes.map((node, index) =>
+      snapshotNodeFromAccessibility(node, `@e${index + 1}`, input.filters),
+    ),
     artifacts: {
       json: snapshotPath,
       screenshot: null,
@@ -44,16 +55,25 @@ export async function persistNativeSnapshot(input: {
     limitations: NATIVE_LIMITATIONS,
   };
 
-  await persistSnapshotArtifacts(input.stateRoot, input.session, snapshot, input.semanticBridge, deps);
+  await persistSnapshotArtifacts(
+    input.stateRoot,
+    input.session,
+    snapshot,
+    input.semanticBridge,
+    deps,
+  );
   return snapshot;
 }
 
-export async function persistSemanticSnapshot(input: {
-  stateRoot: string;
-  session: SessionRecord;
-  filters: SnapshotFilters;
-  semanticBridge: SemanticBridgeSnapshot;
-}, deps: SnapshotPersistenceDependencies): Promise<SnapshotResult> {
+export async function persistSemanticSnapshot(
+  input: {
+    stateRoot: string;
+    session: SessionRecord;
+    filters: SnapshotFilters;
+    semanticBridge: SemanticBridgeSnapshot;
+  },
+  deps: SnapshotPersistenceDependencies,
+): Promise<SnapshotResult> {
   const snapshotId = createSnapshotId(deps.now(), deps.randomSuffix());
   const targetId = input.session.activeTargetId ?? "";
   const refs: RefRecord[] = input.semanticBridge.refs.map((record, index) => ({
@@ -102,7 +122,13 @@ export async function persistSemanticSnapshot(input: {
     limitations: input.semanticBridge.limitations,
   };
 
-  await persistSnapshotArtifacts(input.stateRoot, input.session, snapshot, input.semanticBridge, deps);
+  await persistSnapshotArtifacts(
+    input.stateRoot,
+    input.session,
+    snapshot,
+    input.semanticBridge,
+    deps,
+  );
   return snapshot;
 }
 

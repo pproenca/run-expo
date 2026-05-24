@@ -68,4 +68,3 @@ export function createCliFacade(deps: CliFacadeDependencies): CliFacade {
     getLastCliOptions: () => ({ ...lastCliOptions }),
   };
 }
-

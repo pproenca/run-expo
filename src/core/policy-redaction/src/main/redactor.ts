@@ -1,8 +1,7 @@
 import { REDACTED } from "./domain.js";
 
 const SECRET_KEY_PATTERN = /token|authorization|cookie|password|secret|apikey|apiKey/i;
-const URL_QUERY_SECRET_PATTERN =
-  /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
+const URL_QUERY_SECRET_PATTERN = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
 const FREEFORM_SECRET_PATTERN = /\b(token|authorization|password|secret)=([^\s&]+)/gi;
 const BEARER_SECRET_PATTERN = /(authorization=\[redacted\]\s+)[^\s&]+/gi;
 
@@ -32,8 +31,8 @@ export function redactJson<T extends JsonValue>(value: T, key = ""): T {
   return Object.fromEntries(
     Object.entries(value).map(([childKey, childValue]) => [
       childKey,
-      isSecretKey(childKey) ? REDACTED : redactJson(childValue, childKey)
-    ])
+      isSecretKey(childKey) ? REDACTED : redactJson(childValue, childKey),
+    ]),
   ) as T;
 }
 

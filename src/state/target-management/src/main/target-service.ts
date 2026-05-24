@@ -1,7 +1,13 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-
+import {
+  resolveExpoStateRoot,
+  sessionDirectory,
+  sessionJsonPath,
+} from "../../../session-run-records/src/main/paths.js";
+import { discoverTargets } from "./discovery.js";
+import { normalizeSimulatorDevices } from "./discovery.js";
 import type {
   TargetCommandArgs,
   TargetCommandResult,
@@ -11,10 +17,7 @@ import type {
   TargetRecord,
   TargetUnavailableResult,
 } from "./domain.js";
-import { discoverTargets } from "./discovery.js";
-import { normalizeSimulatorDevices } from "./discovery.js";
 import { requireString } from "./validation.js";
-import { resolveExpoStateRoot, sessionDirectory, sessionJsonPath } from "../../../session-run-records/src/main/paths.js";
 
 /**
  * RULE-009: lists current target candidates and annotates a selected target
@@ -25,7 +28,10 @@ export async function listTargets(
   deps: TargetDependencies = defaultTargetDependencies,
 ): Promise<TargetListResult> {
   const session = await deps.readLatestSession(args.stateRoot);
-  const targets = await discoverTargets({ ...args, selectedTargetId: session?.activeTargetId ?? null }, deps);
+  const targets = await discoverTargets(
+    { ...args, selectedTargetId: session?.activeTargetId ?? null },
+    deps,
+  );
   return { available: targets.length > 0, targets };
 }
 
@@ -35,11 +41,17 @@ export async function selectTarget(
 ): Promise<TargetRecord | TargetUnavailableResult> {
   const session = await deps.readLatestSession(args.stateRoot);
   if (!session) {
-    return { available: false, reason: "No session exists. Run `expo98 --json session new review` first." };
+    return {
+      available: false,
+      reason: "No session exists. Run `expo98 --json session new review` first.",
+    };
   }
 
   const targetId = requireString(args.targetId, "targetId");
-  const targets = await discoverTargets({ ...args, selectedTargetId: session.activeTargetId }, deps);
+  const targets = await discoverTargets(
+    { ...args, selectedTargetId: session.activeTargetId },
+    deps,
+  );
   const target = targets.find((item) => item.targetId === targetId);
   if (!target) {
     return { available: false, reason: "Target not found.", targetId, targets };
@@ -65,7 +77,10 @@ export async function getCurrentTarget(
 ): Promise<TargetCurrentResult> {
   const session = await deps.readLatestSession(args.stateRoot);
   if (!session) {
-    return { available: false, reason: "No session exists. Run `expo98 --json session new review` first." };
+    return {
+      available: false,
+      reason: "No session exists. Run `expo98 --json session new review` first.",
+    };
   }
 
   if (!session.activeTargetId) {
@@ -76,7 +91,10 @@ export async function getCurrentTarget(
     };
   }
 
-  const targets = await discoverTargets({ ...args, selectedTargetId: session.activeTargetId }, deps);
+  const targets = await discoverTargets(
+    { ...args, selectedTargetId: session.activeTargetId },
+    deps,
+  );
   const current = targets.find((item) => item.targetId === session.activeTargetId);
   if (current) {
     return {
@@ -86,7 +104,9 @@ export async function getCurrentTarget(
     };
   }
 
-  const persisted = await deps.readPersistedTarget(args.stateRoot, session.sessionId).catch(() => null);
+  const persisted = await deps
+    .readPersistedTarget(args.stateRoot, session.sessionId)
+    .catch(() => null);
   return {
     available: false,
     reason: "Selected target is stale.",
@@ -104,7 +124,11 @@ export async function targetCommand(
   args: TargetCommandArgs,
   deps: TargetDependencies = defaultTargetDependencies,
 ): Promise<TargetCommandResult> {
-  const effectiveArgs = { ...args, stateRoot: args.stateRoot ?? resolveExpoStateRoot(args as unknown as Record<string, string | null>) };
+  const effectiveArgs = {
+    ...args,
+    stateRoot:
+      args.stateRoot ?? resolveExpoStateRoot(args as unknown as Record<string, string | null>),
+  };
   const action = requireString(args.action ?? "list", "action");
   if (!["list", "select", "current"].includes(action)) {
     throw new Error(`Unknown target action: ${action}`);
@@ -126,10 +150,16 @@ const defaultTargetDependencies: TargetDependencies = {
     const sessions = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(
+        () => null,
+      );
       if (record) sessions.push(record as any);
     }
-    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    sessions.sort((left, right) =>
+      String(right.updatedAt ?? right.createdAt).localeCompare(
+        String(left.updatedAt ?? left.createdAt),
+      ),
+    );
     return sessions[0] ?? null;
   },
   updateSessionRecord: async (stateRoot, record) => {
@@ -138,15 +168,21 @@ const defaultTargetDependencies: TargetDependencies = {
     return record;
   },
   readPersistedTarget: async (stateRoot, sessionId) => {
-    return readJson(join(sessionDirectory(stateRoot, sessionId), "target.json")).catch(() => null) as Promise<TargetRecord | null>;
+    return readJson(join(sessionDirectory(stateRoot, sessionId), "target.json")).catch(
+      () => null,
+    ) as Promise<TargetRecord | null>;
   },
   writePersistedTarget: async (stateRoot, sessionId, target) => {
     await mkdir(sessionDirectory(stateRoot, sessionId), { recursive: true });
     await writeJson(join(sessionDirectory(stateRoot, sessionId), "target.json"), target);
   },
   listIosSimulatorTargets: async () => {
-    const result = await execFile("xcrun", ["simctl", "list", "devices", "available", "--json"], { timeout: 20_000 });
-    const parsed = JSON.parse(result.stdout || "{}") as { devices?: Record<string, Array<Record<string, unknown>>> };
+    const result = await execFile("xcrun", ["simctl", "list", "devices", "available", "--json"], {
+      timeout: 20_000,
+    });
+    const parsed = JSON.parse(result.stdout || "{}") as {
+      devices?: Record<string, Array<Record<string, unknown>>>;
+    };
     return normalizeSimulatorDevices(Object.values(parsed.devices ?? {}).flat());
   },
   fetchMetroTargets: async (port) => {
@@ -156,16 +192,25 @@ const defaultTargetDependencies: TargetDependencies = {
   },
 };
 
-async function execFile(file: string, args: string[], options: { timeout: number }): Promise<{ stdout: string; stderr: string }> {
+async function execFile(
+  file: string,
+  args: string[],
+  options: { timeout: number },
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        Object.assign(error, { stdout, stderr });
-        reject(error);
-        return;
-      }
-      resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-    });
+    nodeExecFile(
+      file,
+      args,
+      { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          Object.assign(error, { stdout, stderr });
+          reject(error);
+          return;
+        }
+        resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      },
+    );
   });
 }
 

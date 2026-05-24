@@ -1,9 +1,11 @@
+import { execFile, spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execFile, spawn } from "node:child_process";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -114,14 +116,24 @@ export type ScreenshotCaptureDependencies = {
   captureScreenshot?(args: ScreenshotCaptureArgs): Promise<unknown>;
   annotatedScreenshot?(args: ScreenshotCaptureArgs): Promise<unknown>;
   execFile?(file: string, args: string[], options: ExecOptions): Promise<ExecResult>;
-  spawnProcess?(file: string, args: string[], options: { stdio: ["ignore", "pipe", "pipe"] }): SpawnedProcess;
-  resolveIosDevice?(requested: string | undefined, options: { preferBooted: true }): Promise<IosDevice>;
+  spawnProcess?(
+    file: string,
+    args: string[],
+    options: { stdio: ["ignore", "pipe", "pipe"] },
+  ): SpawnedProcess;
+  resolveIosDevice?(
+    requested: string | undefined,
+    options: { preferBooted: true },
+  ): Promise<IosDevice>;
   adbScreenshot?(device: string | undefined, outputPath: string): Promise<void>;
   commandPath?(command: string): Promise<string | null>;
   pathExists?(file: string): Promise<boolean>;
   mkdir?(directory: string, options: { recursive: true }): Promise<void>;
   readLatestRefCache?(args: ScreenshotCaptureArgs): Promise<ScreenshotRefCache | null>;
-  readDir?(directory: string, options: { withFileTypes: true }): Promise<Array<{ name: string; isDirectory(): boolean }>>;
+  readDir?(
+    directory: string,
+    options: { withFileTypes: true },
+  ): Promise<Array<{ name: string; isDirectory(): boolean }>>;
   readJsonFile?(file: string): Promise<unknown>;
   writeJsonFile?(file: string, value: unknown): Promise<void>;
   writeFile?(file: string, contents: string, encoding: "utf8"): Promise<void>;
@@ -150,7 +162,8 @@ export async function captureFullScreenshot(
   if (platform !== "ios") {
     return {
       available: false,
-      reason: "Segmented full-page capture is currently implemented for iOS simulator targets only.",
+      reason:
+        "Segmented full-page capture is currently implemented for iOS simulator targets only.",
       mode: "full",
       platform,
     };
@@ -170,7 +183,8 @@ export async function captureFullScreenshot(
   if (!magick) {
     return {
       available: false,
-      reason: "Full-page capture requires ImageMagick's magick command to stitch captured viewport segments.",
+      reason:
+        "Full-page capture requires ImageMagick's magick command to stitch captured viewport segments.",
       mode: "full",
       platform,
     };
@@ -182,7 +196,10 @@ export async function captureFullScreenshot(
       path.join(os.tmpdir(), "expo98-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`),
   );
   const segmentCount = clampNumber(args.fullSegments ?? args.segments ?? 3, 1, 12);
-  const segmentDir = path.join(path.dirname(outputPath), `${path.basename(outputPath, path.extname(outputPath))}-segments`);
+  const segmentDir = path.join(
+    path.dirname(outputPath),
+    `${path.basename(outputPath, path.extname(outputPath))}-segments`,
+  );
   await mkdir(segmentDir, deps);
 
   const segments: string[] = [];
@@ -203,21 +220,26 @@ export async function captureFullScreenshot(
   const gestureResults: Array<Record<string, unknown>> = [];
 
   for (let index = 1; index < segmentCount; index += 1) {
-    const gesture = await execFilePromise(axe, [
-      "swipe",
-      "--start-x",
-      String(startX),
-      "--start-y",
-      String(startY),
-      "--end-x",
-      String(startX),
-      "--end-y",
-      String(endY),
-      "--duration",
-      "0.45",
-      "--udid",
-      device.udid,
-    ], { timeout: 10_000, rejectOnError: false }, deps);
+    const gesture = await execFilePromise(
+      axe,
+      [
+        "swipe",
+        "--start-x",
+        String(startX),
+        "--start-y",
+        String(startY),
+        "--end-x",
+        String(startX),
+        "--end-y",
+        String(endY),
+        "--duration",
+        "0.45",
+        "--udid",
+        device.udid,
+      ],
+      { timeout: 10_000, rejectOnError: false },
+      deps,
+    );
     gestureResults.push({
       index,
       stdout: truncate(gesture.stdout),
@@ -228,7 +250,14 @@ export async function captureFullScreenshot(
     await wait(300, deps);
     const segmentPath = path.join(segmentDir, `segment-${String(index).padStart(3, "0")}.png`);
     const segment = await (deps.captureScreenshot ?? captureScreenshot)(
-      { ...args, full: false, annotate: false, outputPath: segmentPath, device: device.udid, platform },
+      {
+        ...args,
+        full: false,
+        annotate: false,
+        outputPath: segmentPath,
+        device: device.udid,
+        platform,
+      },
       deps,
     );
     if (isUnavailable(segment)) break;
@@ -236,28 +265,38 @@ export async function captureFullScreenshot(
   }
 
   for (let index = 1; index < segments.length; index += 1) {
-    await execFilePromise(axe, [
-      "swipe",
-      "--start-x",
-      String(startX),
-      "--start-y",
-      String(endY),
-      "--end-x",
-      String(startX),
-      "--end-y",
-      String(startY),
-      "--duration",
-      "0.25",
-      "--udid",
-      device.udid,
-    ], { timeout: 10_000, rejectOnError: false }, deps);
+    await execFilePromise(
+      axe,
+      [
+        "swipe",
+        "--start-x",
+        String(startX),
+        "--start-y",
+        String(endY),
+        "--end-x",
+        String(startX),
+        "--end-y",
+        String(startY),
+        "--duration",
+        "0.25",
+        "--udid",
+        device.udid,
+      ],
+      { timeout: 10_000, rejectOnError: false },
+      deps,
+    );
   }
 
   await mkdir(path.dirname(outputPath), deps);
-  const stitch = await execFilePromise(magick, [...segments, "-append", outputPath], {
-    timeout: 30_000,
-    rejectOnError: false,
-  }, deps);
+  const stitch = await execFilePromise(
+    magick,
+    [...segments, "-append", outputPath],
+    {
+      timeout: 30_000,
+      rejectOnError: false,
+    },
+    deps,
+  );
   if (stitch.error || !(await defaultPathExists(outputPath, deps))) {
     return {
       available: false,
@@ -287,7 +326,8 @@ export async function captureFullScreenshot(
     segments,
     segmentCount: segments.length,
     tools: { gesture: "axe", stitch: "magick" },
-    limitation: "iOS Simulator does not expose a stable native full-page screenshot API for arbitrary React Native views; this artifact stitches real viewport screenshots captured after simulator scroll gestures.",
+    limitation:
+      "iOS Simulator does not expose a stable native full-page screenshot API for arbitrary React Native views; this artifact stitches real viewport screenshots captured after simulator scroll gestures.",
     gestures: gestureResults,
     stitch: {
       stdout: truncate(stitch.stdout),
@@ -301,12 +341,19 @@ export async function imageDimensions(
   imagePath: string,
   deps: Pick<ScreenshotCaptureDependencies, "execFile"> = {},
 ): Promise<{ width: number; height: number } | null> {
-  const result = await execFilePromise(magick, ["identify", "-format", "%w %h", imagePath], {
-    timeout: 5_000,
-    rejectOnError: false,
-  }, deps);
+  const result = await execFilePromise(
+    magick,
+    ["identify", "-format", "%w %h", imagePath],
+    {
+      timeout: 5_000,
+      rejectOnError: false,
+    },
+    deps,
+  );
   if (result.error) return null;
-  const match = String(result.stdout ?? "").trim().match(/^(\d+)\s+(\d+)$/);
+  const match = String(result.stdout ?? "")
+    .trim()
+    .match(/^(\d+)\s+(\d+)$/);
   if (!match) return null;
   return { width: Number(match[1]), height: Number(match[2]) };
 }
@@ -328,10 +375,15 @@ export async function captureScreenshot(
   }
 
   const device = await resolveIosDevice(args.device, deps);
-  const result = await execFilePromise("xcrun", ["simctl", "io", device.udid, "screenshot", outputPath], {
-    timeout: 30_000,
-    rejectOnError: false,
-  }, deps);
+  const result = await execFilePromise(
+    "xcrun",
+    ["simctl", "io", device.udid, "screenshot", outputPath],
+    {
+      timeout: 30_000,
+      rejectOnError: false,
+    },
+    deps,
+  );
   if (result.error || !(await defaultPathExists(outputPath, deps))) {
     return {
       available: false,
@@ -371,16 +423,25 @@ export async function annotatedScreenshot(
   const outputPath = String(screenshot.outputPath);
   const artifacts = annotatedScreenshotArtifactPaths(outputPath);
   const labels = (asRecord(labelMap).labels ?? []) as ScreenshotLabel[];
-  await writeJsonFile(artifacts.labelMap, {
-    schemaVersion: 1,
-    createdAt: deps.nowIso?.() ?? new Date().toISOString(),
-    screenshot: outputPath,
-    annotatedImage: artifacts.annotatedImage,
-    snapshotId: cache.snapshotId,
-    targetId: cache.targetId,
-    labels,
-  }, deps);
-  await writeFile(artifacts.annotatedImage, annotatedScreenshotSvg({ screenshotPath: outputPath, labels }), "utf8", deps);
+  await writeJsonFile(
+    artifacts.labelMap,
+    {
+      schemaVersion: 1,
+      createdAt: deps.nowIso?.() ?? new Date().toISOString(),
+      screenshot: outputPath,
+      annotatedImage: artifacts.annotatedImage,
+      snapshotId: cache.snapshotId,
+      targetId: cache.targetId,
+      labels,
+    },
+    deps,
+  );
+  await writeFile(
+    artifacts.annotatedImage,
+    annotatedScreenshotSvg({ screenshotPath: outputPath, labels }),
+    "utf8",
+    deps,
+  );
   return {
     ...screenshot,
     available: true,
@@ -398,9 +459,8 @@ export async function annotatedScreenshot(
 
 export function buildScreenshotLabelMap(cache: ScreenshotRefCache): Record<string, unknown> {
   const refs = cache.refs ?? [];
-  const targetMismatch = refs.filter((record) =>
-    record.snapshotId !== cache.snapshotId ||
-    record.targetId !== cache.targetId
+  const targetMismatch = refs.filter(
+    (record) => record.snapshotId !== cache.snapshotId || record.targetId !== cache.targetId,
   );
   if (targetMismatch.length > 0) {
     return {
@@ -449,9 +509,10 @@ export function buildScreenshotLabelMap(cache: ScreenshotRefCache): Record<strin
   };
 }
 
-export function annotatedScreenshotArtifactPaths(
-  outputPath: string,
-): { labelMap: string; annotatedImage: string } {
+export function annotatedScreenshotArtifactPaths(outputPath: string): {
+  labelMap: string;
+  annotatedImage: string;
+} {
   const ext = path.extname(outputPath);
   const base = ext ? outputPath.slice(0, -ext.length) : outputPath;
   return {
@@ -460,22 +521,25 @@ export function annotatedScreenshotArtifactPaths(
   };
 }
 
-export function annotatedScreenshotSvg(
-  args: { screenshotPath: string; labels: ScreenshotLabel[] },
-): string {
+export function annotatedScreenshotSvg(args: {
+  screenshotPath: string;
+  labels: ScreenshotLabel[];
+}): string {
   const { width, height } = screenshotOverlaySize(args.labels);
   const imageHref = escapeHtml(path.basename(args.screenshotPath));
-  const labelSvg = args.labels.map((label) => {
-    const box = label.box;
-    const textX = Math.max(0, box.x);
-    const textY = Math.max(16, box.y - 6);
-    const text = `${label.index}. ${label.ref}`;
-    return [
-      `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="#ff3b30" stroke-width="2"/>`,
-      `<rect x="${textX}" y="${textY - 15}" width="${Math.max(44, text.length * 8)}" height="18" fill="#ff3b30"/>`,
-      `<text x="${textX + 4}" y="${textY - 2}" fill="#fff" font-family="Menlo, monospace" font-size="12">${escapeHtml(text)}</text>`,
-    ].join("\n");
-  }).join("\n");
+  const labelSvg = args.labels
+    .map((label) => {
+      const box = label.box;
+      const textX = Math.max(0, box.x);
+      const textY = Math.max(16, box.y - 6);
+      const text = `${label.index}. ${label.ref}`;
+      return [
+        `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="#ff3b30" stroke-width="2"/>`,
+        `<rect x="${textX}" y="${textY - 15}" width="${Math.max(44, text.length * 8)}" height="18" fill="#ff3b30"/>`,
+        `<text x="${textX + 4}" y="${textY - 2}" fill="#fff" font-family="Menlo, monospace" font-size="12">${escapeHtml(text)}</text>`,
+      ].join("\n");
+    })
+    .join("\n");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <image href="${imageHref}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMinYMin meet"/>
   ${labelSvg}
@@ -483,7 +547,10 @@ export function annotatedScreenshotSvg(
 `;
 }
 
-export function screenshotOverlaySize(labels: ScreenshotLabel[]): { width: number; height: number } {
+export function screenshotOverlaySize(labels: ScreenshotLabel[]): {
+  width: number;
+  height: number;
+} {
   const maxX = Math.max(390, ...labels.map((label) => label.box.x + label.box.width + 24));
   const maxY = Math.max(844, ...labels.map((label) => label.box.y + label.box.height + 24));
   return { width: Math.ceil(maxX), height: Math.ceil(maxY) };
@@ -515,7 +582,10 @@ export async function pathExists(
   file: string,
   deps: { access(file: string): Promise<void> },
 ): Promise<boolean> {
-  return deps.access(file).then(() => true, () => false);
+  return deps.access(file).then(
+    () => true,
+    () => false,
+  );
 }
 
 async function execFilePromise(
@@ -526,43 +596,64 @@ async function execFilePromise(
 ): Promise<ExecResult> {
   if (deps.execFile) return deps.execFile(file, args, options);
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT }, (
-      error: unknown,
-      stdout: unknown,
-      stderr: unknown,
-    ) => {
-      if (error && options.rejectOnError !== false) {
-        reject(error);
-        return;
-      }
-      const execError = error as (Error & { code?: number | string | null; signal?: string | null }) | null;
-      resolve({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: execError ? { message: execError.message, code: execError.code, signal: execError.signal } : null,
-      });
-    });
+    execFile(
+      file,
+      args,
+      { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT },
+      (error: unknown, stdout: unknown, stderr: unknown) => {
+        if (error && options.rejectOnError !== false) {
+          reject(error);
+          return;
+        }
+        const execError = error as
+          | (Error & { code?: number | string | null; signal?: string | null })
+          | null;
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+          error: execError
+            ? { message: execError.message, code: execError.code, signal: execError.signal }
+            : null,
+        });
+      },
+    );
   });
 }
 
-async function commandPath(command: string, deps: ScreenshotCaptureDependencies): Promise<string | null> {
+async function commandPath(
+  command: string,
+  deps: ScreenshotCaptureDependencies,
+): Promise<string | null> {
   if (deps.commandPath) return deps.commandPath(command);
-  const result = await execFilePromise("sh", ["-lc", `command -v ${command}`], {
-    timeout: 5_000,
-    rejectOnError: false,
-  }, deps);
+  const result = await execFilePromise(
+    "sh",
+    ["-lc", `command -v ${command}`],
+    {
+      timeout: 5_000,
+      rejectOnError: false,
+    },
+    deps,
+  );
   return String(result.stdout ?? "").trim() || null;
 }
 
-async function resolveIosDevice(requested: string | undefined, deps: ScreenshotCaptureDependencies): Promise<IosDevice> {
+async function resolveIosDevice(
+  requested: string | undefined,
+  deps: ScreenshotCaptureDependencies,
+): Promise<IosDevice> {
   if (deps.resolveIosDevice) return deps.resolveIosDevice(requested, { preferBooted: true });
   if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
     return { udid: requested, name: requested, state: "unknown" };
   }
-  const { stdout } = await execFilePromise("xcrun", ["simctl", "list", "devices", "available", "--json"], {
-    timeout: 20_000,
-    maxBuffer: 4 * 1024 * 1024,
-  }, deps);
+  const { stdout } = await execFilePromise(
+    "xcrun",
+    ["simctl", "list", "devices", "available", "--json"],
+    {
+      timeout: 20_000,
+      maxBuffer: 4 * 1024 * 1024,
+    },
+    deps,
+  );
   const parsed = JSON.parse(String(stdout ?? "{}")) as {
     devices?: Record<string, Array<Omit<IosDevice, "runtime">>>;
   };
@@ -572,7 +663,9 @@ async function resolveIosDevice(requested: string | undefined, deps: ScreenshotC
   if (requested) {
     const exact = devices.find((device) => device.udid === requested || device.name === requested);
     if (exact) return exact;
-    const partial = devices.find((device) => device.name.toLowerCase().includes(requested.toLowerCase()));
+    const partial = devices.find((device) =>
+      device.name.toLowerCase().includes(requested.toLowerCase()),
+    );
     if (partial) return partial;
     throw new Error(`No available iOS simulator matched: ${requested}`);
   }
@@ -584,9 +677,15 @@ async function resolveIosDevice(requested: string | undefined, deps: ScreenshotC
   throw new Error("No available iOS simulators found.");
 }
 
-async function adbScreenshot(device: string | undefined, outputPath: string, deps: ScreenshotCaptureDependencies): Promise<void> {
+async function adbScreenshot(
+  device: string | undefined,
+  outputPath: string,
+  deps: ScreenshotCaptureDependencies,
+): Promise<void> {
   if (deps.adbScreenshot) return deps.adbScreenshot(device, outputPath);
-  const args = device ? ["-s", device, "exec-out", "screencap", "-p"] : ["exec-out", "screencap", "-p"];
+  const args = device
+    ? ["-s", device, "exec-out", "screencap", "-p"]
+    : ["exec-out", "screencap", "-p"];
   await new Promise<void>((resolve, reject) => {
     const child = spawnProcess("adb", args, deps);
     let stderr = "";
@@ -619,12 +718,20 @@ async function adbScreenshot(device: string | undefined, outputPath: string, dep
   });
 }
 
-function spawnProcess(file: string, args: string[], deps: ScreenshotCaptureDependencies): SpawnedProcess {
-  if (deps.spawnProcess) return deps.spawnProcess(file, args, { stdio: ["ignore", "pipe", "pipe"] });
+function spawnProcess(
+  file: string,
+  args: string[],
+  deps: ScreenshotCaptureDependencies,
+): SpawnedProcess {
+  if (deps.spawnProcess)
+    return deps.spawnProcess(file, args, { stdio: ["ignore", "pipe", "pipe"] });
   return spawn(file, args, { stdio: ["ignore", "pipe", "pipe"] });
 }
 
-async function defaultPathExists(file: string, deps: ScreenshotCaptureDependencies): Promise<boolean> {
+async function defaultPathExists(
+  file: string,
+  deps: ScreenshotCaptureDependencies,
+): Promise<boolean> {
   if (deps.pathExists) return deps.pathExists(file);
   return pathExists(file, { access: fs.access });
 }
@@ -647,7 +754,11 @@ async function readLatestRefCache(
     .catch(() => null);
 }
 
-async function writeJsonFile(file: string, value: unknown, deps: ScreenshotCaptureDependencies): Promise<void> {
+async function writeJsonFile(
+  file: string,
+  value: unknown,
+  deps: ScreenshotCaptureDependencies,
+): Promise<void> {
   if (deps.writeJsonFile) return deps.writeJsonFile(file, value);
   await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
@@ -672,14 +783,18 @@ function safeTimestamp(deps: ScreenshotCaptureDependencies): string {
 }
 
 function isUnavailable(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && (value as { available?: unknown }).available === false);
+  return Boolean(
+    value && typeof value === "object" && (value as { available?: unknown }).available === false,
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
-function resolveExpoStateRoot(args: { cwd?: string; root?: string; stateDir?: string } = {}): string {
+function resolveExpoStateRoot(
+  args: { cwd?: string; root?: string; stateDir?: string } = {},
+): string {
   if (args.stateDir) {
     const resolved = path.resolve(args.stateDir);
     return path.basename(resolved) === "runs" ? path.dirname(resolved) : resolved;
@@ -697,10 +812,15 @@ async function readLatestSession(
   const sessions: Array<Record<string, unknown>> = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile(path.join(sessionsRoot, entry.name, "session.json"), deps).catch(() => null);
+    const record = await readJsonFile(
+      path.join(sessionsRoot, entry.name, "session.json"),
+      deps,
+    ).catch(() => null);
     if (record) sessions.push(asRecord(record));
   }
-  sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
+  sessions.sort((a, b) =>
+    String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)),
+  );
   return sessions[0] ?? null;
 }
 

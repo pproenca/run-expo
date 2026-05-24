@@ -70,4 +70,3 @@ export function validationStateForAvailability(value: {
   if (value.hasEvidence === true && !value.partialReason) return "validated";
   return "partial";
 }
-

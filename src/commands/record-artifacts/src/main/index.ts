@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface RecordCommandDependencies {
   now?: () => Date;
@@ -14,7 +16,8 @@ export interface StateRootArgs extends Record<string, unknown> {
   cwd?: string | null;
 }
 
-const RECORD_LIMITATION = "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
+const RECORD_LIMITATION =
+  "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
 
 export async function recordCommand(
   args: Record<string, unknown> = {},
@@ -32,7 +35,8 @@ export async function recordCommand(
   const outputPath = resolve(String(args.outputPath ?? positionals[1] ?? defaultOutputPath));
   if (action === "start") {
     await mkdir(dirname(outputPath), { recursive: true });
-    const device = typeof args.device === "string" && args.device.trim() ? args.device.trim() : "booted";
+    const device =
+      typeof args.device === "string" && args.device.trim() ? args.device.trim() : "booted";
     const child = spawn("xcrun", ["simctl", "io", device, "recordVideo", outputPath], {
       detached: true,
       stdio: "ignore",
@@ -88,10 +92,16 @@ export async function readLatestSession(stateRoot: string): Promise<unknown | nu
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(
+      () => null,
+    );
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt)));
+  sessions.sort((a, b) =>
+    String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(
+      String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt),
+    ),
+  );
   return sessions[0] ?? null;
 }
 
@@ -135,7 +145,8 @@ export async function waitForPath(file: string, timeoutMs: number): Promise<bool
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
@@ -148,5 +159,7 @@ function now(deps: RecordCommandDependencies): Date {
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }

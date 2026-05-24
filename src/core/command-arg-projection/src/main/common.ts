@@ -1,6 +1,10 @@
 import type { CliArgs, CliGlobals, CommandProjectionContext } from "./types.js";
 
-export function createProjectionContext(command: string, args: CliArgs, globals: CliGlobals): CommandProjectionContext {
+export function createProjectionContext(
+  command: string,
+  args: CliArgs,
+  globals: CliGlobals,
+): CommandProjectionContext {
   const cwd = args.cwd ?? globals.root;
   return {
     command,

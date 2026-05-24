@@ -32,7 +32,11 @@ function projectDevicesArgs({ args }: CommandProjectionContext): ProjectedComman
   return pickDefined({ platform: args.platform, limit: args.limit });
 }
 
-function projectSessionArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectSessionArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     action: args.action ?? args._[0],
     name: args.name ?? args._[1],
@@ -55,7 +59,11 @@ function projectTargetArgs({ args, globals, cwd }: CommandProjectionContext): Pr
   });
 }
 
-function projectSnapshotArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
+function projectSnapshotArgs({
+  args,
+  globals,
+  cwd,
+}: CommandProjectionContext): ProjectedCommandArgs {
   return pickDefined({
     interactive: args.interactive,
     compact: args.compact,
@@ -120,5 +128,11 @@ function projectWaitArgs({ args, globals, cwd }: CommandProjectionContext): Proj
 }
 
 function projectBatchArgs({ args, globals, cwd }: CommandProjectionContext): ProjectedCommandArgs {
-  return pickDefined({ steps: args.steps ?? args._, bail: args.bail, cwd, root: globals.root, stateDir: globals.stateDir });
+  return pickDefined({
+    steps: args.steps ?? args._,
+    bail: args.bail,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir,
+  });
 }

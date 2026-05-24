@@ -10,7 +10,10 @@ import { redactValue } from "./redaction.js";
 
 type AnyRecord = Record<string, unknown>;
 
-export function flattenAccessibilityNodes(tree: unknown, filters: SnapshotFilters): NormalizedAccessibilityNode[] {
+export function flattenAccessibilityNodes(
+  tree: unknown,
+  filters: SnapshotFilters,
+): NormalizedAccessibilityNode[] {
   const roots = Array.isArray(tree) ? tree : [tree];
   const nodes: NormalizedAccessibilityNode[] = [];
 
@@ -23,8 +26,10 @@ export function flattenAccessibilityNodes(tree: unknown, filters: SnapshotFilter
     }
 
     const normalized = normalizeAccessibilityNode(node);
-    if ((!filters.interactiveOnly || normalized.actions.length > 0)
-      && (!filters.compact || normalized.label || normalized.text || normalized.actions.length > 0)) {
+    if (
+      (!filters.interactiveOnly || normalized.actions.length > 0) &&
+      (!filters.compact || normalized.label || normalized.text || normalized.actions.length > 0)
+    ) {
       nodes.push(normalized);
     }
 
@@ -41,7 +46,9 @@ export function flattenAccessibilityNodes(tree: unknown, filters: SnapshotFilter
 }
 
 export function normalizeAccessibilityRole(role: unknown): string | null {
-  const text = String(role ?? "").replace(/^AX/, "").toLowerCase();
+  const text = String(role ?? "")
+    .replace(/^AX/, "")
+    .toLowerCase();
   if (text === "statictext") return "text";
   if (text === "button") return "button";
   if (text === "textfield" || text === "textbox") return "textbox";
@@ -138,7 +145,9 @@ export function normalizeSemanticBridgeRefs(
     .filter(isRecord)
     .map((item) => {
       const role = normalizeAccessibilityRole(item.role ?? item.type ?? null);
-      const actions = Array.isArray(item.actions) ? item.actions.map(String) : actionsForAccessibilityRole(role);
+      const actions = Array.isArray(item.actions)
+        ? item.actions.map(String)
+        : actionsForAccessibilityRole(role);
       return {
         role,
         label: nullableField(item.label ?? item.name),
@@ -147,7 +156,7 @@ export function normalizeSemanticBridgeRefs(
         testID: nullableField(item.testID ?? item.testId ?? item.nativeID),
         nativeID: nullableField(item.nativeID),
         component: nullableField(item.component),
-        source: filters.includeSource ? item.source ?? null : null,
+        source: filters.includeSource ? (item.source ?? null) : null,
         box: filters.includeBounds ? normalizeFrame(item.box ?? item.frame) : null,
         actions,
         disabled: item.disabled === true,
@@ -156,7 +165,8 @@ export function normalizeSemanticBridgeRefs(
     })
     .filter((record) => {
       if (filters.interactiveOnly && record.actions.length === 0) return false;
-      if (filters.compact && !record.label && !record.text && record.actions.length === 0) return false;
+      if (filters.compact && !record.label && !record.text && record.actions.length === 0)
+        return false;
       return true;
     });
 }

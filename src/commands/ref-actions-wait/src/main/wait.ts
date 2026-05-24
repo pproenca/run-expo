@@ -1,6 +1,13 @@
-import type { RefActionDependencies, RefCache, RefRecord, ToolTextResult, WaitEvaluation, WaitPredicate } from "./domain.js";
 import { clampNumber, normalizeFinderText, requireString, toolJson } from "./common.js";
 import { defaultRefActionDependencies } from "./defaults.js";
+import type {
+  RefActionDependencies,
+  RefCache,
+  RefRecord,
+  ToolTextResult,
+  WaitEvaluation,
+  WaitPredicate,
+} from "./domain.js";
 
 /**
  * RULE-019: cached-ref waits poll at a bounded interval until a final match,
@@ -20,10 +27,18 @@ export async function waitCommand(
   if (!predicate) {
     const ms = clampNumber(args.ms ?? 0, 0, 60000);
     if (ms > 0) await sleep(ms);
-    return toolJson({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now() - started });
+    return toolJson({
+      matched: true,
+      predicate: { kind: "sleep", ms },
+      elapsedMs: now() - started,
+    });
   }
 
-  if (predicate.kind === "metro-ready" || predicate.kind === "app-ready" || predicate.kind === "fn") {
+  if (
+    predicate.kind === "metro-ready" ||
+    predicate.kind === "app-ready" ||
+    predicate.kind === "fn"
+  ) {
     if (!deps.waitRuntimePredicate) {
       return toolJson({
         matched: false,
@@ -34,7 +49,11 @@ export async function waitCommand(
         elapsedMs: now() - started,
       });
     }
-    const runtimeResult = await deps.waitRuntimePredicate(predicate, args, { started, timeoutMs, intervalMs });
+    const runtimeResult = await deps.waitRuntimePredicate(predicate, args, {
+      started,
+      timeoutMs,
+      intervalMs,
+    });
     return toolJson(runtimeResult);
   }
 
@@ -83,14 +102,21 @@ export function waitPredicate(args: Record<string, unknown> = {}): WaitPredicate
 export function evaluateWaitPredicate(cache: RefCache, predicate: WaitPredicate): WaitEvaluation {
   if (predicate.kind === "text") {
     const expected = normalizeFinderText(predicate.text);
-    const ref = cache.refs.find((record) =>
-      !record.stale && normalizeFinderText([record.text, record.label].filter(Boolean).join(" ")).includes(expected)
+    const ref = cache.refs.find(
+      (record) =>
+        !record.stale &&
+        normalizeFinderText([record.text, record.label].filter(Boolean).join(" ")).includes(
+          expected,
+        ),
     );
     if (!ref) return { matched: false, final: false };
     return {
       matched: true,
       final: true,
-      payload: { matched: true, predicate, ref, lastEvidence: waitEvidence(cache) } as Record<string, unknown>,
+      payload: { matched: true, predicate, ref, lastEvidence: waitEvidence(cache) } as Record<
+        string,
+        unknown
+      >,
     };
   }
 
@@ -110,7 +136,11 @@ export function evaluateWaitPredicate(cache: RefCache, predicate: WaitPredicate)
       return {
         matched: false,
         final: true,
-        payload: { matched: false, reason: "Ref not found in the latest snapshot.", ref: predicate.ref },
+        payload: {
+          matched: false,
+          reason: "Ref not found in the latest snapshot.",
+          ref: predicate.ref,
+        },
       };
     }
     if (ref.stale) {
@@ -130,32 +160,47 @@ export function evaluateWaitPredicate(cache: RefCache, predicate: WaitPredicate)
     return {
       matched: true,
       final: true,
-      payload: { matched: true, predicate, ref, lastEvidence: waitEvidence(cache) } as Record<string, unknown>,
+      payload: { matched: true, predicate, ref, lastEvidence: waitEvidence(cache) } as Record<
+        string,
+        unknown
+      >,
     };
   }
 
   if (predicate.kind === "route") {
     const expected = normalizeFinderText(predicate.route);
-    const ref = cache.refs.find((record) =>
-      !record.stale && normalizeFinderText([record.text, record.label].filter(Boolean).join(" ")).includes(expected)
+    const ref = cache.refs.find(
+      (record) =>
+        !record.stale &&
+        normalizeFinderText([record.text, record.label].filter(Boolean).join(" ")).includes(
+          expected,
+        ),
     );
     if (!ref) return { matched: false, final: false };
     return {
       matched: true,
       final: true,
-      payload: { matched: true, predicate, ref, lastEvidence: waitEvidence(cache) } as Record<string, unknown>,
+      payload: { matched: true, predicate, ref, lastEvidence: waitEvidence(cache) } as Record<
+        string,
+        unknown
+      >,
     };
   }
 
   if (predicate.kind === "no-spinner") {
     const spinner = cache.refs.find((record) =>
-      /spinner|loading|progress/i.test([record.role, record.label, record.text].filter(Boolean).join(" "))
+      /spinner|loading|progress/i.test(
+        [record.role, record.label, record.text].filter(Boolean).join(" "),
+      ),
     );
     if (spinner) return { matched: false, final: false };
     return {
       matched: true,
       final: true,
-      payload: { matched: true, predicate, lastEvidence: waitEvidence(cache) } as Record<string, unknown>,
+      payload: { matched: true, predicate, lastEvidence: waitEvidence(cache) } as Record<
+        string,
+        unknown
+      >,
     };
   }
 
@@ -180,7 +225,10 @@ export function timeoutWaitPayload(
   };
 }
 
-export function waitEvidence(cache: RefCache | null, options: { includeSampleRefs?: boolean } = {}): Record<string, unknown> | null {
+export function waitEvidence(
+  cache: RefCache | null,
+  options: { includeSampleRefs?: boolean } = {},
+): Record<string, unknown> | null {
   if (!cache) return null;
   return {
     snapshotId: cache.snapshotId ?? null,
@@ -194,9 +242,7 @@ export function waitEvidence(cache: RefCache | null, options: { includeSampleRef
 
 export function refHasVisibleEvidence(record: Partial<RefRecord> | null | undefined): boolean {
   return Boolean(
-    record?.box
-    || normalizeFinderText(record?.text)
-    || normalizeFinderText(record?.label)
+    record?.box || normalizeFinderText(record?.text) || normalizeFinderText(record?.label),
   );
 }
 

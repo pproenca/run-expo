@@ -20,7 +20,12 @@ export interface ParsedCommand {
 
 export interface RunRecorder {
   path: string | null;
-  finish(entry: { status: "completed" | "failed"; exitCode: number; payload?: unknown; error?: unknown }): Promise<void> | void;
+  finish(entry: {
+    status: "completed" | "failed";
+    exitCode: number;
+    payload?: unknown;
+    error?: unknown;
+  }): Promise<void> | void;
 }
 
 export type ToolHandler = (args: Record<string, unknown>) => Promise<unknown> | unknown;
@@ -29,8 +34,16 @@ export type ToolHandlerRegistry = Record<string, ToolHandler>;
 
 export interface DispatchDependencies {
   handlers: ToolHandlerRegistry;
-  projectArgs: (command: string, args: ParsedCommand["args"], globals: CliGlobals) => Record<string, unknown>;
-  startRunRecord?: (entry: { command: string; args: Record<string, unknown>; globals: CliGlobals }) => Promise<RunRecorder> | RunRecorder;
+  projectArgs: (
+    command: string,
+    args: ParsedCommand["args"],
+    globals: CliGlobals,
+  ) => Record<string, unknown>;
+  startRunRecord?: (entry: {
+    command: string;
+    args: Record<string, unknown>;
+    globals: CliGlobals;
+  }) => Promise<RunRecorder> | RunRecorder;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
   printHelp?: () => string;
@@ -53,7 +66,11 @@ export interface CliRuntime {
 
 export interface CliRuntimeDependencies {
   parseCliArgs: (argv: string[]) => ParsedCommand;
-  commandArgs: (command: string, args: ParsedCommand["args"], globals: CliGlobals) => Record<string, unknown>;
+  commandArgs: (
+    command: string,
+    args: ParsedCommand["args"],
+    globals: CliGlobals,
+  ) => Record<string, unknown>;
   dispatchCommand: (parsed: ParsedCommand, deps: DispatchDependencies) => Promise<number> | number;
   bindHandlers: (implementations: ToolHandlerImplementations) => ToolHandlerRegistry;
   createCliFacade: (deps: {
@@ -99,7 +116,10 @@ export function createCliRuntime(deps: CliRuntimeDependencies): CliRuntime {
   };
 }
 
-export function createProcessExitRunner(runtime: Pick<CliRuntime, "run">, setExitCode: (exitCode: number) => void): (argv: string[]) => Promise<number> {
+export function createProcessExitRunner(
+  runtime: Pick<CliRuntime, "run">,
+  setExitCode: (exitCode: number) => void,
+): (argv: string[]) => Promise<number> {
   return async (argv) => {
     const exitCode = await runtime.run(argv);
     setExitCode(exitCode);
@@ -107,7 +127,10 @@ export function createProcessExitRunner(runtime: Pick<CliRuntime, "run">, setExi
   };
 }
 
-export function assertRuntimeHasHandlers(runtime: Pick<CliRuntime, "handlers">, toolNames: readonly string[]): void {
+export function assertRuntimeHasHandlers(
+  runtime: Pick<CliRuntime, "handlers">,
+  toolNames: readonly string[],
+): void {
   const missing = toolNames.filter((toolName) => runtime.handlers[toolName] === undefined);
   if (missing.length > 0) {
     throw new Error(`Missing runtime handlers: ${missing.join(", ")}`);

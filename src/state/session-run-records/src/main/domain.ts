@@ -1,8 +1,8 @@
-import { CURRENT_CLI_NAME, CLI_VERSION } from "../../../../core/cli-identity/src/main/index.ts";
 import {
   EXIT_INVALID_USAGE,
   EXIT_RUNTIME_FAILURE,
 } from "../../../../core/cli-error-classification/src/main/index.ts";
+import { CURRENT_CLI_NAME, CLI_VERSION } from "../../../../core/cli-identity/src/main/index.ts";
 import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export type { ToolTextResult };
@@ -40,7 +40,12 @@ export type SessionRecord = {
 
 export type SessionActionResult =
   | { available: true; action: "show" | "close"; session: SessionRecord }
-  | { available: false; action: "show" | "close"; reason: "Session not found."; name: string | null };
+  | {
+      available: false;
+      action: "show" | "close";
+      reason: "Session not found.";
+      name: string | null;
+    };
 
 export type CleanSessionsResult = {
   available: true;

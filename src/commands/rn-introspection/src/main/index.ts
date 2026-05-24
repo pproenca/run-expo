@@ -1,10 +1,19 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-
-import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import { bridgeDomainCommand, type BridgeDomainPayload, type DomainUnavailable } from "../../../bridge-domain-actions/src/main/index.ts";
 import type { PolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
-import { realValidation, type RealValidation } from "../../../../core/real-validation/src/main/index.ts";
+import {
+  realValidation,
+  type RealValidation,
+} from "../../../../core/real-validation/src/main/index.ts";
+import {
+  toolJson,
+  type ToolTextResult,
+} from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  bridgeDomainCommand,
+  type BridgeDomainPayload,
+  type DomainUnavailable,
+} from "../../../bridge-domain-actions/src/main/index.ts";
 
 export interface RefCache {
   snapshotId?: string | null;
@@ -33,8 +42,12 @@ export interface RnBridgeRequest {
 }
 
 export interface RnIntrospectionDependencies {
-  readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
-  bridgeDomainCommand?: (request: RnBridgeRequest) => Promise<RnBridgeDomainResult> | RnBridgeDomainResult;
+  readLatestRefCache?: (
+    args: Record<string, unknown>,
+  ) => Promise<RefCache | null> | RefCache | null;
+  bridgeDomainCommand?: (
+    request: RnBridgeRequest,
+  ) => Promise<RnBridgeDomainResult> | RnBridgeDomainResult;
 }
 
 export type RnBridgeDomainResult = BridgeDomainPayload | DomainUnavailable | PolicyDeniedPayload;
@@ -45,11 +58,16 @@ export async function rnCommand(
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "tree", "action");
-  if (!["tree", "inspect", "renders", "fiber"].includes(action)) throw new Error(`Unknown React Native action: ${action}`);
+  if (!["tree", "inspect", "renders", "fiber"].includes(action))
+    throw new Error(`Unknown React Native action: ${action}`);
   if (action === "inspect") return toolJson(await rnInspectPayload(args, deps));
 
-  const subaction = action === "renders" ? requireString(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
-  if (subaction && !["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown React Native renders action: ${subaction}`);
+  const subaction =
+    action === "renders"
+      ? requireString(args.subaction ?? positionals[1] ?? "read", "subaction")
+      : null;
+  if (subaction && !["start", "stop", "read"].includes(subaction))
+    throw new Error(`Unknown React Native renders action: ${subaction}`);
   const bridgeAction = action === "renders" ? `renders-${subaction}` : action;
   if (!deps.bridgeDomainCommand) {
     return toolJson({
@@ -65,7 +83,12 @@ export async function rnCommand(
     args,
     domain: "rn",
     action: bridgeAction,
-    expression: rnExpression({ action: bridgeAction, ref: args.ref, depth: args.depth, limit: args.limit }),
+    expression: rnExpression({
+      action: bridgeAction,
+      ref: args.ref,
+      depth: args.depth,
+      limit: args.limit,
+    }),
     policy: {
       checked: true,
       action: `rn.${bridgeAction}`,
@@ -74,9 +97,10 @@ export async function rnCommand(
       reason: "React Native introspection is read-only.",
     },
   });
-  const outputPayload = action === "tree" && !wantsRawOutput(args)
-    ? summarizeRnTreePayload(bridgePayload)
-    : bridgePayload;
+  const outputPayload =
+    action === "tree" && !wantsRawOutput(args)
+      ? summarizeRnTreePayload(bridgePayload)
+      : bridgePayload;
   return toolJson({
     ...outputPayload,
     action,
@@ -138,7 +162,17 @@ export async function rnInspectPayload(
   };
 }
 
-export function rnExpression({ action, ref, depth, limit }: { action: string; ref?: unknown; depth?: unknown; limit?: unknown }): string {
+export function rnExpression({
+  action,
+  ref,
+  depth,
+  limit,
+}: {
+  action: string;
+  ref?: unknown;
+  depth?: unknown;
+  limit?: unknown;
+}): string {
   return `(() => {
     const action = ${JSON.stringify(action)};
     const ref = ${JSON.stringify(ref ?? null)};
@@ -301,35 +335,67 @@ export function rnExpression({ action, ref, depth, limit }: { action: string; re
   })()`;
 }
 
-export function rnRealValidation(payload: Record<string, any>, action: string, subaction: string | null): RealValidation {
+export function rnRealValidation(
+  payload: Record<string, any>,
+  action: string,
+  subaction: string | null,
+): RealValidation {
   if (payload.available === false) {
     return realValidation({
       state: "unvalidated",
-      evidence: [{ source: String(payload.source ?? "react-native"), command: `rn.${action}`, confidence: "low" }],
-      missingEvidence: [{
-        signal: "react-native-runtime-bridge",
-        reason: String(payload.reason ?? "React Native runtime evidence was unavailable."),
-        recommendedFix: "Launch a Hermes dev target and mount the dev-only RN bridge/profiler instrumentation.",
-      }],
+      evidence: [
+        {
+          source: String(payload.source ?? "react-native"),
+          command: `rn.${action}`,
+          confidence: "low",
+        },
+      ],
+      missingEvidence: [
+        {
+          signal: "react-native-runtime-bridge",
+          reason: String(payload.reason ?? "React Native runtime evidence was unavailable."),
+          recommendedFix:
+            "Launch a Hermes dev target and mount the dev-only RN bridge/profiler instrumentation.",
+        },
+      ],
     });
   }
   const commits = Array.isArray(payload.renders?.commits) ? payload.renders.commits : [];
-  const hasCommitDurations = commits.some((commit: any) => Number.isFinite(Number(commit.durationMs ?? commit.actualDuration)));
+  const hasCommitDurations = commits.some((commit: any) =>
+    Number.isFinite(Number(commit.durationMs ?? commit.actualDuration)),
+  );
   if (action === "renders") {
     return realValidation({
       state: hasCommitDurations ? "validated" : "partial",
       claimsAllowed: { renderCost: hasCommitDurations },
-      evidence: [{ source: String(payload.source ?? payload.sources?.[0] ?? "app-instrumentation"), command: `rn.renders.${subaction ?? "read"}`, confidence: hasCommitDurations ? "medium" : "low" }],
-      missingEvidence: hasCommitDurations ? [] : [{
-        signal: "react-profiler-commit-durations",
-        reason: "Render bridge returned no commit duration records.",
-        recommendedFix: "Mount a React Profiler wrapper in development and rerun rn renders start/read/stop.",
-      }],
+      evidence: [
+        {
+          source: String(payload.source ?? payload.sources?.[0] ?? "app-instrumentation"),
+          command: `rn.renders.${subaction ?? "read"}`,
+          confidence: hasCommitDurations ? "medium" : "low",
+        },
+      ],
+      missingEvidence: hasCommitDurations
+        ? []
+        : [
+            {
+              signal: "react-profiler-commit-durations",
+              reason: "Render bridge returned no commit duration records.",
+              recommendedFix:
+                "Mount a React Profiler wrapper in development and rerun rn renders start/read/stop.",
+            },
+          ],
     });
   }
   return realValidation({
     state: "validated",
-    evidence: [{ source: String(payload.source ?? payload.sources?.[0] ?? "react-native"), command: `rn.${action}`, confidence: "medium" }],
+    evidence: [
+      {
+        source: String(payload.source ?? payload.sources?.[0] ?? "react-native"),
+        command: `rn.${action}`,
+        confidence: "medium",
+      },
+    ],
   });
 }
 
@@ -348,7 +414,9 @@ export async function readLatestRefCache(
   const stateRoot = resolveExpoStateRoot(args);
   const session = await readLatestSession(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile(join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null) as Promise<RefCache | null>;
+  return readJsonFile(
+    join(sessionDirectory(stateRoot, String(session.sessionId)), "refs.json"),
+  ).catch(() => null) as Promise<RefCache | null>;
 }
 
 export async function readLatestSession(stateRoot: string): Promise<Record<string, any> | null> {
@@ -357,10 +425,16 @@ export async function readLatestSession(stateRoot: string): Promise<Record<strin
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile(join(sessionsRoot, entry.name, "session.json")).catch(
+      () => null,
+    );
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt)));
+  sessions.sort((a, b) =>
+    String(asRecord(b)?.updatedAt ?? asRecord(b)?.createdAt).localeCompare(
+      String(asRecord(a)?.updatedAt ?? asRecord(a)?.createdAt),
+    ),
+  );
   return asRecord(sessions[0]);
 }
 
@@ -382,12 +456,15 @@ export async function readJsonFile(file: string): Promise<unknown> {
 }
 
 export function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : null;
 }
 
 function wantsRawOutput(args: Record<string, unknown>): boolean {
@@ -414,7 +491,9 @@ export function summarizeRnTreePayload(payload: Record<string, any>): Record<str
     route: payload.route ?? payload.routeHint ?? null,
     screen: {
       route: componentPath.find((name) => /^Route\(/.test(name)) ?? null,
-      component: componentPath.find((name) => /Route\(|Layout|Screen|SignIn|Schedule|Console/.test(name)) ?? null,
+      component:
+        componentPath.find((name) => /Route\(|Layout|Screen|SignIn|Schedule|Console/.test(name)) ??
+        null,
       path: componentPath,
     },
     counts: {
@@ -424,18 +503,21 @@ export function summarizeRnTreePayload(payload: Record<string, any>): Record<str
       controls: controls.length,
       rawTreeRoots: tree.length || null,
     },
-    viewport: viewport ? pickDefined({
-      width: viewport.width,
-      height: viewport.height,
-      scale: viewport.scale,
-      fontScale: viewport.fontScale,
-    }) : null,
+    viewport: viewport
+      ? pickDefined({
+          width: viewport.width,
+          height: viewport.height,
+          scale: viewport.scale,
+          fontScale: viewport.fontScale,
+        })
+      : null,
     target,
     structure,
     visibleText,
     controls,
     rawAvailable: true,
-    rawHint: "Rerun rn tree with --raw true for full component stacks, CDP transport, and unpruned trees.",
+    rawHint:
+      "Rerun rn tree with --raw true for full component stacks, CDP transport, and unpruned trees.",
     limitations: [
       "Output is pruned for agent relevance; infrastructure wrappers, native host views, component stacks, and transport internals are omitted by default.",
       ...arrayOfStrings(payload.limitations),
@@ -453,7 +535,10 @@ function compactTarget(value: unknown): Record<string, unknown> | null {
   });
 }
 
-function compactStructure(tree: unknown[], elements: Record<string, any>[]): Array<Record<string, unknown>> {
+function compactStructure(
+  tree: unknown[],
+  elements: Record<string, any>[],
+): Array<Record<string, unknown>> {
   const fromTree = flattenTreeResults(tree.flatMap((node) => simplifyTreeNode(node, 0)));
   if (fromTree.length > 0) return fromTree.slice(0, 80);
   return pathTreeFromElements(elements);
@@ -465,21 +550,27 @@ function simplifyTreeNode(value: unknown, depth: number): Array<Record<string, u
   if (!node) return [];
   const name = nodeName(node);
   const element = asRecord(node.element);
-  const children = Array.isArray(node.children) ? node.children.flatMap((child) => simplifyTreeNode(child, depth + 1)) : [];
+  const children = Array.isArray(node.children)
+    ? node.children.flatMap((child) => simplifyTreeNode(child, depth + 1))
+    : [];
   const details = elementDetails(element ?? node);
   const meaningful = isRelevantName(name) || Object.keys(details).length > 0;
   if (!meaningful) return children;
-  return [pickDefined({
-    component: name,
-    ...details,
-    children: children.length > 0 ? children : undefined,
-  })];
+  return [
+    pickDefined({
+      component: name,
+      ...details,
+      children: children.length > 0 ? children : undefined,
+    }),
+  ];
 }
 
 function flattenTreeResults(nodes: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   const compacted: Array<Record<string, unknown>> = [];
   for (const node of nodes) {
-    const children = Array.isArray(node.children) ? flattenTreeResults(node.children as Array<Record<string, unknown>>) : [];
+    const children = Array.isArray(node.children)
+      ? flattenTreeResults(node.children as Array<Record<string, unknown>>)
+      : [];
     compacted.push({ ...node, ...(children.length > 0 ? { children } : {}) });
   }
   return compacted;
@@ -537,18 +628,23 @@ function visibleTextRecords(elements: Record<string, any>[]): Array<Record<strin
     const testID = optionalNonemptyString(element.testID ?? asRecord(element.element)?.testID);
     if (role || testID || name === "Text" || name === "RCTText" || label.length > 1) {
       seen.add(label);
-      records.push(pickDefined({
-        text: label,
-        component: name,
-        path: relevantPathFromElement(element),
-        box: boxFromFrame(element.frame ?? asRecord(element.element)?.frame),
-      }));
+      records.push(
+        pickDefined({
+          text: label,
+          component: name,
+          path: relevantPathFromElement(element),
+          box: boxFromFrame(element.frame ?? asRecord(element.element)?.frame),
+        }),
+      );
     }
   }
   return records.slice(0, 80);
 }
 
-function controlRecords(elements: Record<string, any>[], textRecords: Array<Record<string, any>>): Array<Record<string, any>> {
+function controlRecords(
+  elements: Record<string, any>[],
+  textRecords: Array<Record<string, any>>,
+): Array<Record<string, any>> {
   const controls: Array<Record<string, any>> = [];
   for (const element of elements) {
     const elementRecord = asRecord(element.element) ?? element;
@@ -558,20 +654,27 @@ function controlRecords(elements: Record<string, any>[], textRecords: Array<Reco
     const isInput = /TextInput|Input/i.test(String(name));
     if (!role && !testID && !isInput) continue;
     const box = boxFromFrame(element.frame ?? elementRecord.frame);
-    const inferredLabel = optionalNonemptyString(element.label ?? elementRecord.label) ?? inferControlLabel(box, textRecords);
-    controls.push(pickDefined({
-      type: isInput ? "input" : role ?? "control",
-      label: inferredLabel,
-      testID,
-      component: name,
-      path: relevantPathFromElement(element),
-      box,
-    }));
+    const inferredLabel =
+      optionalNonemptyString(element.label ?? elementRecord.label) ??
+      inferControlLabel(box, textRecords);
+    controls.push(
+      pickDefined({
+        type: isInput ? "input" : (role ?? "control"),
+        label: inferredLabel,
+        testID,
+        component: name,
+        path: relevantPathFromElement(element),
+        box,
+      }),
+    );
   }
   return controls.slice(0, 60);
 }
 
-function inferControlLabel(box: Record<string, number> | undefined, textRecords: Array<Record<string, any>>): string | undefined {
+function inferControlLabel(
+  box: Record<string, number> | undefined,
+  textRecords: Array<Record<string, any>>,
+): string | undefined {
   if (!box) return undefined;
   for (const record of textRecords) {
     const textBox = asRecord(record.box);
@@ -592,7 +695,9 @@ function inferControlLabel(box: Record<string, number> | undefined, textRecords:
 
 function inferComponentPath(tree: unknown[], elements: Record<string, any>[]): string[] {
   for (const element of elements) {
-    const path = relevantPathFromElement(element).filter((name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name));
+    const path = relevantPathFromElement(element).filter(
+      (name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name),
+    );
     if (path.length > 0) return path.slice(0, 16);
   }
   const path: string[] = [];
@@ -627,7 +732,10 @@ function isRelevantName(name: string | null): name is string {
   if (!name) return false;
   if (/^RCT|^RNC|^RNS|ViewManagerAdapter|HostRoot|HostComponent|HostText/.test(name)) return false;
   if (WRAPPER_NAMES.has(name)) return false;
-  if (/^(Screen|ScreenStack|ScreenStackItem|InnerScreen|Suspender|Freeze|DelayedFreeze)$/.test(name)) return false;
+  if (
+    /^(Screen|ScreenStack|ScreenStackItem|InnerScreen|Suspender|Freeze|DelayedFreeze)$/.test(name)
+  )
+    return false;
   if (/^(View|Animated\(View\)|ScrollView|Text)$/.test(name)) return false;
   return true;
 }
@@ -666,7 +774,10 @@ function elementDetails(element: Record<string, any>): Record<string, unknown> {
   const role = optionalNonemptyString(element.role);
   const testID = optionalNonemptyString(element.testID);
   const box = boxFromFrame(element.frame ?? element.box);
-  const actions = Array.isArray(element.actions) && element.actions.length > 0 ? element.actions.map(String).slice(0, 10) : undefined;
+  const actions =
+    Array.isArray(element.actions) && element.actions.length > 0
+      ? element.actions.map(String).slice(0, 10)
+      : undefined;
   return pickDefined({ label, text, role, testID, box, actions });
 }
 
@@ -685,7 +796,8 @@ function countRelevantNodes(nodes: Array<Record<string, unknown>>): number {
   let count = 0;
   for (const node of nodes) {
     count += 1;
-    if (Array.isArray(node.children)) count += countRelevantNodes(node.children as Array<Record<string, unknown>>);
+    if (Array.isArray(node.children))
+      count += countRelevantNodes(node.children as Array<Record<string, unknown>>);
   }
   return count;
 }

@@ -9,16 +9,21 @@ export interface HttpPayload {
   body: string;
 }
 
-export async function removedAnnotationServerCommand(args: RemovedAnnotationServerArgs = {}): Promise<Record<string, unknown>> {
+export async function removedAnnotationServerCommand(
+  args: RemovedAnnotationServerArgs = {},
+): Promise<Record<string, unknown>> {
   return removedAnnotationServerHttpPayload(args);
 }
 
-export function removedAnnotationServerHttpPayload(args: RemovedAnnotationServerArgs = {}): Record<string, unknown> {
+export function removedAnnotationServerHttpPayload(
+  args: RemovedAnnotationServerArgs = {},
+): Record<string, unknown> {
   return {
     available: false,
     action: "annotation-server",
     code: "external-annotation-server-removed",
-    reason: "The external annotation server has been removed. Use the in-app annotation overlay instead.",
+    reason:
+      "The external annotation server has been removed. Use the in-app annotation overlay instead.",
     requested: {
       dir: typeof args.dir === "string" ? args.dir : null,
       port: args.port ?? null,
