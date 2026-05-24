@@ -1,25 +1,25 @@
-import { parseCliArgs } from "../cli-argv-parser/src/main/index.ts";
-import { commandArgs } from "../command-arg-projection/src/main/index.ts";
+import { parseCliArgs } from "./modules/cli-argv-parser/src/main/index.ts";
+import { commandArgs } from "./modules/command-arg-projection/src/main/index.ts";
 import {
   dispatchCommand,
   exitCodeForError,
   formatCliError,
   toolJson,
   unwrapToolJson,
-} from "../command-dispatch-envelope/src/main/index.ts";
-import { createCliFacade } from "../cli-facade-entrypoint/src/main/index.ts";
-import { cliHelpText } from "../cli-help-surface/src/main/index.ts";
-import { createCliRuntime } from "../cli-runtime-composition/src/main/index.ts";
-import { createCliExecutable } from "../cli-executable-wrapper/src/main/index.ts";
-import { bindHandlers } from "../tool-handler-registry/src/main/index.ts";
-import { doctor as legacyDoctor, projectInfo } from "../project-info-doctor/src/main/index.ts";
-import { expoRouterSitemap } from "../router-sitemap/src/main/index.ts";
-import { listDevices } from "../device-listing/src/main/index.ts";
-import { sessionCommand, startRunRecord } from "../session-run-records/src/main/index.ts";
-import { targetCommand } from "../target-management/src/main/index.ts";
-import { snapshotCommand, refsCommand, getRefCommand } from "../snapshot-evidence/src/main/index.ts";
-import { findCommand, waitCommand } from "../ref-actions-wait/src/main/index.ts";
-import { batchCommand } from "../batch-orchestration/src/main/index.ts";
+} from "./modules/command-dispatch-envelope/src/main/index.ts";
+import { createCliFacade } from "./modules/cli-facade-entrypoint/src/main/index.ts";
+import { cliHelpText } from "./modules/cli-help-surface/src/main/index.ts";
+import { createCliRuntime } from "./modules/cli-runtime-composition/src/main/index.ts";
+import { createCliExecutable } from "./modules/cli-executable-wrapper/src/main/index.ts";
+import { bindHandlers } from "./modules/tool-handler-registry/src/main/index.ts";
+import { doctor as legacyDoctor, projectInfo } from "./modules/project-info-doctor/src/main/index.ts";
+import { expoRouterSitemap } from "./modules/router-sitemap/src/main/index.ts";
+import { listDevices } from "./modules/device-listing/src/main/index.ts";
+import { sessionCommand, startRunRecord } from "./modules/session-run-records/src/main/index.ts";
+import { targetCommand } from "./modules/target-management/src/main/index.ts";
+import { snapshotCommand, refsCommand, getRefCommand } from "./modules/snapshot-evidence/src/main/index.ts";
+import { findCommand, waitCommand } from "./modules/ref-actions-wait/src/main/index.ts";
+import { batchCommand } from "./modules/batch-orchestration/src/main/index.ts";
 import {
   bootSimulator,
   collectAppLogs,
@@ -28,8 +28,8 @@ import {
   reloadApp,
   terminateApp,
   uninstallApp,
-} from "../app-lifecycle-actions/src/main/index.ts";
-import { openExpoRoute, openUrl } from "../route-url-actions/src/main/index.ts";
+} from "./modules/app-lifecycle-actions/src/main/index.ts";
+import { openExpoRoute, openUrl } from "./modules/route-url-actions/src/main/index.ts";
 import {
   automationGesture,
   automationTap,
@@ -37,38 +37,38 @@ import {
   keyboardCommand,
   refActionCommand,
   setEnvironmentCommand,
-} from "../interaction-actions/src/main/index.ts";
-import { automationTakeScreenshot } from "../screenshot-capture/src/main/index.ts";
-import { captureUxContext } from "../ux-context-capture/src/main/index.ts";
-import { annotateScreen } from "../annotate-screen-artifacts/src/main/index.ts";
-import { runtimeInspector } from "../runtime-inspector-actions/src/main/index.ts";
-import { reviewOverlay } from "../review-overlay-workflow/src/main/index.ts";
-import { reviewNextStep } from "../review-next-guidance/src/main/index.ts";
-import { annotationServer } from "../annotation-server-http/src/main/index.ts";
-import { consoleCommand, devtoolsCommand, errorsCommand } from "../devtools-diagnostics/src/main/index.ts";
-import { metroCommand } from "../metro-probes/src/main/index.ts";
-import { navigationCommand } from "../navigation-deeplinks/src/main/index.ts";
-import { networkCommand } from "../network-evidence/src/main/index.ts";
-import { controlsCommand, stateCommand, storageCommand } from "../bridge-domain-actions/src/main/index.ts";
-import { bridgeCommand } from "../bridge-command-adapter/src/main/index.ts";
-import { accessibilityCommand } from "../accessibility-actions/src/main/index.ts";
-import { dialogCommand, sheetCommand } from "../modal-blocker-actions/src/main/index.ts";
-import { recordCommand } from "../record-artifacts/src/main/index.ts";
-import { diffCommand, reviewCommand } from "../review-evidence-reports/src/main/index.ts";
-import { debugInspectCommand, highlightCommand } from "../debug-inspect-highlight/src/main/index.ts";
-import { expoCommand } from "../expo-introspection-actions/src/main/index.ts";
-import { rnCommand } from "../rn-introspection/src/main/index.ts";
-import { perfCommand } from "../perf-evidence/src/main/index.ts";
-import { dashboardCommand } from "../dashboard-observability/src/main/index.ts";
-import { policyCommand, redactCommand } from "../policy-redaction/src/main/command-boundary.ts";
+} from "./modules/interaction-actions/src/main/index.ts";
+import { automationTakeScreenshot } from "./modules/screenshot-capture/src/main/index.ts";
+import { captureUxContext } from "./modules/ux-context-capture/src/main/index.ts";
+import { annotateScreen } from "./modules/annotate-screen-artifacts/src/main/index.ts";
+import { runtimeInspector } from "./modules/runtime-inspector-actions/src/main/index.ts";
+import { reviewOverlay } from "./modules/review-overlay-workflow/src/main/index.ts";
+import { reviewNextStep } from "./modules/review-next-guidance/src/main/index.ts";
+import { annotationServer } from "./modules/annotation-server-http/src/main/index.ts";
+import { consoleCommand, devtoolsCommand, errorsCommand } from "./modules/devtools-diagnostics/src/main/index.ts";
+import { metroCommand } from "./modules/metro-probes/src/main/index.ts";
+import { navigationCommand } from "./modules/navigation-deeplinks/src/main/index.ts";
+import { networkCommand } from "./modules/network-evidence/src/main/index.ts";
+import { controlsCommand, stateCommand, storageCommand } from "./modules/bridge-domain-actions/src/main/index.ts";
+import { bridgeCommand } from "./modules/bridge-command-adapter/src/main/index.ts";
+import { accessibilityCommand } from "./modules/accessibility-actions/src/main/index.ts";
+import { dialogCommand, sheetCommand } from "./modules/modal-blocker-actions/src/main/index.ts";
+import { recordCommand } from "./modules/record-artifacts/src/main/index.ts";
+import { diffCommand, reviewCommand } from "./modules/review-evidence-reports/src/main/index.ts";
+import { debugInspectCommand, highlightCommand } from "./modules/debug-inspect-highlight/src/main/index.ts";
+import { expoCommand } from "./modules/expo-introspection-actions/src/main/index.ts";
+import { rnCommand } from "./modules/rn-introspection/src/main/index.ts";
+import { perfCommand } from "./modules/perf-evidence/src/main/index.ts";
+import { dashboardCommand } from "./modules/dashboard-observability/src/main/index.ts";
+import { policyCommand, redactCommand } from "./modules/policy-redaction/src/main/command-boundary.ts";
 import {
   installCommand,
   releaseCommand,
   skillsCommand,
   upgradeCommand,
-} from "../plugin-self-management/src/main/index.ts";
-import { liveBacklogCommand } from "../live-backlog/src/main/index.ts";
-import { traceInteraction } from "../interaction-trace-expression/src/main/index.ts";
+} from "./modules/plugin-self-management/src/main/index.ts";
+import { liveBacklogCommand } from "./modules/live-backlog/src/main/index.ts";
+import { traceInteraction } from "./modules/interaction-trace-expression/src/main/index.ts";
 
 const CLI_VERSION = "0.1.0";
 

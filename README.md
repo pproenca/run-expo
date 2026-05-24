@@ -8,7 +8,7 @@ npx expo98 --json doctor
 npx expo98 --json project-info --cwd /path/to/expo-app
 ```
 
-The npm package exposes `expo98` as the primary binary and keeps `expo-ios` as a compatibility alias. The transformed modules in this repository are source and test inputs; they are not exposed as separate npm workspace packages.
+The npm package exposes `expo98` as the primary binary and keeps `expo-ios` as a compatibility alias.
 
 ## Requirements
 
@@ -38,16 +38,17 @@ npm run build
 npm pack --dry-run --json
 ```
 
-`npm run build` regenerates `cli/expo98.mjs` from `src/bundled-cli.ts`. The packed CLI intentionally contains the executable bundle, compatibility wrapper, package metadata, README, and license rather than publishing every transformed source module.
+`npm run build` regenerates `cli/expo98.mjs` from `src/bundled-cli.ts`. The checked-in bundle is required so `npx expo98 ...` works from the packed package without rebuilding source.
 
 ## Repository Shape
 
-- `src/bundled-cli.ts` contains the bundled CLI source entrypoint.
+- `src/bundled-cli.ts` contains the source entrypoint for the bundled CLI.
+- `src/modules/` contains internal runtime source modules used only to build the bundle.
 - `cli/expo98.mjs` is the generated executable used by `npx expo98`.
 - `cli/expo-ios.mjs` is a compatibility wrapper.
-- Module directories such as `project-info-doctor/`, `policy-redaction/`, and `runtime-service-contracts/` contain transformed TypeScript packages with focused tests and transformation notes.
+- `tests/` verifies package entrypoints, direct CLI use, and packed npm contents.
 - `docs/` contains curated modernization context carried forward from the rewrite.
 
-## Modernization Notes
+## Publishing Check
 
-This repo replaced a legacy monolithic `dist/expo-ios.mjs` runtime with tested, source-owned modules and a generated single executable. See `docs/modernization.md`, `docs/architecture.md`, and `docs/business-rules.md` for the behavior and architecture record.
+`npm pack --dry-run --json` should include only the package files needed by users: license, README, package metadata, `cli/expo98.mjs`, and `cli/expo-ios.mjs`.

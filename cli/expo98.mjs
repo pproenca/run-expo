@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// cli-argv-parser/src/main/index.ts
+// src/modules/cli-argv-parser/src/main/index.ts
 var EXIT_INVALID_USAGE = 2;
 var CliUsageError = class extends Error {
   exitCode = EXIT_INVALID_USAGE;
@@ -131,7 +131,7 @@ function toCamel(value) {
   return value.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
 }
 
-// command-arg-projection/src/main/index.ts
+// src/modules/command-arg-projection/src/main/index.ts
 function commandArgs(command, args, globals = {}) {
   const cwd = args.cwd ?? globals.root;
   const common = {
@@ -696,7 +696,7 @@ function pickDefined(object) {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== void 0));
 }
 
-// command-dispatch-envelope/src/main/index.ts
+// src/modules/command-dispatch-envelope/src/main/index.ts
 var EXIT_SUCCESS = 0;
 var EXIT_RUNTIME_FAILURE = 1;
 var EXIT_INVALID_USAGE2 = 2;
@@ -1033,7 +1033,7 @@ function noopRecorder() {
   } };
 }
 
-// cli-facade-entrypoint/src/main/index.ts
+// src/modules/cli-facade-entrypoint/src/main/index.ts
 function defaultLastCliOptions() {
   return {
     json: false,
@@ -1068,7 +1068,7 @@ function createCliFacade(deps) {
   };
 }
 
-// cli-help-surface/src/main/index.ts
+// src/modules/cli-help-surface/src/main/index.ts
 var CLI_VERSION2 = "0.1.0";
 var GLOBAL_FLAGS = [
   "--json                 Write { ok, data } JSON to stdout",
@@ -1252,7 +1252,7 @@ function indent(lines) {
   return lines.map((line) => `  ${line}`);
 }
 
-// cli-runtime-composition/src/main/index.ts
+// src/modules/cli-runtime-composition/src/main/index.ts
 var CLI_RUNTIME_COMPONENT_SOURCES = [
   component("parseCliArgs", "@expo98/cli-argv-parser", "parseCliArgs"),
   component("commandArgs", "@expo98/command-arg-projection", "commandArgs"),
@@ -1296,7 +1296,7 @@ function component(role, packageName, exportName, required = true) {
   return { role, packageName, exportName, required };
 }
 
-// cli-executable-wrapper/src/main/index.ts
+// src/modules/cli-executable-wrapper/src/main/index.ts
 var DEFAULT_PROCESS_ARGV_OFFSET = 2;
 function createCliExecutable(deps) {
   return {
@@ -1325,7 +1325,7 @@ function readArgv(argv) {
   return typeof argv === "function" ? argv() : argv;
 }
 
-// tool-handler-registry/src/main/index.ts
+// src/modules/tool-handler-registry/src/main/index.ts
 var TOOL_HANDLER_BINDINGS = [
   ["doctor", "doctor"],
   ["project_info", "projectInfo"],
@@ -1475,7 +1475,7 @@ function source(handlerSymbol, packageName, exportName = handlerSymbol) {
   return { handlerSymbol, packageName, exportName };
 }
 
-// project-info-doctor/src/main/index.ts
+// src/modules/project-info-doctor/src/main/index.ts
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { execFile } from "node:child_process";
@@ -1983,7 +1983,7 @@ function summarizeUpstreamDependencies(dependencies) {
   };
 }
 
-// router-sitemap/src/main/index.ts
+// src/modules/router-sitemap/src/main/index.ts
 import { promises as fs2 } from "node:fs";
 import path2 from "node:path";
 function routeFromFile(relativeFile, dependencies = {}) {
@@ -2096,7 +2096,7 @@ async function defaultReadFile(filePath, encoding) {
   return fs2.readFile(filePath, encoding);
 }
 
-// device-listing/src/main/index.ts
+// src/modules/device-listing/src/main/index.ts
 var MAX_OUTPUT2 = 4e4;
 function clampNumber2(value, min, max) {
   const number = Number(value);
@@ -2215,13 +2215,13 @@ function truncate3(value, limit = MAX_OUTPUT2) {
 [truncated ${text.length - limit} characters]`;
 }
 
-// session-run-records/src/main/domain.ts
+// src/modules/session-run-records/src/main/domain.ts
 var CLI_NAME3 = "expo-ios";
 var CLI_VERSION4 = "0.1.0";
 var REDACTED2 = "[redacted]";
 var MAX_OUTPUT3 = 4e4;
 
-// session-run-records/src/main/ids.ts
+// src/modules/session-run-records/src/main/ids.ts
 var systemClock = () => /* @__PURE__ */ new Date();
 var randomBase36Suffix = () => Math.random().toString(36).slice(2, 8);
 function createSessionId(name, at, randomSuffix = randomBase36Suffix) {
@@ -2233,7 +2233,7 @@ function createRunId(at, randomSuffix = randomBase36Suffix) {
   return `${timestamp}-${randomSuffix()}`;
 }
 
-// session-run-records/src/main/paths.ts
+// src/modules/session-run-records/src/main/paths.ts
 import { basename as basename2, join as join2, resolve as resolve2 } from "node:path";
 function resolveExpoStateRoot2(args = {}) {
   if (args.stateDir) {
@@ -2250,11 +2250,11 @@ function sessionJsonPath(stateRoot, sessionId) {
   return join2(sessionDirectory(stateRoot, sessionId), "session.json");
 }
 
-// session-run-records/src/main/session-service.ts
+// src/modules/session-run-records/src/main/session-service.ts
 import { mkdir as mkdir3, readdir, rm } from "node:fs/promises";
 import { join as join3 } from "node:path";
 
-// session-run-records/src/main/json-store.ts
+// src/modules/session-run-records/src/main/json-store.ts
 import { mkdir as mkdir2, readFile as readFile2, writeFile } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
 async function writeJsonFile(file, value) {
@@ -2266,7 +2266,7 @@ async function readJsonFile2(file) {
   return JSON.parse(await readFile2(file, "utf8"));
 }
 
-// session-run-records/src/main/validation.ts
+// src/modules/session-run-records/src/main/validation.ts
 function requireString(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
@@ -2277,7 +2277,7 @@ function requireOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// session-run-records/src/main/session-service.ts
+// src/modules/session-run-records/src/main/session-service.ts
 async function sessionCommand(args = {}, deps = {}) {
   const action = requireString(args.action ?? "new", "action");
   if (!["new", "list", "show", "close", "clean"].includes(action)) {
@@ -2393,11 +2393,11 @@ async function cleanSessions(input) {
   return { available: true, action: "clean", stateRoot: input.stateRoot, olderThan, removed };
 }
 
-// session-run-records/src/main/run-recorder.ts
+// src/modules/session-run-records/src/main/run-recorder.ts
 import { mkdir as mkdir4 } from "node:fs/promises";
 import { join as join4, resolve as resolve3 } from "node:path";
 
-// session-run-records/src/main/redaction.ts
+// src/modules/session-run-records/src/main/redaction.ts
 var SECRET_KEY_PATTERN = /token|authorization|cookie|password|secret|apikey|apiKey/i;
 var URL_QUERY_SECRET_PATTERN = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
 function redactValue2(value, key = "") {
@@ -2452,7 +2452,7 @@ function truncateOutput(value, limit = MAX_OUTPUT3) {
 }
 var truncate4 = truncateOutput;
 
-// session-run-records/src/main/run-recorder.ts
+// src/modules/session-run-records/src/main/run-recorder.ts
 async function startRunRecord(input) {
   if (!input.globals.record && !input.globals.stateDir) {
     return { path: null, async finish() {
@@ -2516,7 +2516,7 @@ function stripUndefined(value) {
   return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== void 0));
 }
 
-// target-management/src/main/validation.ts
+// src/modules/target-management/src/main/validation.ts
 function requireString2(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
@@ -2531,7 +2531,7 @@ function clampNumber3(value, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
-// target-management/src/main/target-record.ts
+// src/modules/target-management/src/main/target-record.ts
 function stableIdPart(value) {
   return String(value ?? "unknown").toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
 }
@@ -2579,7 +2579,7 @@ function targetRecord(input) {
   };
 }
 
-// target-management/src/main/discovery.ts
+// src/modules/target-management/src/main/discovery.ts
 async function discoverTargets(args, deps) {
   const platform = args.platform ?? "all";
   const metroPort = clampMetroPort(args.metroPort);
@@ -2632,7 +2632,7 @@ function optionalString(value) {
   return typeof value === "string" ? value : null;
 }
 
-// target-management/src/main/target-service.ts
+// src/modules/target-management/src/main/target-service.ts
 async function listTargets(args, deps) {
   const session = await deps.readLatestSession(args.stateRoot);
   const targets = await discoverTargets({ ...args, selectedTargetId: session?.activeTargetId ?? null }, deps);
@@ -2701,7 +2701,7 @@ async function targetCommand(args, deps) {
   return getCurrentTarget(args, deps);
 }
 
-// snapshot-evidence/src/main/filters.ts
+// src/modules/snapshot-evidence/src/main/filters.ts
 function buildSnapshotFilters(args = {}) {
   return {
     interactiveOnly: args.interactive === true,
@@ -2719,13 +2719,13 @@ function clampNumber4(value, min, max) {
   return Math.max(min, Math.min(max, numberValue));
 }
 
-// snapshot-evidence/src/main/ids.ts
+// src/modules/snapshot-evidence/src/main/ids.ts
 function createSnapshotId(now6, randomSuffix) {
   const timestamp = now6.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").replace("T", "-").toLowerCase();
   return `snapshot-${timestamp}-${randomSuffix}`;
 }
 
-// snapshot-evidence/src/main/accessibility.ts
+// src/modules/snapshot-evidence/src/main/accessibility.ts
 function flattenAccessibilityNodes(tree, filters) {
   const roots = Array.isArray(tree) ? tree : [tree];
   const nodes = [];
@@ -2847,7 +2847,7 @@ function stringOrNull2(value) {
   return value === void 0 || value === null ? null : String(value);
 }
 
-// snapshot-evidence/src/main/persistence.ts
+// src/modules/snapshot-evidence/src/main/persistence.ts
 var NATIVE_LIMITATIONS = [
   "Native accessibility snapshots expose semantic UI where available; React component props and private fiber details are not included."
 ];
@@ -2952,7 +2952,7 @@ async function persistSnapshotArtifacts(stateRoot, session, snapshot, semanticBr
   });
 }
 
-// snapshot-evidence/src/main/ref-commands.ts
+// src/modules/snapshot-evidence/src/main/ref-commands.ts
 async function refsCommand(args, deps) {
   const cache = await readLatestRefCache(args.stateRoot, deps);
   if (!cache) {
@@ -3023,7 +3023,7 @@ function requireString3(value, name) {
   return value.trim();
 }
 
-// snapshot-evidence/src/main/snapshot-command.ts
+// src/modules/snapshot-evidence/src/main/snapshot-command.ts
 async function snapshotCommand(args, deps) {
   const stateRoot = args.stateRoot ?? "";
   const session = await deps.readLatestSession(stateRoot);
@@ -3104,7 +3104,7 @@ function truncate5(value, limit = 4e3) {
 [truncated ${text.length - limit} characters]`;
 }
 
-// ref-actions-wait/src/main/common.ts
+// src/modules/ref-actions-wait/src/main/common.ts
 function toolJson6(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
@@ -3137,7 +3137,7 @@ function normalizeFinderText(value) {
   return String(value ?? "").toLowerCase().trim();
 }
 
-// ref-actions-wait/src/main/find.ts
+// src/modules/ref-actions-wait/src/main/find.ts
 async function findCommand(args, deps) {
   const kind = requireString4(args.kind, "kind").toLowerCase();
   const value = requireString4(args.value, "value");
@@ -3213,7 +3213,7 @@ async function planUnavailable(action) {
   return { available: false, reason: `No action planner configured for ${action}.`, action };
 }
 
-// ref-actions-wait/src/main/wait.ts
+// src/modules/ref-actions-wait/src/main/wait.ts
 async function waitCommand(args, deps) {
   const now6 = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
@@ -3386,7 +3386,7 @@ function defaultSleep(ms) {
   return new Promise((resolve15) => setTimeout(resolve15, ms));
 }
 
-// batch-orchestration/src/main/domain.ts
+// src/modules/batch-orchestration/src/main/domain.ts
 var EXIT_RUNTIME_FAILURE3 = 1;
 var EXIT_INVALID_USAGE4 = 2;
 var CliUsageError4 = class extends Error {
@@ -3397,7 +3397,7 @@ var CliUsageError4 = class extends Error {
   }
 };
 
-// batch-orchestration/src/main/tool-json.ts
+// src/modules/batch-orchestration/src/main/tool-json.ts
 function toolJson7(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
@@ -3415,7 +3415,7 @@ function unwrapToolJson4(result) {
   }
 }
 
-// batch-orchestration/src/main/errors.ts
+// src/modules/batch-orchestration/src/main/errors.ts
 var REDACTED3 = "[redacted]";
 var SECRET_KEY_PATTERN2 = /token|authorization|cookie|password|secret|apikey|apiKey/i;
 var URL_QUERY_SECRET_PATTERN2 = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
@@ -3485,7 +3485,7 @@ function isSecretKey3(key) {
   return SECRET_KEY_PATTERN2.test(key);
 }
 
-// batch-orchestration/src/main/cli.ts
+// src/modules/batch-orchestration/src/main/cli.ts
 function parseCliArgs2(argv) {
   const args = { _: [] };
   const globals = defaultGlobals2();
@@ -3618,7 +3618,7 @@ function toCamel2(value) {
   return value.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
 }
 
-// batch-orchestration/src/main/command-map.ts
+// src/modules/batch-orchestration/src/main/command-map.ts
 var ALIASES2 = {
   "session": "session",
   "target": "target",
@@ -3751,7 +3751,7 @@ function commandArgs2(command, args, globals = {}) {
   }
 }
 
-// batch-orchestration/src/main/batch.ts
+// src/modules/batch-orchestration/src/main/batch.ts
 async function batchCommand(args, deps) {
   const steps = normalizeBatchSteps(args.steps ?? []);
   const bail = args.bail === true;
@@ -3813,7 +3813,7 @@ async function runBatchStep(step, batchArgs, deps) {
   return { command, data: redactValue4(unwrapToolJson4(result)) };
 }
 
-// app-lifecycle-actions/src/main/index.ts
+// src/modules/app-lifecycle-actions/src/main/index.ts
 import { resolve as resolvePath } from "node:path";
 var MAX_OUTPUT5 = 4e4;
 async function bootSimulator(args, deps) {
@@ -4199,7 +4199,7 @@ function stringFrom(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-// route-url-actions/src/main/index.ts
+// src/modules/route-url-actions/src/main/index.ts
 import { execFile as nodeExecFile } from "node:child_process";
 import * as fs3 from "node:fs/promises";
 import path3 from "node:path";
@@ -4410,7 +4410,7 @@ var defaultExecFile = (file, args, options = {}) => new Promise((resolve15, reje
   });
 });
 
-// interaction-actions/src/main/index.ts
+// src/modules/interaction-actions/src/main/index.ts
 import { basename as basename3 } from "node:path";
 var MAX_OUTPUT7 = 4e4;
 async function automationTap(args, deps) {
@@ -4961,7 +4961,7 @@ function reviewQuestions() {
   ];
 }
 
-// screenshot-capture/src/main/index.ts
+// src/modules/screenshot-capture/src/main/index.ts
 import * as fs4 from "node:fs/promises";
 import * as os from "node:os";
 import * as path4 from "node:path";
@@ -5460,7 +5460,7 @@ async function readJsonFile4(file, deps) {
   return JSON.parse(await fs4.readFile(file, "utf8"));
 }
 
-// ux-context-capture/src/main/index.ts
+// src/modules/ux-context-capture/src/main/index.ts
 var REVIEW_CONTEXT_QUESTIONS = [
   "Is the screen blank because of empty data, loading, failed network, or render failure?",
   "Which route/source file likely owns the visible screen?",
@@ -5605,7 +5605,7 @@ function formatError7(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// annotate-screen-artifacts/src/main/index.ts
+// src/modules/annotate-screen-artifacts/src/main/index.ts
 function toolJson11(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
@@ -5878,7 +5878,7 @@ function escapeHtml2(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// runtime-inspector-actions/src/main/index.ts
+// src/modules/runtime-inspector-actions/src/main/index.ts
 var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"];
 function toolJson12(value) {
   return {
@@ -6054,7 +6054,7 @@ function asRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 
-// review-overlay-workflow/src/main/index.ts
+// src/modules/review-overlay-workflow/src/main/index.ts
 var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
 function toolJson13(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -6261,7 +6261,7 @@ function relativePathFallback(from, to) {
   return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
 }
 
-// review-next-guidance/src/main/index.ts
+// src/modules/review-next-guidance/src/main/index.ts
 var SUBORDINATE_RULE = "Do not patch or call done until the current constraint is proven or deliberately elevated.";
 var NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigation model without a separate reason."];
 function toolJson14(value) {
@@ -6526,7 +6526,7 @@ function clampNumber13(value, min, max) {
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
 }
 
-// annotation-server-http/src/main/index.ts
+// src/modules/annotation-server-http/src/main/index.ts
 var ANNOTATION_BODY_LIMIT = 2 * 1024 * 1024;
 async function annotationServer(args = {}, deps) {
   const dir = deps.resolvePath(requireString9(args.dir, "dir"));
@@ -6636,7 +6636,7 @@ function formatError8(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// devtools-diagnostics/src/main/index.ts
+// src/modules/devtools-diagnostics/src/main/index.ts
 var DEVTOOLS_EVENTS_LIMITATIONS = [
   "This v1 collector records DevTools capability/session events, not a raw Chrome DevTools Protocol stream."
 ];
@@ -7368,7 +7368,7 @@ function formatError9(error) {
   return message == null ? String(error) : String(message);
 }
 
-// metro-probes/src/main/index.ts
+// src/modules/metro-probes/src/main/index.ts
 import { promises as fs5 } from "node:fs";
 import path5 from "node:path";
 var LIMITATIONS = [
@@ -7815,7 +7815,7 @@ async function fetchWithTimeout2(url, timeoutMs, init) {
   }
 }
 
-// navigation-deeplinks/src/main/index.ts
+// src/modules/navigation-deeplinks/src/main/index.ts
 var EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 var NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
@@ -8143,7 +8143,7 @@ function redactSensitiveUrlQuery2(value) {
   );
 }
 
-// network-evidence/src/main/index.ts
+// src/modules/network-evidence/src/main/index.ts
 import { promises as fs6 } from "node:fs";
 import path6 from "node:path";
 var CLI_NAME4 = "expo-ios";
@@ -8623,7 +8623,7 @@ function defaultResolveExpoStateRoot(args) {
   return ".scratch/expo-ios";
 }
 
-// bridge-domain-actions/src/main/index.ts
+// src/modules/bridge-domain-actions/src/main/index.ts
 var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
 var MAX_OUTPUT11 = 4e4;
 var MAX_ARRAY_ITEMS2 = 1e3;
@@ -9064,7 +9064,7 @@ function formatError11(error) {
   return record?.message == null ? String(error) : String(record.message);
 }
 
-// bridge-command-adapter/src/main/index.ts
+// src/modules/bridge-command-adapter/src/main/index.ts
 import { promises as fs7 } from "node:fs";
 import path7 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION4 = "1.0.0";
@@ -9320,7 +9320,7 @@ function asRecord9(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 
-// accessibility-actions/src/main/index.ts
+// src/modules/accessibility-actions/src/main/index.ts
 import { readdir as readdir3, readFile as readFile5 } from "node:fs/promises";
 import { basename as basename5, join as join6, resolve as resolve5 } from "node:path";
 var FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
@@ -9451,7 +9451,7 @@ function asRecord10(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// modal-blocker-actions/src/main/index.ts
+// src/modules/modal-blocker-actions/src/main/index.ts
 var MAX_OUTPUT12 = 4e4;
 var MAX_ARRAY_ITEMS3 = 1e3;
 function toolJson22(value) {
@@ -9679,7 +9679,7 @@ function asRecord11(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// record-artifacts/src/main/index.ts
+// src/modules/record-artifacts/src/main/index.ts
 import { access as access4, mkdir as mkdir8, readdir as readdir4, readFile as readFile6, writeFile as writeFile4 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname4, join as join7, resolve as resolve6 } from "node:path";
 var RECORD_LIMITATION = "This tracer-bullet command records metadata; native video capture is implemented by a later adapter.";
@@ -9777,7 +9777,7 @@ function asRecord12(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// review-evidence-reports/src/main/index.ts
+// src/modules/review-evidence-reports/src/main/index.ts
 import { mkdir as mkdir9, readdir as readdir5, readFile as readFile7, stat as stat3, writeFile as writeFile5 } from "node:fs/promises";
 import { basename as basename7, dirname as dirname5, join as join8, resolve as resolve7 } from "node:path";
 var REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
@@ -10019,7 +10019,7 @@ function asRecord13(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// debug-inspect-highlight/src/main/index.ts
+// src/modules/debug-inspect-highlight/src/main/index.ts
 import { mkdir as fsMkdir, readdir as readdir6, readFile as readFile8, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename as basename8, dirname as dirname6, join as join9, resolve as resolve8 } from "node:path";
 function toolJson25(value) {
@@ -10208,7 +10208,7 @@ function asRecord14(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// expo-introspection-actions/src/main/index.ts
+// src/modules/expo-introspection-actions/src/main/index.ts
 var EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"];
 function toolJson26(value) {
   return {
@@ -10384,7 +10384,7 @@ function asRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 
-// rn-introspection/src/main/index.ts
+// src/modules/rn-introspection/src/main/index.ts
 import { readdir as readdir7, readFile as readFile9 } from "node:fs/promises";
 import { basename as basename9, join as join10, resolve as resolve9 } from "node:path";
 function toolJson27(value) {
@@ -10522,7 +10522,7 @@ function asRecord16(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// perf-evidence/src/main/index.ts
+// src/modules/perf-evidence/src/main/index.ts
 import { mkdir as fsMkdir2, readFile as readFile10, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
 import { basename as basename10, dirname as dirname7, join as join11, resolve as resolve10 } from "node:path";
 var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
@@ -11030,7 +11030,7 @@ function firstPositional2(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
 }
 
-// dashboard-observability/src/main/index.ts
+// src/modules/dashboard-observability/src/main/index.ts
 import { mkdir as mkdir10, readdir as readdir8, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
 import { basename as basename11, dirname as dirname8, join as join12, resolve as resolve11 } from "node:path";
 var DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
@@ -11133,11 +11133,11 @@ function asRecord17(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// policy-redaction/src/main/command-boundary.ts
+// src/modules/policy-redaction/src/main/command-boundary.ts
 import { mkdir as mkdir11, readFile as readFile12, writeFile as writeFile7 } from "node:fs/promises";
 import { dirname as dirname9, resolve as resolve12 } from "node:path";
 
-// policy-redaction/src/main/domain.ts
+// src/modules/policy-redaction/src/main/domain.ts
 var REDACTED5 = "[redacted]";
 var POLICY_REASONS = Object.freeze({
   READ_ALLOWED: "Read action does not require policy approval.",
@@ -11166,7 +11166,7 @@ function checkedPolicyDecision({
   };
 }
 
-// policy-redaction/src/main/policy-service.ts
+// src/modules/policy-redaction/src/main/policy-service.ts
 function decideActionPolicy({
   action,
   sideEffect,
@@ -11240,7 +11240,7 @@ function actionSideEffect(action) {
   return "device";
 }
 
-// policy-redaction/src/main/redactor.ts
+// src/modules/policy-redaction/src/main/redactor.ts
 var SECRET_KEY_PATTERN3 = /token|authorization|cookie|password|secret|apikey|apiKey/i;
 var URL_QUERY_SECRET_PATTERN3 = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
 function redactJson(value, key = "") {
@@ -11273,7 +11273,7 @@ function isSecretKey4(key) {
   return SECRET_KEY_PATTERN3.test(key);
 }
 
-// policy-redaction/src/main/command-boundary.ts
+// src/modules/policy-redaction/src/main/command-boundary.ts
 function toolJson30(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
@@ -11362,7 +11362,7 @@ function requireOptionalString9(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// plugin-self-management/src/main/index.ts
+// src/modules/plugin-self-management/src/main/index.ts
 import { access as access5, mkdir as mkdir12, mkdtemp, readdir as readdir9, readFile as readFile13, writeFile as writeFile8 } from "node:fs/promises";
 import { homedir, tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname10, join as join13, resolve as resolve13 } from "node:path";
@@ -11532,7 +11532,7 @@ function formatError13(error) {
   return record?.message == null ? String(error) : String(record.message);
 }
 
-// live-backlog/src/main/index.ts
+// src/modules/live-backlog/src/main/index.ts
 import { mkdir as fsMkdir3, readdir as fsReaddir, writeFile as fsWriteFile3 } from "node:fs/promises";
 import { join as join14, resolve as resolve14 } from "node:path";
 var EXIT_SUCCESS2 = 0;
@@ -12132,7 +12132,7 @@ function firstPositional3(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
 }
 
-// interaction-trace-expression/src/main/index.ts
+// src/modules/interaction-trace-expression/src/main/index.ts
 async function traceInteraction(args = {}, deps) {
   const metroPort = clampNumber24(args.metroPort ?? 8081, 1, 65535);
   const action = args.action;

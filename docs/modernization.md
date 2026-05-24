@@ -1,28 +1,28 @@
 # Modernization Summary
 
-This repository is the hard replacement for the previous `expo98` checkout at `/Users/pedroproenca/Documents/Projects/expo98`. The replacement preserves git history and replaces the legacy `expo-ios` monolith with the modernized `expo98` CLI workspace.
+This repository is the hard replacement for the previous `expo98` checkout at `/Users/pedroproenca/Documents/Projects/expo98`. The replacement preserves git history and replaces the legacy `expo-ios` monolith with the modernized `expo98` CLI.
 
 ## What Changed
 
 - Primary executable changed from `expo-ios` to `expo98`; `expo-ios` remains as a compatibility bin.
-- Runtime ownership moved from a checked-in monolithic `dist/expo-ios.mjs` file to TypeScript source modules plus a generated bundle at `cli/expo98.mjs`.
+- Runtime ownership moved from a checked-in monolithic `dist/expo-ios.mjs` file to `src/bundled-cli.ts` plus a generated bundle at `cli/expo98.mjs`.
 - Runtime dependency `esbuild` is declared in `dependencies` so the package can build and pack in normal npm environments.
-- The npm package is intentionally one executable CLI package, not a published monorepo.
-- Legacy Clawpatch output, generated topology HTML/JSON, local caches, and per-package `dist` outputs were not carried into the final repo.
+- The repo is now intentionally one clean executable CLI package, not a monorepo and not the modernization staging workspace.
+- Legacy Clawpatch output, generated topology HTML/JSON, local caches, per-module workspaces, and per-package `dist` outputs are not part of this final repo.
 
 ## Evidence Carried Forward
 
 - Source-cited business rules are preserved in `docs/business-rules.md`.
 - Architecture intent is preserved in `docs/architecture.md` and Mermaid diagrams under `docs/diagrams/`.
-- Per-module `TRANSFORMATION_NOTES.md` files remain beside transformed modules.
 
 ## Validation Baseline
 
-The modernization baseline before replacement was:
+A valid publish candidate should pass:
 
-- 93 package manifests
-- 950 passing module and root tests
-- passing root package entrypoint tests
-- passing build and dry-run pack checks
-- `npx --no-install expo98 --version` returning `0.1.0`
-- package dry run containing the executable bundle, compatibility wrapper, README, package metadata, and license
+- `npm ci`
+- `npm test`
+- `npm run build`
+- `npm pack --dry-run --json`
+- `npx --no-install expo98 --version`
+- `npx --no-install expo98 --json doctor`
+- `npx --no-install expo98 --json project-info --cwd .`
