@@ -10,6 +10,7 @@
   "scripts": {
     "build": "node scripts/build-bundled-cli.mjs",
     "doctor": "node cli/expo98.mjs --json doctor",
+    "expo98": "node cli/expo98.mjs",
     "pack:check": "pnpm pack --dry-run --json",
     "prepack": "pnpm run build",
     "test": "node --test tests/*.mjs"

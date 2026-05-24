@@ -30,6 +30,13 @@ describe("expo98 package bin", () => {
     assert.equal(stderr, "");
   });
 
+  it("runs the local pnpm expo98 script for development testing", async () => {
+    const { stdout, stderr } = await execFileAsync("pnpm", ["expo98", "--version"], { env: npxEnv });
+
+    assert.match(stdout, /0\.1\.0\n$/);
+    assert.equal(stderr, "");
+  });
+
   it("returns JSON doctor evidence from the modernized package entrypoint", async () => {
     const { stdout } = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--json", "doctor"]);
     const payload = JSON.parse(stdout);

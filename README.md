@@ -33,10 +33,13 @@ State-changing commands are policy-gated. Provide `--action-policy <path>` for c
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm expo98 --version
 pnpm test
 pnpm run build
 pnpm pack --dry-run --json
 ```
+
+`pnpm expo98 ...` runs the checked-in CLI directly for local development without going through `npx` or a packed install.
 
 `pnpm run build` regenerates `cli/expo98.mjs` from `src/bundled-cli.ts`. The checked-in bundle is required so `npx expo98 ...` works from the packed package without rebuilding source.
 
