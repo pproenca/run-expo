@@ -1,11 +1,15 @@
 import { openSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { createServer as createHttpServer } from "node:http";
-import { createServer as createNetServer } from "node:net";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn, type StdioOptions } from "node:child_process";
 
 import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { createEventsFile, readEvents } from "./events.js";
+import { codexReviewOverlayComponentSource } from "./scaffold-template.js";
+import { clampNumber, findAvailablePort, normalizeEndpointPath, reviewOverlayServer } from "./server.js";
+
+export { codexReviewOverlayComponentSource };
+export { normalizeEndpointPath, reviewOverlayServer };
 
 export interface ReviewOverlayArgs extends Record<string, unknown> {
   action?: unknown;
@@ -190,104 +194,8 @@ export function relativeImportFromAppRoot(cwd: string, overlayDir: string, deps?
   return rel.startsWith(".") ? rel : `./${rel}`;
 }
 
-export function normalizeEndpointPath(value: unknown): string {
-  const raw = requireOptionalString(value) ?? "/events";
-  const endpoint = raw.startsWith("/") ? raw : `/${raw}`;
-  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint)) throw new Error("endpointPath must be a simple URL path.");
-  return endpoint;
-}
-
 export function requireOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-export function clampNumber(value: unknown, min: number, max: number): number {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) {
-    throw new Error(`Expected a finite number, got ${value}.`);
-  }
-  return Math.min(Math.max(numberValue, min), max);
-}
-
-export function codexReviewOverlayComponentSource(): string {
-  return `import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-
-type CodexReviewOverlayProps = {
-  endpoint?: string;
-  screenName?: string;
-  inspectedViewRef?: React.RefObject<unknown>;
-};
-
-export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }: CodexReviewOverlayProps): React.ReactElement {
-  const [active, setActive] = useState(false);
-  const [events, setEvents] = useState([]);
-  const sequence = useRef(0);
-
-  const submit = useCallback(async (event) => {
-    const payload = {
-      id: "overlay-" + Date.now().toString(36) + "-" + sequence.current++,
-      screenName,
-      createdAt: new Date().toISOString(),
-      ...event,
-    };
-    setEvents((current) => current.concat(payload));
-    try {
-      await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch {}
-  }, [endpoint, screenName]);
-
-  const label = useMemo(() => active ? "Tap target" : "Comment", [active]);
-
-  return (
-    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <View pointerEvents="box-none" style={styles.toolbar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Codex review comment"
-          onPress={() => setActive((value) => !value)}
-          style={[styles.button, active ? styles.active : null]}
-        >
-          <Text style={styles.buttonText}>{label}</Text>
-        </Pressable>
-      </View>
-      {active ? (
-        <Pressable
-          accessibilityLabel="Codex review target surface"
-          style={StyleSheet.absoluteFill}
-          onPress={(event) => {
-            const { locationX, locationY, pageX, pageY } = event.nativeEvent;
-            submit({
-              type: "tap-comment",
-              gesture: { locationX, locationY, pageX, pageY },
-              element: { refAvailable: Boolean(inspectedViewRef?.current) },
-            });
-            setActive(false);
-          }}
-        />
-      ) : null}
-      <View pointerEvents="none" style={styles.counter}>
-        <Text style={styles.counterText}>{events.length}</Text>
-      </View>
-    </View>
-  );
-}
-
-export default CodexReviewOverlay;
-
-const styles = StyleSheet.create({
-  toolbar: { position: "absolute", top: 48, right: 16, zIndex: 9999 },
-  button: { backgroundColor: "#0a84ff", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 },
-  active: { backgroundColor: "#ff453a" },
-  buttonText: { color: "white", fontWeight: "700" },
-  counter: { position: "absolute", top: 92, right: 16, minWidth: 24, alignItems: "center" },
-  counterText: { color: "white", backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12, overflow: "hidden", paddingHorizontal: 7, paddingVertical: 2 },
-});
-`;
 }
 
 function relativePathFallback(from: string, to: string): string {
@@ -305,88 +213,4 @@ async function defaultNormalizeProjectCwd(cwd: unknown): Promise<string> {
   const details = await stat(resolved).catch(() => null);
   if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
-}
-
-async function createEventsFile(args: { outputDir: string; title?: unknown; reset: boolean }): Promise<Record<string, any>> {
-  await mkdir(args.outputDir, { recursive: true });
-  const eventsPath = path.join(args.outputDir, "events.json");
-  const existing = await readJson(eventsPath).catch(() => null);
-  const payload = args.reset || !existing
-    ? {
-      version: 1,
-      title: requireOptionalString(args.title) ?? "Codex in-app review",
-      createdAt: new Date().toISOString(),
-      events: [],
-    }
-    : existing;
-  await writeFile(eventsPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
-}
-
-async function readEvents(eventsPath: string, options: { metroPort?: unknown } = {}): Promise<Record<string, any>> {
-  const payload = await readJson(eventsPath).catch(() => null);
-  if (!payload) {
-    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
-  }
-  const events = Array.isArray(payload.events) ? payload.events : [];
-  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
-}
-
-async function reviewOverlayServer(args: { dir: string; port?: unknown; endpointPath?: unknown }): Promise<ToolTextResult> {
-  const dir = path.resolve(args.dir);
-  const port = args.port ? clampNumber(args.port, 1, 65535) : await findAvailablePort(17655);
-  const endpointPath = normalizeEndpointPath(args.endpointPath);
-  await mkdir(dir, { recursive: true });
-  await createEventsFile({ outputDir: dir, reset: false });
-  const server = createHttpServer((request, response) => {
-    let body = "";
-    request.setEncoding("utf8");
-    request.on("data", (chunk) => {
-      body += chunk;
-    });
-    request.on("end", async () => {
-      const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
-      const eventsPath = path.join(dir, "events.json");
-      if (request.method === "GET" && url.pathname === "/events.json") {
-        const text = await readFile(eventsPath, "utf8").catch(() => "{\"events\":[]}\n");
-        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(text);
-        return;
-      }
-      if (request.method === "POST" && url.pathname === endpointPath) {
-        const current = await readJson(eventsPath).catch(() => ({ version: 1, events: [] }));
-        const events = Array.isArray(current.events) ? current.events : [];
-        events.push(JSON.parse(body || "{}"));
-        const next = { ...current, events, updatedAt: new Date().toISOString() };
-        await writeFile(eventsPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}\n`);
-        return;
-      }
-      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-      response.end("{\"ok\":false,\"error\":\"not found\"}\n");
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", () => resolve()));
-  const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-  return await new Promise<never>(() => {});
-}
-
-async function readJson(file: string): Promise<Record<string, any>> {
-  return JSON.parse(await readFile(file, "utf8"));
-}
-
-function findAvailablePort(start: number): Promise<number> {
-  return new Promise((resolve) => {
-    const tryPort = (port: number) => {
-      const server = createNetServer();
-      server.once("error", () => tryPort(port + 1));
-      server.once("listening", () => {
-        server.close(() => resolve(port));
-      });
-      server.listen(port, "127.0.0.1");
-    };
-    tryPort(start);
-  });
 }

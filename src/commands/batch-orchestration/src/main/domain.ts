@@ -1,18 +1,12 @@
 import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import {
+  CliUsageError,
+  EXIT_INVALID_USAGE,
+  EXIT_RUNTIME_FAILURE,
+} from "../../../../core/cli-error-classification/src/main/index.ts";
 
 export type { ToolTextResult };
-
-export const EXIT_RUNTIME_FAILURE = 1;
-export const EXIT_INVALID_USAGE = 2;
-
-export class CliUsageError extends Error {
-  readonly exitCode = EXIT_INVALID_USAGE;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "CliUsageError";
-  }
-}
+export { CliUsageError, EXIT_INVALID_USAGE, EXIT_RUNTIME_FAILURE };
 
 export interface ParsedCliArgs {
   globals: Record<string, unknown>;

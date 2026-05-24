@@ -1,4 +1,6 @@
-export const EXIT_INVALID_USAGE = 2;
+import { CliUsageError, EXIT_INVALID_USAGE } from "../../../cli-error-classification/src/main/index.ts";
+
+export { CliUsageError, EXIT_INVALID_USAGE };
 
 export interface ParsedCliArgs {
   globals: CliGlobals;
@@ -28,15 +30,6 @@ export interface CliGlobals extends Record<string, unknown> {
   contentBoundaries: boolean;
   allowRuntimeEval: string | null;
   confirmActions: string | null;
-}
-
-export class CliUsageError extends Error {
-  readonly exitCode = EXIT_INVALID_USAGE;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "CliUsageError";
-  }
 }
 
 export function parseCliArgs(argv: string[]): ParsedCliArgs {
@@ -199,4 +192,3 @@ export function formatError(error: unknown): string {
   const record = error as { message?: unknown };
   return String(record.message ?? error);
 }
-

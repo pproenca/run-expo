@@ -16,21 +16,31 @@ import {
   perfTransport,
 } from "./model.js";
 import { perfValidation } from "./validation.js";
-import type { PerfDependencies } from "./types.js";
+import type {
+  PerfArgs,
+  PerfBudgetArtifact,
+  PerfBudgetCheck,
+  PerfComparisonDelta,
+  PerfDependencies,
+  PerfMetric,
+  PerfPayload,
+} from "./types.js";
 
-export async function perfSummaryPayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfSummaryPayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const cwd = await projectCwd(args.cwd, deps);
   const summary = await projectSummary(cwd, deps);
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65_535);
   const metro = await metroStatus({ metroPort }, deps);
-  const metrics = [];
+  const metrics: PerfMetric[] = [];
   const unavailableSources = [];
   const packageJsonPath = await findUpFile(summary.projectRoot, "package.json", deps);
   if (packageJsonPath) {
-    const packageJson = await readJson(packageJsonPath, deps);
+    const packageJson = asRecord(await readJson(packageJsonPath, deps)) ?? {};
+    const dependencies = asRecord(packageJson.dependencies) ?? {};
+    const devDependencies = asRecord(packageJson.devDependencies) ?? {};
     metrics.push(perfMetric({
       name: "project.dependencies",
-      value: Object.keys({ ...(packageJson.dependencies ?? {}), ...(packageJson.devDependencies ?? {}) }).length,
+      value: Object.keys({ ...dependencies, ...devDependencies }).length,
       unit: "count",
       source: "project",
       confidence: "low",
@@ -76,7 +86,11 @@ export async function perfSummaryPayload(args: Record<string, any> = {}, deps: P
   };
 }
 
-export async function perfRuntimePayload(args: Record<string, any> = {}, action: string, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+export async function perfRuntimePayload(args: PerfArgs = {}, action: string, deps: PerfDependencies = {}): Promise<PerfPayload> {
   return writeRuntimePerfArtifact(args, deps, {
     artifactAction: action,
     bridgeAction: action,
@@ -86,7 +100,7 @@ export async function perfRuntimePayload(args: Record<string, any> = {}, action:
   });
 }
 
-export async function perfInstrumentedPayload(args: Record<string, any> = {}, action: string, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfInstrumentedPayload(args: PerfArgs = {}, action: string, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const subaction = requireOptionalString(args.subaction);
   const label = requireOptionalString(args.label);
   const bridgeAction = perfBridgeAction(action, subaction);
@@ -99,7 +113,7 @@ export async function perfInstrumentedPayload(args: Record<string, any> = {}, ac
   });
 }
 
-export async function perfInteractionPayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfInteractionPayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const subaction = requireString(args.subaction ?? "read", "subaction");
   if (!["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown performance interaction action: ${subaction}`);
   const label = requireOptionalString(args.label ?? args.interaction);
@@ -113,7 +127,7 @@ export async function perfInteractionPayload(args: Record<string, any> = {}, dep
   });
 }
 
-export async function perfReportPayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfReportPayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const nativeArtifact = requireOptionalString(args.nativeArtifact);
   const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: "report", label: args.interaction ?? args.label });
   const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve(nativeArtifact)) : null;
@@ -137,13 +151,13 @@ export async function perfReportPayload(args: Record<string, any> = {}, deps: Pe
 }
 
 
-export async function perfComparePayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfComparePayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const baselinePath = resolve(requireString(args.baseline, "baseline"));
   const candidatePath = resolve(requireString(args.candidate, "candidate"));
-  const baseline = await readJson(baselinePath, deps);
-  const candidate = await readJson(candidatePath, deps);
+  const baseline = await readJson(baselinePath, deps) as PerfPayload;
+  const candidate = await readJson(candidatePath, deps) as PerfPayload;
   const candidateMetrics = metricMap(candidate.metrics ?? []);
-  const deltas = [];
+  const deltas: PerfComparisonDelta[] = [];
   for (const metric of baseline.metrics ?? []) {
     const next = candidateMetrics.get(metric.name);
     if (!next || typeof metric.value !== "number" || typeof next.value !== "number") continue;
@@ -169,17 +183,17 @@ export async function perfComparePayload(args: Record<string, any> = {}, deps: P
   }, deps);
 }
 
-export async function perfBudgetPayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfBudgetPayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const subaction = requireString(args.subaction ?? "check", "subaction");
   if (subaction !== "check") throw new Error(`Unknown performance budget action: ${subaction}`);
   const budgetPath = resolve(requireString(args.file, "file"));
   const candidatePath = resolve(requireString(args.candidate, "candidate"));
-  const budget = await readJson(budgetPath, deps);
-  const candidate = await readJson(candidatePath, deps);
+  const budget = await readJson(budgetPath, deps) as PerfBudgetArtifact;
+  const candidate = await readJson(candidatePath, deps) as PerfPayload;
   const metrics = metricMap(candidate.metrics ?? []);
-  const checks = (budget.budgets ?? []).map((rule: any) => {
+  const checks: PerfBudgetCheck[] = (budget.budgets ?? []).map((rule) => {
     const metric = metrics.get(rule.metric);
-    const value = metric?.value ?? null;
+    const value = typeof metric?.value === "number" ? metric.value : null;
     const passed = typeof value === "number" &&
       (typeof rule.max !== "number" || value <= rule.max) &&
       (typeof rule.min !== "number" || value >= rule.min);
@@ -192,13 +206,13 @@ export async function perfBudgetPayload(args: Record<string, any> = {}, deps: Pe
     sources: ["artifact"],
     file: budgetPath,
     candidate: candidatePath,
-    passed: checks.every((check: any) => check.passed),
+    passed: checks.every((check) => check.passed),
     checks,
     limitations: ["Budget checks compare numeric metrics only; choose budgets that match build mode and device context."],
   }, deps);
 }
 
-export async function perfMemoryPayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfMemoryPayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const samples = clampNumber(args.samples ?? 1, 1, 100);
   const nativeArtifact = requireOptionalString(args.nativeArtifact);
   const projectRoot = await projectCwd(args.cwd, deps);
@@ -230,14 +244,14 @@ export async function perfMemoryPayload(args: Record<string, any> = {}, deps: Pe
   return writePerfArtifact(args, "memory", { ...payload, realValidation: perfValidation(payload, "memory") }, deps);
 }
 
-export async function perfNativeProfilerPayload(args: Record<string, any> = {}, profiler: string, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfNativeProfilerPayload(args: PerfArgs = {}, profiler: string, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const subaction = requireString(args.subaction ?? (profiler === "memgraph" ? "capture" : "stop"), "subaction");
   const allowed = profiler === "ettrace" ? ["start", "stop"] : ["capture"];
   if (!allowed.includes(subaction)) throw new Error(`Unknown ${profiler} action: ${subaction}`);
   const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
-  const nativeArtifact = resolve(args.nativeArtifact ?? join(resolveExpoStateRoot(args), "artifacts", "perf", defaultName));
+  const nativeArtifact = resolve(String(args.nativeArtifact ?? join(resolveExpoStateRoot(args), "artifacts", "perf", defaultName)));
   await (deps.mkdir ?? fsMkdir)(dirname(nativeArtifact), { recursive: true });
-  let sampleResult: Record<string, any> | null = null;
+  let sampleResult: unknown = null;
   let samplePid: number | null = null;
   let sampleSeconds: number | null = null;
   if (profiler === "ettrace" && subaction === "start" && args.pid !== undefined) {
@@ -280,10 +294,10 @@ function requirePid(value: unknown): number {
   return pid;
 }
 
-export async function perfBundlePayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
+export async function perfBundlePayload(args: PerfArgs = {}, deps: PerfDependencies = {}): Promise<PerfPayload> {
   const cwd = await projectCwd(args.cwd, deps);
   const bundleArtifact = requireOptionalString(args.bundleArtifact);
-  const metrics = [];
+  const metrics: PerfMetric[] = [];
   const unavailableSources = [];
   let available = false;
   let bundlePath = null;

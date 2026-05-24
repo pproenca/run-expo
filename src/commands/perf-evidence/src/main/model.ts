@@ -1,14 +1,30 @@
 import { requireOptionalString } from "./common.js";
 import { redactPerfValue as redactValue } from "./redaction.js";
+import type {
+  PerfConfidence,
+  PerfFinding,
+  PerfFrameSample,
+  PerfMetric,
+  PerfNativeSummary,
+  PerfNetworkRequest,
+  PerfRenderCommit,
+  PerfReport,
+  PerfRuntimePayload,
+} from "./types.js";
 
-export function metricMap(metrics: any[]): Map<string, any> {
-  return new Map((metrics ?? []).map((metric) => [metric.name, metric]));
+export function metricMap(metrics: unknown): Map<string, PerfMetric> {
+  if (!Array.isArray(metrics)) return new Map();
+  return new Map(metrics.map((metric) => {
+    const record = metric && typeof metric === "object" && !Array.isArray(metric) ? metric as Record<string, unknown> : {};
+    const normalized = perfMetric(record);
+    return [normalized.name, normalized];
+  }));
 }
 
-export function lowerConfidence(left: unknown, right: unknown): string {
-  const order = ["low", "medium", "high"];
-  const leftIndex = order.indexOf(String(left));
-  const rightIndex = order.indexOf(String(right));
+export function lowerConfidence(left: unknown, right: unknown): PerfConfidence {
+  const order: PerfConfidence[] = ["low", "medium", "high"];
+  const leftIndex = order.indexOf(normalizeConfidence(left));
+  const rightIndex = order.indexOf(normalizeConfidence(right));
   return order[Math.min(leftIndex === -1 ? 0 : leftIndex, rightIndex === -1 ? 0 : rightIndex)];
 }
 
@@ -29,15 +45,15 @@ export function normalizePerfBridgePayload(value: any, action: string): Record<s
   return { ...value, action, metrics };
 }
 
-export function normalizePerfReport(runtimePayload: unknown, nativeSummary: Record<string, any> | null): Record<string, any> {
-  const runtime = runtimePayload && typeof runtimePayload === "object" && !Array.isArray(runtimePayload) ? redactValue(runtimePayload as any) : null;
-  const requests = Array.isArray((runtime as any)?.network?.requests) ? (runtime as any).network.requests : [];
-  const renders = Array.isArray((runtime as any)?.renders?.commits) ? (runtime as any).renders.commits : [];
-  const frames = Array.isArray((runtime as any)?.frames?.samples) ? (runtime as any).frames.samples : [];
-  const findings = [];
+export function normalizePerfReport(runtimePayload: unknown, nativeSummary: PerfNativeSummary | null): PerfReport {
+  const runtime = normalizeRuntimePayload(runtimePayload);
+  const requests = runtimeNetworkRequests(runtime);
+  const renders = runtimeRenderCommits(runtime);
+  const frames = runtimeFrameSamples(runtime);
+  const findings: PerfFinding[] = [];
   const slowRequests = requests
-    .filter((request: any) => Number(request.durationMs) >= 500)
-    .sort((a: any, b: any) => Number(b.durationMs ?? 0) - Number(a.durationMs ?? 0));
+    .filter((request) => Number(request.durationMs) >= 500)
+    .sort((a, b) => Number(b.durationMs ?? 0) - Number(a.durationMs ?? 0));
   if (slowRequests[0]) {
     findings.push({
       type: "network-latency",
@@ -46,7 +62,7 @@ export function normalizePerfReport(runtimePayload: unknown, nativeSummary: Reco
       evidence: { durationMs: slowRequests[0].durationMs, status: slowRequests[0].status ?? null },
     });
   }
-  const worstCommit = renders.reduce((worst: any, commit: any) => Number(commit.durationMs ?? commit.actualDuration ?? 0) > Number(worst?.durationMs ?? worst?.actualDuration ?? 0) ? commit : worst, null);
+  const worstCommit = renders.reduce<PerfRenderCommit | null>((worst, commit) => Number(commit.durationMs ?? commit.actualDuration ?? 0) > Number(worst?.durationMs ?? worst?.actualDuration ?? 0) ? commit : worst, null);
   if (worstCommit && Number(worstCommit.durationMs ?? worstCommit.actualDuration ?? 0) >= 16.7) {
     findings.push({
       type: "render-cost",
@@ -55,13 +71,13 @@ export function normalizePerfReport(runtimePayload: unknown, nativeSummary: Reco
       evidence: worstCommit,
     });
   }
-  const droppedFrames = Number((runtime as any)?.frames?.droppedFrameCount ?? frames.filter((frame: any) => Number(frame.deltaMs) > 33.4).length);
+  const droppedFrames = Number(runtime?.frames?.droppedFrameCount ?? frames.filter((frame) => Number(frame.deltaMs) > 33.4).length);
   if (droppedFrames > 0) {
     findings.push({
       type: "frame-jank",
       severity: droppedFrames >= 5 ? "high" : "medium",
       summary: "Frame samples include dropped or long frames.",
-      evidence: { droppedFrameCount: droppedFrames, worstFrameMs: (runtime as any)?.frames?.worstFrameMs ?? null },
+      evidence: { droppedFrameCount: droppedFrames, worstFrameMs: runtime?.frames?.worstFrameMs ?? null },
     });
   }
   if (nativeSummary?.available) {
@@ -77,10 +93,10 @@ export function normalizePerfReport(runtimePayload: unknown, nativeSummary: Reco
     });
   }
   const metrics = [
-    { name: "network.requests", value: requests.length, unit: "count", source: "network", confidence: requests.length ? "medium" : "low" },
-    { name: "renders.commits", value: renders.length, unit: "count", source: "react-profiler", confidence: renders.length ? "medium" : "low" },
-    { name: "frames.samples", value: frames.length, unit: "count", source: "frame-sampler", confidence: frames.length ? "medium" : "low" },
-    ...(nativeSummary?.available ? [{ name: "native.sample.bytes", value: nativeSummary.bytes, unit: "bytes", source: "native-profiler", confidence: "medium" }] : []),
+    perfMetric({ name: "network.requests", value: requests.length, unit: "count", source: "network", confidence: requests.length ? "medium" : "low" }),
+    perfMetric({ name: "renders.commits", value: renders.length, unit: "count", source: "react-profiler", confidence: renders.length ? "medium" : "low" }),
+    perfMetric({ name: "frames.samples", value: frames.length, unit: "count", source: "frame-sampler", confidence: frames.length ? "medium" : "low" }),
+    ...(nativeSummary?.available ? [perfMetric({ name: "native.sample.bytes", value: nativeSummary.bytes, unit: "bytes", source: "native-profiler", confidence: "medium" })] : []),
   ];
   return {
     available: Boolean(runtime || nativeSummary?.available),
@@ -101,6 +117,24 @@ export function normalizePerfReport(runtimePayload: unknown, nativeSummary: Reco
       ...(!requests.length ? ["Network attribution is unavailable because no request rows were returned."] : []),
     ],
   };
+}
+
+function normalizeRuntimePayload(value: unknown): PerfRuntimePayload | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? redactValue(value) as PerfRuntimePayload
+    : null;
+}
+
+function runtimeNetworkRequests(runtime: PerfRuntimePayload | null): PerfNetworkRequest[] {
+  return Array.isArray(runtime?.network?.requests) ? runtime.network.requests : [];
+}
+
+function runtimeRenderCommits(runtime: PerfRuntimePayload | null): PerfRenderCommit[] {
+  return Array.isArray(runtime?.renders?.commits) ? runtime.renders.commits : [];
+}
+
+function runtimeFrameSamples(runtime: PerfRuntimePayload | null): PerfFrameSample[] {
+  return Array.isArray(runtime?.frames?.samples) ? runtime.frames.samples : [];
 }
 
 export function perfEvidenceSource(value: any): string {
@@ -135,15 +169,31 @@ export function normalizePerfBuildKind(value: unknown): string {
   throw new Error(`Unknown performance build kind: ${buildKind}`);
 }
 
-export function perfMetric({ name, value, unit, source, confidence }: Record<string, any>): Record<string, any> {
-  return { name, value, unit, source, confidence };
+export function perfMetric({ name, value, unit, source, confidence }: {
+  name?: unknown;
+  value?: unknown;
+  unit?: unknown;
+  source?: unknown;
+  confidence?: unknown;
+}): PerfMetric {
+  return {
+    name: String(name),
+    value,
+    unit: unit == null ? null : String(unit),
+    source: typeof source === "string" && source ? source : "unknown",
+    confidence: confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "low",
+  };
 }
 
-export function perfOverallConfidence(metrics: Array<Record<string, any>>): string {
+export function perfOverallConfidence(metrics: Array<Pick<PerfMetric, "confidence">>): PerfConfidence {
   if (!metrics.length) return "low";
   if (metrics.some((metric) => metric.confidence === "high")) return "high";
   if (metrics.some((metric) => metric.confidence === "medium")) return "medium";
   return "low";
+}
+
+function normalizeConfidence(value: unknown): PerfConfidence {
+  return value === "high" || value === "medium" || value === "low" ? value : "low";
 }
 
 export function perfDevelopmentLimitations(extra: unknown[] = []): string[] {

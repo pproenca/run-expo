@@ -3,6 +3,14 @@ import {
   unwrapToolJson,
   type ToolTextResult,
 } from "../../../tool-json-envelope/src/main/index.ts";
+import {
+  CliUsageError,
+  errorCodeForExitCode,
+  exitCodeForError,
+  EXIT_INVALID_USAGE,
+  EXIT_RUNTIME_FAILURE,
+  EXIT_SUCCESS,
+} from "../../../cli-error-classification/src/main/index.ts";
 import { CURRENT_CLI_NAME, CLI_VERSION } from "../../../cli-identity/src/main/index.ts";
 import { COMMAND_ALIASES, commandAliases } from "../../../command-surface/src/main/index.ts";
 import {
@@ -12,13 +20,18 @@ import {
   truncateOutput,
 } from "../../../policy-redaction/src/main/redactor.ts";
 
-export const EXIT_SUCCESS = 0;
-export const EXIT_RUNTIME_FAILURE = 1;
-export const EXIT_INVALID_USAGE = 2;
 export const CLI_NAME = CURRENT_CLI_NAME;
 export const REDACTED = "[redacted]";
 
 export { toolJson, unwrapToolJson };
+export {
+  CliUsageError,
+  errorCodeForExitCode,
+  exitCodeForError,
+  EXIT_INVALID_USAGE,
+  EXIT_RUNTIME_FAILURE,
+  EXIT_SUCCESS,
+};
 export {
   formatError,
   redactValue,
@@ -63,15 +76,6 @@ export interface DispatchDependencies {
   stderr?: (text: string) => void;
   printHelp?: () => string;
   cliVersion?: string;
-}
-
-export class CliUsageError extends Error {
-  readonly exitCode = EXIT_INVALID_USAGE;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "CliUsageError";
-  }
 }
 
 export { COMMAND_ALIASES, commandAliases };
@@ -238,24 +242,6 @@ export function plainPayload(command: string, payload: any): string[] {
   }
   lines.push(`data: ${JSON.stringify(payload)}`);
   return lines;
-}
-
-export function exitCodeForError(error: unknown): number {
-  const record = error as { exitCode?: unknown; message?: unknown } | null | undefined;
-  if (record && Number.isInteger(record.exitCode)) {
-    return record.exitCode as number;
-  }
-  const message = String(record?.message ?? "");
-  if (/Unknown command|Unknown tool|requires a value|Expected a finite number|must be a non-empty string|must look like|must not contain whitespace|valid JSON/i.test(message)) {
-    return EXIT_INVALID_USAGE;
-  }
-  return EXIT_RUNTIME_FAILURE;
-}
-
-export function errorCodeForExitCode(exitCode: number): "invalid_usage" | "runtime_failure" | "error" {
-  if (exitCode === EXIT_INVALID_USAGE) return "invalid_usage";
-  if (exitCode === EXIT_RUNTIME_FAILURE) return "runtime_failure";
-  return "error";
 }
 
 export function truncate(value: unknown, limit = 40_000): string {

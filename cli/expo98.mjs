@@ -3644,8 +3644,8 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
 var defaultSnapshotDependencies = {
   now: () => /* @__PURE__ */ new Date(),
   randomSuffix: randomBase36Suffix,
-  ensureDirectory: async (path14) => {
-    await mkdir6(path14, { recursive: true });
+  ensureDirectory: async (path16) => {
+    await mkdir6(path16, { recursive: true });
   },
   writeJsonFile: writeJson2,
   updateSessionRecord: async (stateRoot, record) => {
@@ -4075,8 +4075,8 @@ async function readLatestSession2(stateRoot) {
   );
   return sessions[0] ?? null;
 }
-async function readJson4(path14) {
-  return JSON.parse(await readFile6(path14, "utf8"));
+async function readJson4(path16) {
+  return JSON.parse(await readFile6(path16, "utf8"));
 }
 
 // src/commands/ref-actions-wait/src/main/find.ts
@@ -5909,9 +5909,9 @@ function clampNumber9(value, min, max) {
   }
   return Math.min(Math.max(numberValue, min), max);
 }
-function getPath(value, path14) {
+function getPath(value, path16) {
   let current = value;
-  for (const key of path14) {
+  for (const key of path16) {
     current = asRecord4(current)?.[key];
   }
   return current;
@@ -6537,7 +6537,7 @@ var defaultInteractionDependencies = {
   wait: (ms) => new Promise((resolve18) => setTimeout(resolve18, ms)),
   now: () => /* @__PURE__ */ new Date(),
   tmpdir: osTmpdir,
-  mkdir: (path14, options) => fs7.mkdir(path14, options),
+  mkdir: (path16, options) => fs7.mkdir(path16, options),
   joinPath: joinPath2
 };
 async function defaultCommandPath(command) {
@@ -7368,154 +7368,43 @@ function formatError8(error) {
 
 // src/commands/review-overlay-workflow/src/main/index.ts
 import { openSync } from "node:fs";
-import { mkdir as mkdir10, readFile as readFile11, stat as stat5, writeFile as writeFile6 } from "node:fs/promises";
-import { createServer as createHttpServer } from "node:http";
-import { createServer as createNetServer } from "node:net";
-import path7 from "node:path";
+import { mkdir as mkdir12, stat as stat5, writeFile as writeFile8 } from "node:fs/promises";
+import path9 from "node:path";
 import { spawn as spawn2 } from "node:child_process";
-var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
-async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies) {
-  const payload = await reviewOverlayAction(args, deps);
-  return isToolTextResult(payload) ? payload : toolJson(payload);
-}
-async function reviewOverlayAction(args = {}, deps = defaultReviewOverlayDependencies) {
-  const action = requireOptionalString5(args.action) ?? "prepare";
-  if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
-    throw new Error(`Unknown review-overlay action: ${action}`);
-  }
-  if (action === "scaffold") return scaffoldReviewOverlay(args, deps);
-  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
-  const outputDir = deps.resolvePath(requireOptionalString5(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
-  const eventsPath = deps.joinPath(outputDir, "events.json");
-  if (action === "read") {
-    const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
-    return { outputDir, eventsPath, ...data2 };
-  }
-  if (action === "clear") {
-    const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
-    return { outputDir, eventsPath, cleared: true, ...data2 };
-  }
-  if (action === "server") {
-    return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
-  }
-  const title = requireOptionalString5(args.title) ?? "Codex in-app review";
-  const data = await deps.createEventsFile({ outputDir, title, reset: false });
-  let server = null;
-  if (args.serve === true) {
-    const port = args.port ? clampNumber13(args.port, 1, 65535) : await deps.findAvailablePort(17655);
-    const endpointPath = normalizeEndpointPath(args.endpointPath);
-    const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
-    const logFd = await deps.openLogFile(logPath, "a");
-    const child = await deps.spawnDetached(deps.execPath, [
-      deps.scriptPath,
-      "review-overlay-server",
-      "--output-dir",
-      outputDir,
-      "--port",
-      String(port),
-      "--endpoint-path",
-      endpointPath
-    ], {
-      detached: true,
-      stdio: ["ignore", logFd, logFd]
-    });
-    child.unref?.();
-    server = {
-      url: `http://127.0.0.1:${port}/`,
-      endpoint: `http://127.0.0.1:${port}${endpointPath}`,
-      eventsUrl: `http://127.0.0.1:${port}/events.json`,
-      pid: child.pid,
-      logPath,
-      stop: `kill ${child.pid}`
-    };
-  }
-  return {
-    outputDir,
-    eventsPath,
-    server,
-    ...data,
-    instructions: [
-      "Run review-overlay scaffold once, then mount CodexReviewOverlay inside the app root in development only.",
-      server ? `Pass endpoint="${server.endpoint}" to CodexReviewOverlay. In iOS Simulator, 127.0.0.1 points at the Mac host.` : "Start with --serve true or run review-overlay server before using the overlay in the simulator.",
-      `Codex can read in-app review events from ${eventsPath}.`
-    ]
-  };
-}
-var defaultReviewOverlayDependencies = {
-  normalizeProjectCwd: defaultNormalizeProjectCwd2,
-  fallbackCwd: () => process.cwd(),
-  resolvePath: (...parts) => path7.resolve(...parts.filter((part) => Boolean(part))),
-  joinPath: (...parts) => path7.join(...parts),
-  relativePath: (from, to) => path7.relative(from, to),
-  createEventsFile,
-  readEvents,
-  reviewOverlayServer,
-  mkdir: mkdir10,
-  writeFile: writeFile6,
-  pathExists: async (file) => stat5(file).then(() => true, () => false),
-  findAvailablePort,
-  openLogFile: (file) => openSync(file, "a"),
-  spawnDetached: (command, argv, options) => spawn2(command, argv, options),
-  execPath: process.execPath,
-  scriptPath: process.argv[1] ?? ""
-};
-function isToolTextResult(value) {
-  return Array.isArray(value?.content);
-}
-async function scaffoldReviewOverlay(args = {}, deps) {
-  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
-  const overlayDir = deps.resolvePath(cwd, requireOptionalString5(args.overlayDir) ?? "codex-review-overlay");
-  const componentPath = deps.joinPath(overlayDir, "CodexReviewOverlay.tsx");
-  const indexPath = deps.joinPath(overlayDir, "index.ts");
-  if (await deps.pathExists(componentPath) && args.force !== true) {
-    throw new Error(`${componentPath} already exists. Pass --force true to overwrite.`);
-  }
-  await deps.mkdir(overlayDir, { recursive: true });
-  await deps.writeFile(componentPath, codexReviewOverlayComponentSource(), "utf8");
-  await deps.writeFile(indexPath, `export { CodexReviewOverlay } from "./CodexReviewOverlay";
-export { default } from "./CodexReviewOverlay";
+
+// src/commands/review-overlay-workflow/src/main/events.ts
+import { mkdir as mkdir10, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
+import path7 from "node:path";
+async function createEventsFile(args) {
+  await mkdir10(args.outputDir, { recursive: true });
+  const eventsPath = path7.join(args.outputDir, "events.json");
+  const existing = await readJson5(eventsPath).catch(() => null);
+  const payload = args.reset || !existing ? {
+    version: 1,
+    title: requireOptionalString5(args.title) ?? "Codex in-app review",
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    events: []
+  } : existing;
+  await writeFile6(eventsPath, `${JSON.stringify(payload, null, 2)}
 `, "utf8");
-  return {
-    overlayDir,
-    componentPath,
-    indexPath,
-    integration: {
-      import: `import { CodexReviewOverlay } from "${relativeImportFromAppRoot(cwd, overlayDir, deps)}";`,
-      jsx: `{__DEV__ ? <CodexReviewOverlay endpoint="http://127.0.0.1:17655/events" screenName="Schedule" inspectedViewRef={inspectedViewRef} /> : null}`,
-      note: "Mount this near the root layout so it floats above the current screen. Wrap only the app content, not the overlay, in a host View ref with collapsable={false}; pass that ref as inspectedViewRef so comments identify the tapped app element."
-    },
-    capabilities: [
-      "single Comment control inside the app",
-      "inactive state leaves the app interactive",
-      "mouse-over preview after Comment resolves native elements before selection",
-      "next click after Comment resolves the touched native element and owner hierarchy",
-      "Copy action writes Agentation-style feedback markdown to the Mac clipboard",
-      "bounding boxes around commented elements",
-      "gesture metadata for tap, hold, and scroll conflict notes",
-      "local JSON event sync readable by Codex"
-    ]
-  };
+  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
 }
-function relativeImportFromAppRoot(cwd, overlayDir, deps) {
-  const rel = (deps?.relativePath(cwd, overlayDir) ?? relativePathFallback(cwd, overlayDir)).replace(/\\/g, "/");
-  return rel.startsWith(".") ? rel : `./${rel}`;
+async function readEvents(eventsPath, options = {}) {
+  const payload = await readJson5(eventsPath).catch(() => null);
+  if (!payload) {
+    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
+  }
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
 }
-function normalizeEndpointPath(value) {
-  const raw = requireOptionalString5(value) ?? "/events";
-  const endpoint = raw.startsWith("/") ? raw : `/${raw}`;
-  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint)) throw new Error("endpointPath must be a simple URL path.");
-  return endpoint;
+async function readJson5(file) {
+  return JSON.parse(await readFile11(file, "utf8"));
 }
 function requireOptionalString5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber13(value, min, max) {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) {
-    throw new Error(`Expected a finite number, got ${value}.`);
-  }
-  return Math.min(Math.max(numberValue, min), max);
-}
+
+// src/commands/review-overlay-workflow/src/main/scaffold-template.ts
 function codexReviewOverlayComponentSource() {
   return `import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -7596,48 +7485,17 @@ const styles = StyleSheet.create({
 });
 `;
 }
-function relativePathFallback(from, to) {
-  const fromParts = from.split("/").filter(Boolean);
-  const toParts = to.split("/").filter(Boolean);
-  while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
-    fromParts.shift();
-    toParts.shift();
-  }
-  return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
-}
-async function defaultNormalizeProjectCwd2(cwd) {
-  const resolved = path7.resolve(requireOptionalString5(cwd) ?? ".");
-  const details = await stat5(resolved).catch(() => null);
-  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
-  return resolved;
-}
-async function createEventsFile(args) {
-  await mkdir10(args.outputDir, { recursive: true });
-  const eventsPath = path7.join(args.outputDir, "events.json");
-  const existing = await readJson5(eventsPath).catch(() => null);
-  const payload = args.reset || !existing ? {
-    version: 1,
-    title: requireOptionalString5(args.title) ?? "Codex in-app review",
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-    events: []
-  } : existing;
-  await writeFile6(eventsPath, `${JSON.stringify(payload, null, 2)}
-`, "utf8");
-  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
-}
-async function readEvents(eventsPath, options = {}) {
-  const payload = await readJson5(eventsPath).catch(() => null);
-  if (!payload) {
-    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
-  }
-  const events = Array.isArray(payload.events) ? payload.events : [];
-  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
-}
+
+// src/commands/review-overlay-workflow/src/main/server.ts
+import { mkdir as mkdir11, readFile as readFile12, writeFile as writeFile7 } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
+import path8 from "node:path";
 async function reviewOverlayServer(args) {
-  const dir = path7.resolve(args.dir);
+  const dir = path8.resolve(args.dir);
   const port = args.port ? clampNumber13(args.port, 1, 65535) : await findAvailablePort(17655);
   const endpointPath = normalizeEndpointPath(args.endpointPath);
-  await mkdir10(dir, { recursive: true });
+  await mkdir11(dir, { recursive: true });
   await createEventsFile({ outputDir: dir, reset: false });
   const server = createHttpServer((request, response) => {
     let body = "";
@@ -7647,9 +7505,9 @@ async function reviewOverlayServer(args) {
     });
     request.on("end", async () => {
       const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
-      const eventsPath = path7.join(dir, "events.json");
+      const eventsPath = path8.join(dir, "events.json");
       if (request.method === "GET" && url.pathname === "/events.json") {
-        const text = await readFile11(eventsPath, "utf8").catch(() => '{"events":[]}\n');
+        const text = await readFile12(eventsPath, "utf8").catch(() => '{"events":[]}\n');
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(text);
         return;
@@ -7659,7 +7517,7 @@ async function reviewOverlayServer(args) {
         const events = Array.isArray(current.events) ? current.events : [];
         events.push(JSON.parse(body || "{}"));
         const next = { ...current, events, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-        await writeFile6(eventsPath, `${JSON.stringify(next, null, 2)}
+        await writeFile7(eventsPath, `${JSON.stringify(next, null, 2)}
 `, "utf8");
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}
@@ -7677,8 +7535,18 @@ async function reviewOverlayServer(args) {
   return await new Promise(() => {
   });
 }
-async function readJson5(file) {
-  return JSON.parse(await readFile11(file, "utf8"));
+function normalizeEndpointPath(value) {
+  const raw = requireOptionalString6(value) ?? "/events";
+  const endpoint = raw.startsWith("/") ? raw : `/${raw}`;
+  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint)) throw new Error("endpointPath must be a simple URL path.");
+  return endpoint;
+}
+function clampNumber13(value, min, max) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) {
+    throw new Error(`Expected a finite number, got ${value}.`);
+  }
+  return Math.min(Math.max(numberValue, min), max);
 }
 function findAvailablePort(start) {
   return new Promise((resolve18) => {
@@ -7693,13 +7561,163 @@ function findAvailablePort(start) {
     tryPort(start);
   });
 }
+function requireOptionalString6(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+// src/commands/review-overlay-workflow/src/main/index.ts
+var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
+async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies) {
+  const payload = await reviewOverlayAction(args, deps);
+  return isToolTextResult(payload) ? payload : toolJson(payload);
+}
+async function reviewOverlayAction(args = {}, deps = defaultReviewOverlayDependencies) {
+  const action = requireOptionalString7(args.action) ?? "prepare";
+  if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
+    throw new Error(`Unknown review-overlay action: ${action}`);
+  }
+  if (action === "scaffold") return scaffoldReviewOverlay(args, deps);
+  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
+  const outputDir = deps.resolvePath(requireOptionalString7(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
+  const eventsPath = deps.joinPath(outputDir, "events.json");
+  if (action === "read") {
+    const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
+    return { outputDir, eventsPath, ...data2 };
+  }
+  if (action === "clear") {
+    const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
+    return { outputDir, eventsPath, cleared: true, ...data2 };
+  }
+  if (action === "server") {
+    return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
+  }
+  const title = requireOptionalString7(args.title) ?? "Codex in-app review";
+  const data = await deps.createEventsFile({ outputDir, title, reset: false });
+  let server = null;
+  if (args.serve === true) {
+    const port = args.port ? clampNumber13(args.port, 1, 65535) : await deps.findAvailablePort(17655);
+    const endpointPath = normalizeEndpointPath(args.endpointPath);
+    const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
+    const logFd = await deps.openLogFile(logPath, "a");
+    const child = await deps.spawnDetached(deps.execPath, [
+      deps.scriptPath,
+      "review-overlay-server",
+      "--output-dir",
+      outputDir,
+      "--port",
+      String(port),
+      "--endpoint-path",
+      endpointPath
+    ], {
+      detached: true,
+      stdio: ["ignore", logFd, logFd]
+    });
+    child.unref?.();
+    server = {
+      url: `http://127.0.0.1:${port}/`,
+      endpoint: `http://127.0.0.1:${port}${endpointPath}`,
+      eventsUrl: `http://127.0.0.1:${port}/events.json`,
+      pid: child.pid,
+      logPath,
+      stop: `kill ${child.pid}`
+    };
+  }
+  return {
+    outputDir,
+    eventsPath,
+    server,
+    ...data,
+    instructions: [
+      "Run review-overlay scaffold once, then mount CodexReviewOverlay inside the app root in development only.",
+      server ? `Pass endpoint="${server.endpoint}" to CodexReviewOverlay. In iOS Simulator, 127.0.0.1 points at the Mac host.` : "Start with --serve true or run review-overlay server before using the overlay in the simulator.",
+      `Codex can read in-app review events from ${eventsPath}.`
+    ]
+  };
+}
+var defaultReviewOverlayDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd2,
+  fallbackCwd: () => process.cwd(),
+  resolvePath: (...parts) => path9.resolve(...parts.filter((part) => Boolean(part))),
+  joinPath: (...parts) => path9.join(...parts),
+  relativePath: (from, to) => path9.relative(from, to),
+  createEventsFile,
+  readEvents,
+  reviewOverlayServer,
+  mkdir: mkdir12,
+  writeFile: writeFile8,
+  pathExists: async (file) => stat5(file).then(() => true, () => false),
+  findAvailablePort,
+  openLogFile: (file) => openSync(file, "a"),
+  spawnDetached: (command, argv, options) => spawn2(command, argv, options),
+  execPath: process.execPath,
+  scriptPath: process.argv[1] ?? ""
+};
+function isToolTextResult(value) {
+  return Array.isArray(value?.content);
+}
+async function scaffoldReviewOverlay(args = {}, deps) {
+  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
+  const overlayDir = deps.resolvePath(cwd, requireOptionalString7(args.overlayDir) ?? "codex-review-overlay");
+  const componentPath = deps.joinPath(overlayDir, "CodexReviewOverlay.tsx");
+  const indexPath = deps.joinPath(overlayDir, "index.ts");
+  if (await deps.pathExists(componentPath) && args.force !== true) {
+    throw new Error(`${componentPath} already exists. Pass --force true to overwrite.`);
+  }
+  await deps.mkdir(overlayDir, { recursive: true });
+  await deps.writeFile(componentPath, codexReviewOverlayComponentSource(), "utf8");
+  await deps.writeFile(indexPath, `export { CodexReviewOverlay } from "./CodexReviewOverlay";
+export { default } from "./CodexReviewOverlay";
+`, "utf8");
+  return {
+    overlayDir,
+    componentPath,
+    indexPath,
+    integration: {
+      import: `import { CodexReviewOverlay } from "${relativeImportFromAppRoot(cwd, overlayDir, deps)}";`,
+      jsx: `{__DEV__ ? <CodexReviewOverlay endpoint="http://127.0.0.1:17655/events" screenName="Schedule" inspectedViewRef={inspectedViewRef} /> : null}`,
+      note: "Mount this near the root layout so it floats above the current screen. Wrap only the app content, not the overlay, in a host View ref with collapsable={false}; pass that ref as inspectedViewRef so comments identify the tapped app element."
+    },
+    capabilities: [
+      "single Comment control inside the app",
+      "inactive state leaves the app interactive",
+      "mouse-over preview after Comment resolves native elements before selection",
+      "next click after Comment resolves the touched native element and owner hierarchy",
+      "Copy action writes Agentation-style feedback markdown to the Mac clipboard",
+      "bounding boxes around commented elements",
+      "gesture metadata for tap, hold, and scroll conflict notes",
+      "local JSON event sync readable by Codex"
+    ]
+  };
+}
+function relativeImportFromAppRoot(cwd, overlayDir, deps) {
+  const rel = (deps?.relativePath(cwd, overlayDir) ?? relativePathFallback(cwd, overlayDir)).replace(/\\/g, "/");
+  return rel.startsWith(".") ? rel : `./${rel}`;
+}
+function requireOptionalString7(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+function relativePathFallback(from, to) {
+  const fromParts = from.split("/").filter(Boolean);
+  const toParts = to.split("/").filter(Boolean);
+  while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
+    fromParts.shift();
+    toParts.shift();
+  }
+  return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
+}
+async function defaultNormalizeProjectCwd2(cwd) {
+  const resolved = path9.resolve(requireOptionalString7(cwd) ?? ".");
+  const details = await stat5(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
 
 // src/commands/annotate-screen-artifacts/src/main/index.ts
 var ANNOTATE_ACTIONS = /* @__PURE__ */ new Set(["prepare", "read", "clear", "scaffold", "server"]);
 var SCAFFOLD_CONFIRMATION = "annotate-overlay-scaffold";
 async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireOptionalString6(args.action ?? positionals[0]) ?? "prepare";
+  const action = requireOptionalString8(args.action ?? positionals[0]) ?? "prepare";
   if (!ANNOTATE_ACTIONS.has(action)) {
     throw new Error(`Unknown annotate-screen action: ${action}`);
   }
@@ -7750,7 +7768,7 @@ function hasExplicitConfirmation(value, required) {
   if (typeof value !== "string") return false;
   return value.split(/[,\s]+/).filter(Boolean).includes(required);
 }
-function requireOptionalString6(value) {
+function requireOptionalString8(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 function isRecord7(value) {
@@ -7762,12 +7780,12 @@ function isToolTextResult2(value) {
 
 // src/commands/runtime-inspector-actions/src/main/index.ts
 import { execFile as nodeExecFile9 } from "node:child_process";
-import { readFile as readFile13 } from "node:fs/promises";
-import path9 from "node:path";
+import { readFile as readFile14 } from "node:fs/promises";
+import path11 from "node:path";
 
 // src/commands/bridge-domain-actions/src/main/index.ts
-import { readFile as readFile12 } from "node:fs/promises";
-import path8 from "node:path";
+import { readFile as readFile13 } from "node:fs/promises";
+import path10 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 var MAX_OUTPUT10 = 4e4;
 var MAX_ARRAY_ITEMS = 1e3;
@@ -7831,8 +7849,8 @@ async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies
 var defaultBridgeDomainDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
   evaluateHermesExpression,
-  readJsonFile: async (file) => JSON.parse(await readFile12(file, "utf8")),
-  resolvePath: (file) => path8.resolve(file)
+  readJsonFile: async (file) => JSON.parse(await readFile13(file, "utf8")),
+  resolvePath: (file) => path10.resolve(file)
 };
 async function bridgeDomainCommand(input, deps = defaultBridgeDomainDependencies) {
   const metroPort = clampNumber14(input.args.metroPort ?? 8081, 1, 65535);
@@ -8206,7 +8224,7 @@ var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-commen
 async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
   const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
-  const commentTitle = requireOptionalString7(args.commentTitle) ?? "Codex: Add UI comment";
+  const commentTitle = requireOptionalString9(args.commentTitle) ?? "Codex: Add UI comment";
   const maxComments = clampNumber15(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
     return toolJson(await deps.openIosDevMenu({ ...args, metroPort }));
@@ -8235,15 +8253,15 @@ var defaultRuntimeInspectorDependencies = {
 };
 var defaultOpenDevMenuDependencies = {
   broadcastMetroMessage,
-  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString7(device), options),
+  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString9(device), options),
   openDevClientForMessageSocket: async (args) => unwrapToolJson(await openExpoRoute({
     device: args.device.udid,
     bundleId: args.bundleId,
     url: args.devClientUrl
   })),
   execFile: execFile7,
-  readJsonFile: async (file) => JSON.parse(await readFile13(file, "utf8")),
-  resolvePath: (file) => path9.resolve(file),
+  readJsonFile: async (file) => JSON.parse(await readFile14(file, "utf8")),
+  resolvePath: (file) => path11.resolve(file),
   truncate: truncate12
 };
 function normalizeRuntimeInspectorAction(value) {
@@ -8273,7 +8291,7 @@ async function openIosDevMenu(args, deps) {
     };
   }
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
-  const devClientUrl = requireOptionalString7(args.devClientUrl);
+  const devClientUrl = requireOptionalString9(args.devClientUrl);
   let devClientRepair = null;
   if (devClientUrl) {
     devClientRepair = await deps.openDevClientForMessageSocket({
@@ -8465,7 +8483,7 @@ function requireString10(value, field) {
   }
   return value.trim();
 }
-function requireOptionalString7(value) {
+function requireOptionalString9(value) {
   if (value === void 0 || value === null || value === "") return null;
   return requireString10(value, "value");
 }
@@ -8475,9 +8493,9 @@ function truncate12(value, limit = 4e4) {
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
-function getPath2(value, path14) {
+function getPath2(value, path16) {
   let current = value;
-  for (const part of path14) {
+  for (const part of path16) {
     current = asRecord9(current)?.[part];
     if (current === void 0) return void 0;
   }
@@ -8543,11 +8561,11 @@ var NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigati
 async function reviewNextStep(args = {}) {
   const surface = args.surface ?? "generic";
   const stage = args.stage ?? "intake";
-  const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
-  const cwd = requireOptionalString8(args.cwd) ?? ".";
+  const issue = requireOptionalString10(args.issue) ?? "unspecified UI review issue";
+  const cwd = requireOptionalString10(args.cwd) ?? ".";
   const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
-  const componentFilter = requireOptionalString8(args.componentFilter);
-  const verifierRule = requireOptionalString8(args.verifierRule);
+  const componentFilter = requireOptionalString10(args.componentFilter);
+  const verifierRule = requireOptionalString10(args.verifierRule);
   const flags = reviewFlags(args);
   const requiredFlows = reviewFlowsForSurface(surface);
   const suggestedCommands = reviewCommandSuggestions({ cwd, metroPort, componentFilter, flags, stage });
@@ -8786,7 +8804,7 @@ function shellArg2(value) {
   if (/^[A-Za-z0-9_./:@=-]+$/.test(text)) return text;
   return `'${text.replace(/'/g, "'\\''")}'`;
 }
-function requireOptionalString8(value) {
+function requireOptionalString10(value) {
   if (value == null) return void 0;
   if (typeof value !== "string") throw new Error("Expected optional string.");
   const trimmed = value.trim();
@@ -9129,7 +9147,7 @@ async function devtoolsEventsPayload(args = {}, deps = {}) {
   if (!["start", "read", "stop"].includes(subaction)) throw new Error(`Unknown devtools events action: ${subaction}`);
   const stateRoot = resolveExpoStateRoot4(args, deps);
   const eventsDir = joinPath3(stateRoot, "artifacts", "devtools-events");
-  await mkdir11(deps, eventsDir, { recursive: true });
+  await mkdir13(deps, eventsDir, { recursive: true });
   const file = joinPath3(eventsDir, "events.json");
   const existing = await readJsonFile5(deps, file).catch(() => ({ events: [] }));
   const previousEvents = Array.isArray(asRecord10(existing)?.events) ? asRecord10(existing)?.events : [];
@@ -9399,7 +9417,7 @@ function resolveExpoStateRoot4(args, deps) {
   if (explicit?.endsWith("/runs")) return explicit.slice(0, -"/runs".length);
   return explicit ?? joinPath3(typeof args.root === "string" ? args.root : ".", ".scratch", "expo98");
 }
-async function mkdir11(deps, dir, options) {
+async function mkdir13(deps, dir, options) {
   if (deps.mkdir) return deps.mkdir(dir, options);
   const fs10 = await import("node:fs/promises");
   return fs10.mkdir(dir, options);
@@ -9891,7 +9909,7 @@ function redactSensitiveUrlQuery2(value) {
 
 // src/commands/network-evidence/src/main/index.ts
 import { promises as fs8 } from "node:fs";
-import path10 from "node:path";
+import path12 from "node:path";
 var CLI_NAME4 = CURRENT_CLI_NAME;
 var CLI_VERSION3 = "0.1.0";
 var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
@@ -10539,9 +10557,9 @@ var systemClock2 = {
   now: () => /* @__PURE__ */ new Date()
 };
 var defaultPath2 = {
-  resolve: (filePath) => path10.resolve(filePath),
-  join: (...segments) => path10.join(...segments),
-  dirname: (filePath) => path10.dirname(filePath)
+  resolve: (filePath) => path12.resolve(filePath),
+  join: (...segments) => path12.join(...segments),
+  dirname: (filePath) => path12.dirname(filePath)
 };
 var defaultFileSystem = {
   mkdir: (filePath, options) => fs8.mkdir(filePath, options).then(() => void 0),
@@ -10555,7 +10573,7 @@ function defaultResolveExpoStateRoot(args) {
 
 // src/commands/bridge-command-adapter/src/main/index.ts
 import { promises as fs9 } from "node:fs";
-import path11 from "node:path";
+import path13 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION4 = "1.0.0";
 var BRIDGE_SCHEMA_VERSION = 1;
 var BRIDGE_DIR = ".expo98";
@@ -10736,7 +10754,7 @@ function hasExplicitConfirmation2(value, required) {
   return String(value ?? "").split(",").map((item) => item.trim()).includes(required);
 }
 async function normalizeProjectCwd2(cwd, options = {}) {
-  const resolved = path11.resolve(cwd ?? process.cwd());
+  const resolved = path13.resolve(cwd ?? process.cwd());
   const stat8 = await fs9.stat(resolved).catch(() => null);
   if (!stat8?.isDirectory()) {
     throw new Error(`Directory does not exist: ${resolved}`);
@@ -10764,8 +10782,8 @@ function bridgeCommandIo(dependencies) {
     writeJsonFile: dependencies.writeJsonFile ?? writeJsonFile4,
     writeFile: dependencies.writeFile ?? fs9.writeFile,
     rm: dependencies.rm ?? fs9.rm,
-    joinPath: dependencies.joinPath ?? path11.join,
-    resolvePath: dependencies.resolvePath ?? path11.resolve,
+    joinPath: dependencies.joinPath ?? path13.join,
+    resolvePath: dependencies.resolvePath ?? path13.resolve,
     currentCwd: dependencies.currentCwd ?? process.cwd
   };
 }
@@ -10819,7 +10837,7 @@ function asRecord11(value) {
 }
 
 // src/commands/accessibility-actions/src/main/index.ts
-import { readdir as readdir8, readFile as readFile14 } from "node:fs/promises";
+import { readdir as readdir8, readFile as readFile15 } from "node:fs/promises";
 import { execFile as nodeExecFile10 } from "node:child_process";
 import { basename as basename5, join as join10, resolve as resolve5 } from "node:path";
 var FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
@@ -10958,7 +10976,7 @@ function sessionDirectory2(stateRoot, sessionId) {
   return join10(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile7(file) {
-  return JSON.parse(await readFile14(file, "utf8"));
+  return JSON.parse(await readFile15(file, "utf8"));
 }
 function requireString15(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -10987,8 +11005,8 @@ function asSessionRecord(value) {
 }
 
 // src/commands/modal-blocker-actions/src/main/index.ts
-import { readFile as readFile15 } from "node:fs/promises";
-import path12 from "node:path";
+import { readFile as readFile16 } from "node:fs/promises";
+import path14 from "node:path";
 var MAX_OUTPUT12 = 4e4;
 var MAX_ARRAY_ITEMS3 = 1e3;
 function boundedToolJson2(value) {
@@ -11003,8 +11021,8 @@ async function sheetCommand(args = {}, deps = defaultModalBridgeDependencies) {
 var defaultModalBridgeDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
   evaluateHermesExpression,
-  readJsonFile: async (file) => JSON.parse(await readFile15(file, "utf8")),
-  resolvePath: (file) => path12.resolve(file)
+  readJsonFile: async (file) => JSON.parse(await readFile16(file, "utf8")),
+  resolvePath: (file) => path14.resolve(file)
 };
 async function modalBridgeCommand(input, deps) {
   const positionals = Array.isArray(input.args._) ? input.args._ : [];
@@ -11219,7 +11237,7 @@ function asRecord13(value) {
 
 // src/commands/record-artifacts/src/main/index.ts
 import { spawn as spawn3 } from "node:child_process";
-import { access as access4, mkdir as mkdir12, readdir as readdir9, readFile as readFile16, writeFile as writeFile7 } from "node:fs/promises";
+import { access as access4, mkdir as mkdir14, readdir as readdir9, readFile as readFile17, writeFile as writeFile9 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname4, join as join11, resolve as resolve6 } from "node:path";
 var RECORD_LIMITATION = "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
 async function recordCommand(args = {}, deps = {}) {
@@ -11229,12 +11247,12 @@ async function recordCommand(args = {}, deps = {}) {
   const stateRoot = resolveExpoStateRoot6(args);
   const session = asRecord14(await readLatestSession5(stateRoot));
   const recordDir = join11(stateRoot, "artifacts", "recordings");
-  await mkdir12(recordDir, { recursive: true });
+  await mkdir14(recordDir, { recursive: true });
   const metadataPath = runRecordMetadataPath(stateRoot);
   const defaultOutputPath = join11(recordDir, `recording-${isoStamp(deps)}.mov`);
   const outputPath = resolve6(String(args.outputPath ?? positionals[1] ?? defaultOutputPath));
   if (action === "start") {
-    await mkdir12(dirname4(outputPath), { recursive: true });
+    await mkdir14(dirname4(outputPath), { recursive: true });
     const device = typeof args.device === "string" && args.device.trim() ? args.device.trim() : "booted";
     const child = spawn3("xcrun", ["simctl", "io", device, "recordVideo", outputPath], {
       detached: true,
@@ -11305,10 +11323,10 @@ function resolveExpoStateRoot6(args = {}) {
   return join11(root, ".scratch", "expo98");
 }
 async function readJsonFile8(file) {
-  return JSON.parse(await readFile16(file, "utf8"));
+  return JSON.parse(await readFile17(file, "utf8"));
 }
 async function writeJsonFile5(file, value) {
-  await writeFile7(file, `${JSON.stringify(value, null, 2)}
+  await writeFile9(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 async function pathExists5(file) {
@@ -11342,7 +11360,7 @@ function asRecord14(value) {
 }
 
 // src/commands/review-evidence-reports/src/main/index.ts
-import { mkdir as mkdir13, readdir as readdir10, readFile as readFile17, stat as stat6, writeFile as writeFile8 } from "node:fs/promises";
+import { mkdir as mkdir15, readdir as readdir10, readFile as readFile18, stat as stat6, writeFile as writeFile10 } from "node:fs/promises";
 import { basename as basename7, dirname as dirname5, join as join12, resolve as resolve7 } from "node:path";
 var REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
 var ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
@@ -11353,7 +11371,7 @@ async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const stateRoot = resolveExpoStateRoot7(args);
   const session = await readLatestSession6(stateRoot);
   const outputPath = resolve7(String(args.outputPath ?? join12(stateRoot, "artifacts", `review-${action}-${isoStamp2(deps)}.json`)));
-  await mkdir13(dirname5(outputPath), { recursive: true });
+  await mkdir15(dirname5(outputPath), { recursive: true });
   const runs = await listRunRecords(stateRoot);
   const latestRefs = await readLatestRefCache5(args);
   const payload = action === "matrix" ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath }) : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
@@ -11375,7 +11393,7 @@ async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const stateRoot = resolveExpoStateRoot7(normalizedArgs);
   const session = await readLatestSession6(stateRoot);
   const outputPath = resolve7(String(normalizedArgs.outputPath ?? join12(stateRoot, "artifacts", `diff-${kind}-${isoStamp2(deps)}.json`)));
-  await mkdir13(dirname5(outputPath), { recursive: true });
+  await mkdir15(dirname5(outputPath), { recursive: true });
   const diff = kind === "snapshot" ? await snapshotDiffPayload(normalizedArgs) : kind === "route" ? await routeDiffPayload(normalizedArgs, deps) : await screenshotDiffPayload(normalizedArgs);
   const payload = {
     ...diff,
@@ -11551,10 +11569,10 @@ function sessionDirectory3(stateRoot, sessionId) {
   return join12(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile9(file) {
-  return JSON.parse(await readFile17(file, "utf8"));
+  return JSON.parse(await readFile18(file, "utf8"));
 }
 async function writeJsonFile6(file, value) {
-  await writeFile8(file, `${JSON.stringify(value, null, 2)}
+  await writeFile10(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function requireString18(value, name) {
@@ -11582,7 +11600,7 @@ function asRecord15(value) {
 }
 
 // src/commands/debug-inspect-highlight/src/main/index.ts
-import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile18, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile19, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename as basename8, dirname as dirname6, join as join13, resolve as resolve8 } from "node:path";
 async function debugInspectCommand(args = {}, deps = {}) {
   return toolJson(await debugInspectPayload(args, deps));
@@ -11739,7 +11757,7 @@ function sessionDirectory4(stateRoot, sessionId) {
   return join13(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile10(file) {
-  return JSON.parse(await readFile18(file, "utf8"));
+  return JSON.parse(await readFile19(file, "utf8"));
 }
 function requireString19(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11792,8 +11810,8 @@ function asTargetRecord(value) {
 }
 
 // src/commands/expo-introspection-actions/src/main/index.ts
-import { access as access5, readFile as readFile19, stat as stat7 } from "node:fs/promises";
-import path13 from "node:path";
+import { access as access5, readFile as readFile20, stat as stat7 } from "node:fs/promises";
+import path15 from "node:path";
 var EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"];
 async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   const action = requireString20(args.action ?? "modules", "action");
@@ -11862,7 +11880,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
 }
 var defaultExpoCommandDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd3,
-  resolvePath: (input) => path13.resolve(input),
+  resolvePath: (input) => path15.resolve(input),
   currentWorkingDirectory: () => process.cwd(),
   runtimeSummary: async (cwd) => {
     const info = asRecord17(unwrapToolJson(await projectInfo({ cwd }))) ?? {};
@@ -11877,17 +11895,17 @@ var defaultExpoCommandDependencies = {
   projectInfo,
   buildUpstreamDependencyReport,
   findUp: findUp3,
-  readJsonFile: async (filePath) => JSON.parse(await readFile19(filePath, "utf8")),
-  joinPath: (...parts) => path13.join(...parts),
+  readJsonFile: async (filePath) => JSON.parse(await readFile20(filePath, "utf8")),
+  joinPath: (...parts) => path15.join(...parts),
   pathExists: async (filePath) => access5(filePath).then(() => true, () => false),
   firstExisting: async (projectRoot, names) => {
     for (const name of names) {
-      const candidate = path13.join(projectRoot, name);
+      const candidate = path15.join(projectRoot, name);
       if (await access5(candidate).then(() => true, () => false)) return candidate;
     }
     return null;
   },
-  readTextFile: (filePath) => readFile19(filePath, "utf8")
+  readTextFile: (filePath) => readFile20(filePath, "utf8")
 };
 async function expoModuleRecords(projectRoot, deps) {
   const packageJsonPath = await deps.findUp(projectRoot, "package.json");
@@ -11980,24 +11998,24 @@ function asRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 async function defaultNormalizeProjectCwd3(cwd) {
-  const resolved = path13.resolve(cwd ?? ".");
+  const resolved = path15.resolve(cwd ?? ".");
   const details = await stat7(resolved).catch(() => null);
   if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp3(projectRoot, filename) {
-  let current = path13.resolve(projectRoot);
+  let current = path15.resolve(projectRoot);
   while (true) {
-    const candidate = path13.join(current, filename);
+    const candidate = path15.join(current, filename);
     if (await access5(candidate).then(() => true, () => false)) return candidate;
-    const parent = path13.dirname(current);
+    const parent = path15.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
 
 // src/commands/rn-introspection/src/main/index.ts
-import { readdir as readdir12, readFile as readFile20 } from "node:fs/promises";
+import { readdir as readdir12, readFile as readFile21 } from "node:fs/promises";
 import { basename as basename9, join as join14, resolve as resolve9 } from "node:path";
 async function rnCommand(args = {}, deps = defaultRnDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
@@ -12305,7 +12323,7 @@ function sessionDirectory5(stateRoot, sessionId) {
   return join14(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile11(file) {
-  return JSON.parse(await readFile20(file, "utf8"));
+  return JSON.parse(await readFile21(file, "utf8"));
 }
 function requireString21(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -12406,10 +12424,10 @@ function flattenTreeResults(nodes) {
 function pathTreeFromElements(elements) {
   const root = { component: "root", children: /* @__PURE__ */ new Map() };
   for (const element of elements) {
-    const path14 = relevantPathFromElement(element);
-    if (path14.length === 0) continue;
+    const path16 = relevantPathFromElement(element);
+    if (path16.length === 0) continue;
     let cursor = root;
-    for (const name of path14) {
+    for (const name of path16) {
       let child = cursor.children.get(name);
       if (!child) {
         child = { component: name, children: /* @__PURE__ */ new Map() };
@@ -12491,27 +12509,27 @@ function inferControlLabel(box, textRecords) {
 }
 function inferComponentPath(tree, elements) {
   for (const element of elements) {
-    const path15 = relevantPathFromElement(element).filter((name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name));
-    if (path15.length > 0) return path15.slice(0, 16);
+    const path17 = relevantPathFromElement(element).filter((name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name));
+    if (path17.length > 0) return path17.slice(0, 16);
   }
-  const path14 = [];
+  const path16 = [];
   let cursor = asRecord18(tree[0]);
   let depth = 0;
   while (cursor && depth < 40) {
     const name = nodeName(cursor);
-    if (isRelevantName(name)) path14.push(name);
+    if (isRelevantName(name)) path16.push(name);
     const child = Array.isArray(cursor.children) ? asRecord18(cursor.children[0]) : null;
     cursor = child;
     depth += 1;
   }
-  return unique(path14).slice(0, 16);
+  return unique(path16).slice(0, 16);
 }
 function relevantPathFromElement(element) {
   const hierarchy = Array.isArray(element.hierarchy) ? element.hierarchy : [];
-  const path14 = hierarchy.map((item) => nodeName(item)).filter((name) => Boolean(name && isRelevantName(name)));
+  const path16 = hierarchy.map((item) => nodeName(item)).filter((name) => Boolean(name && isRelevantName(name)));
   const elementName = optionalNonemptyString(element.name);
-  if (elementName && isRelevantName(elementName)) path14.push(elementName);
-  return unique(path14).slice(0, 24);
+  if (elementName && isRelevantName(elementName)) path16.push(elementName);
+  return unique(path16).slice(0, 24);
 }
 function nodeName(value) {
   const record = asRecord18(value);
@@ -12618,7 +12636,7 @@ function requireString22(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function requireOptionalString9(value) {
+function requireOptionalString11(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 function clampNumber22(value, min, max) {
@@ -12635,12 +12653,12 @@ import { mkdir as fsMkdir3, writeFile as fsWriteFile3 } from "node:fs/promises";
 import { dirname as dirname8, join as join17, resolve as resolve13 } from "node:path";
 
 // src/commands/perf-evidence/src/main/artifacts.ts
-import { mkdir as fsMkdir2, readFile as readFile22 } from "node:fs/promises";
+import { mkdir as fsMkdir2, readFile as readFile23 } from "node:fs/promises";
 import { dirname as dirname7, join as join16, resolve as resolve12 } from "node:path";
 
 // src/commands/perf-evidence/src/main/dependencies.ts
 import { execFile as nodeExecFile11 } from "node:child_process";
-import { readFile as readFile21, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
+import { readFile as readFile22, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
 import { resolve as resolve11 } from "node:path";
 async function projectCwd(cwd, deps) {
   if (deps.normalizeProjectCwd) {
@@ -12665,17 +12683,17 @@ async function findUpFile(cwd, name, deps) {
 }
 async function readJson6(file, deps) {
   if (deps.readJsonFile) return deps.readJsonFile(file);
-  return JSON.parse(await readFile21(file, "utf8"));
+  return JSON.parse(await readFile22(file, "utf8"));
 }
 async function writeJsonFile7(file, value, deps) {
   await (deps.writeFile ?? fsWriteFile2)(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-async function exists(path14, deps) {
-  return deps.pathExists ? deps.pathExists(path14) : fsStat(path14).then(() => true, () => false);
+async function exists(path16, deps) {
+  return deps.pathExists ? deps.pathExists(path16) : fsStat(path16).then(() => true, () => false);
 }
-async function fileStat(path14, deps) {
-  return deps.stat ? deps.stat(path14) : fsStat(path14).catch(() => null);
+async function fileStat(path16, deps) {
+  return deps.stat ? deps.stat(path16) : fsStat(path16).catch(() => null);
 }
 function execFile9(file, argv, options) {
   return new Promise((resolveExec) => {
@@ -12699,7 +12717,7 @@ async function writePerfArtifact(args, action, payload, deps = {}) {
   return withArtifact;
 }
 async function parseNativeSampleArtifact(file) {
-  const text = await readFile22(file, "utf8").catch(() => null);
+  const text = await readFile23(file, "utf8").catch(() => null);
   if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
   const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);
   const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/);
@@ -12754,12 +12772,17 @@ function redactPerfValue(value) {
 
 // src/commands/perf-evidence/src/main/model.ts
 function metricMap(metrics) {
-  return new Map((metrics ?? []).map((metric) => [metric.name, metric]));
+  if (!Array.isArray(metrics)) return /* @__PURE__ */ new Map();
+  return new Map(metrics.map((metric) => {
+    const record = metric && typeof metric === "object" && !Array.isArray(metric) ? metric : {};
+    const normalized = perfMetric(record);
+    return [normalized.name, normalized];
+  }));
 }
 function lowerConfidence(left, right) {
   const order = ["low", "medium", "high"];
-  const leftIndex = order.indexOf(String(left));
-  const rightIndex = order.indexOf(String(right));
+  const leftIndex = order.indexOf(normalizeConfidence(left));
+  const rightIndex = order.indexOf(normalizeConfidence(right));
   return order[Math.min(leftIndex === -1 ? 0 : leftIndex, rightIndex === -1 ? 0 : rightIndex)];
 }
 function normalizePerfBridgePayload(value, action) {
@@ -12779,10 +12802,10 @@ function normalizePerfBridgePayload(value, action) {
   return { ...value, action, metrics };
 }
 function normalizePerfReport(runtimePayload, nativeSummary) {
-  const runtime2 = runtimePayload && typeof runtimePayload === "object" && !Array.isArray(runtimePayload) ? redactPerfValue(runtimePayload) : null;
-  const requests = Array.isArray(runtime2?.network?.requests) ? runtime2.network.requests : [];
-  const renders = Array.isArray(runtime2?.renders?.commits) ? runtime2.renders.commits : [];
-  const frames = Array.isArray(runtime2?.frames?.samples) ? runtime2.frames.samples : [];
+  const runtime2 = normalizeRuntimePayload(runtimePayload);
+  const requests = runtimeNetworkRequests(runtime2);
+  const renders = runtimeRenderCommits(runtime2);
+  const frames = runtimeFrameSamples(runtime2);
   const findings = [];
   const slowRequests = requests.filter((request) => Number(request.durationMs) >= 500).sort((a, b) => Number(b.durationMs ?? 0) - Number(a.durationMs ?? 0));
   if (slowRequests[0]) {
@@ -12824,10 +12847,10 @@ function normalizePerfReport(runtimePayload, nativeSummary) {
     });
   }
   const metrics = [
-    { name: "network.requests", value: requests.length, unit: "count", source: "network", confidence: requests.length ? "medium" : "low" },
-    { name: "renders.commits", value: renders.length, unit: "count", source: "react-profiler", confidence: renders.length ? "medium" : "low" },
-    { name: "frames.samples", value: frames.length, unit: "count", source: "frame-sampler", confidence: frames.length ? "medium" : "low" },
-    ...nativeSummary?.available ? [{ name: "native.sample.bytes", value: nativeSummary.bytes, unit: "bytes", source: "native-profiler", confidence: "medium" }] : []
+    perfMetric({ name: "network.requests", value: requests.length, unit: "count", source: "network", confidence: requests.length ? "medium" : "low" }),
+    perfMetric({ name: "renders.commits", value: renders.length, unit: "count", source: "react-profiler", confidence: renders.length ? "medium" : "low" }),
+    perfMetric({ name: "frames.samples", value: frames.length, unit: "count", source: "frame-sampler", confidence: frames.length ? "medium" : "low" }),
+    ...nativeSummary?.available ? [perfMetric({ name: "native.sample.bytes", value: nativeSummary.bytes, unit: "bytes", source: "native-profiler", confidence: "medium" })] : []
   ];
   return {
     available: Boolean(runtime2 || nativeSummary?.available),
@@ -12848,6 +12871,18 @@ function normalizePerfReport(runtimePayload, nativeSummary) {
       ...!requests.length ? ["Network attribution is unavailable because no request rows were returned."] : []
     ]
   };
+}
+function normalizeRuntimePayload(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? redactPerfValue(value) : null;
+}
+function runtimeNetworkRequests(runtime2) {
+  return Array.isArray(runtime2?.network?.requests) ? runtime2.network.requests : [];
+}
+function runtimeRenderCommits(runtime2) {
+  return Array.isArray(runtime2?.renders?.commits) ? runtime2.renders.commits : [];
+}
+function runtimeFrameSamples(runtime2) {
+  return Array.isArray(runtime2?.frames?.samples) ? runtime2.frames.samples : [];
 }
 function perfEvidenceSource(value) {
   if (typeof value?.source === "string") return value.source;
@@ -12870,19 +12905,28 @@ async function perfContext({ args, projectRoot, metro, target = null }) {
   };
 }
 function normalizePerfBuildKind(value) {
-  const buildKind = requireOptionalString9(value) ?? "development";
+  const buildKind = requireOptionalString11(value) ?? "development";
   if (buildKind === "production") return "production";
   if (["development", "dev-build", "preview", "release-export", "unknown"].includes(buildKind)) return buildKind;
   throw new Error(`Unknown performance build kind: ${buildKind}`);
 }
 function perfMetric({ name, value, unit, source, confidence }) {
-  return { name, value, unit, source, confidence };
+  return {
+    name: String(name),
+    value,
+    unit: unit == null ? null : String(unit),
+    source: typeof source === "string" && source ? source : "unknown",
+    confidence: confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "low"
+  };
 }
 function perfOverallConfidence(metrics) {
   if (!metrics.length) return "low";
   if (metrics.some((metric) => metric.confidence === "high")) return "high";
   if (metrics.some((metric) => metric.confidence === "medium")) return "medium";
   return "low";
+}
+function normalizeConfidence(value) {
+  return value === "high" || value === "medium" || value === "low" ? value : "low";
 }
 function perfDevelopmentLimitations(extra = []) {
   return [
@@ -13264,10 +13308,12 @@ async function perfSummaryPayload(args = {}, deps = {}) {
   const unavailableSources = [];
   const packageJsonPath = await findUpFile(summary.projectRoot, "package.json", deps);
   if (packageJsonPath) {
-    const packageJson = await readJson6(packageJsonPath, deps);
+    const packageJson = asRecord19(await readJson6(packageJsonPath, deps)) ?? {};
+    const dependencies = asRecord19(packageJson.dependencies) ?? {};
+    const devDependencies = asRecord19(packageJson.devDependencies) ?? {};
     metrics.push(perfMetric({
       name: "project.dependencies",
-      value: Object.keys({ ...packageJson.dependencies ?? {}, ...packageJson.devDependencies ?? {} }).length,
+      value: Object.keys({ ...dependencies, ...devDependencies }).length,
       unit: "count",
       source: "project",
       confidence: "low"
@@ -13312,6 +13358,9 @@ async function perfSummaryPayload(args = {}, deps = {}) {
     realValidation: perfValidation(payload, "summary")
   };
 }
+function asRecord19(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
 async function perfRuntimePayload(args = {}, action, deps = {}) {
   return writeRuntimePerfArtifact(args, deps, {
     artifactAction: action,
@@ -13322,8 +13371,8 @@ async function perfRuntimePayload(args = {}, action, deps = {}) {
   });
 }
 async function perfInstrumentedPayload(args = {}, action, deps = {}) {
-  const subaction = requireOptionalString9(args.subaction);
-  const label = requireOptionalString9(args.label);
+  const subaction = requireOptionalString11(args.subaction);
+  const label = requireOptionalString11(args.label);
   const bridgeAction = perfBridgeAction(action, subaction);
   return writeRuntimePerfArtifact(args, deps, {
     artifactAction: action,
@@ -13336,7 +13385,7 @@ async function perfInstrumentedPayload(args = {}, action, deps = {}) {
 async function perfInteractionPayload(args = {}, deps = {}) {
   const subaction = requireString22(args.subaction ?? "read", "subaction");
   if (!["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown performance interaction action: ${subaction}`);
-  const label = requireOptionalString9(args.label ?? args.interaction);
+  const label = requireOptionalString11(args.label ?? args.interaction);
   return writeRuntimePerfArtifact(args, deps, {
     artifactAction: "interaction",
     bridgeAction: `interaction-${subaction}`,
@@ -13347,7 +13396,7 @@ async function perfInteractionPayload(args = {}, deps = {}) {
   });
 }
 async function perfReportPayload(args = {}, deps = {}) {
-  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
+  const nativeArtifact = requireOptionalString11(args.nativeArtifact);
   const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: "report", label: args.interaction ?? args.label });
   const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve13(nativeArtifact)) : null;
   const report = normalizePerfReport(evidence.bridgePayload, nativeSummary);
@@ -13409,7 +13458,7 @@ async function perfBudgetPayload(args = {}, deps = {}) {
   const metrics = metricMap(candidate.metrics ?? []);
   const checks = (budget.budgets ?? []).map((rule) => {
     const metric = metrics.get(rule.metric);
-    const value = metric?.value ?? null;
+    const value = typeof metric?.value === "number" ? metric.value : null;
     const passed = typeof value === "number" && (typeof rule.max !== "number" || value <= rule.max) && (typeof rule.min !== "number" || value >= rule.min);
     return { metric: rule.metric, value, min: rule.min ?? null, max: rule.max ?? null, passed, unit: metric?.unit ?? null };
   });
@@ -13427,7 +13476,7 @@ async function perfBudgetPayload(args = {}, deps = {}) {
 }
 async function perfMemoryPayload(args = {}, deps = {}) {
   const samples = clampNumber22(args.samples ?? 1, 1, 100);
-  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
+  const nativeArtifact = requireOptionalString11(args.nativeArtifact);
   const projectRoot = await projectCwd(args.cwd, deps);
   const metrics = [perfMetric({
     name: "memory.samples",
@@ -13459,7 +13508,7 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
   const allowed = profiler === "ettrace" ? ["start", "stop"] : ["capture"];
   if (!allowed.includes(subaction)) throw new Error(`Unknown ${profiler} action: ${subaction}`);
   const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
-  const nativeArtifact = resolve13(args.nativeArtifact ?? join17(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
+  const nativeArtifact = resolve13(String(args.nativeArtifact ?? join17(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName)));
   await (deps.mkdir ?? fsMkdir3)(dirname8(nativeArtifact), { recursive: true });
   let sampleResult = null;
   let samplePid = null;
@@ -13505,7 +13554,7 @@ function requirePid(value) {
 }
 async function perfBundlePayload(args = {}, deps = {}) {
   const cwd = await projectCwd(args.cwd, deps);
-  const bundleArtifact = requireOptionalString9(args.bundleArtifact);
+  const bundleArtifact = requireOptionalString11(args.bundleArtifact);
   const metrics = [];
   const unavailableSources = [];
   let available = false;
@@ -13553,7 +13602,7 @@ async function perfCommand(args = {}, deps = {}) {
 }
 
 // src/commands/dashboard-observability/src/main/index.ts
-import { mkdir as mkdir14, readdir as readdir13, readFile as readFile23, writeFile as writeFile9 } from "node:fs/promises";
+import { mkdir as mkdir16, readdir as readdir13, readFile as readFile24, writeFile as writeFile11 } from "node:fs/promises";
 import { basename as basename11, dirname as dirname9, join as join18, resolve as resolve14 } from "node:path";
 var DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
 async function dashboardCommand(args = {}) {
@@ -13563,9 +13612,9 @@ async function dashboardCommand(args = {}) {
   const stateRoot = resolveExpoStateRoot11(args);
   const dashboardDir = join18(stateRoot, "dashboard");
   const statePath = join18(dashboardDir, "dashboard-state.json");
-  await mkdir14(dashboardDir, { recursive: true });
-  const previous = asRecord19(await readJsonFile12(statePath).catch(() => null));
-  const previousArtifacts = asRecord19(previous?.artifacts);
+  await mkdir16(dashboardDir, { recursive: true });
+  const previous = asRecord20(await readJsonFile12(statePath).catch(() => null));
+  const previousArtifacts = asRecord20(previous?.artifacts);
   const status = action === "start" ? "running" : action === "stop" ? "stopped" : previous?.status ?? "stopped";
   const payload = {
     available: true,
@@ -13591,7 +13640,7 @@ async function dashboardSessions(stateRoot) {
   const sessions = [];
   for (const name of names.sort()) {
     const sessionPath = join18(sessionsDir, name, "session.json");
-    const session = asRecord19(await readJsonFile12(sessionPath).catch(() => null));
+    const session = asRecord20(await readJsonFile12(sessionPath).catch(() => null));
     if (session) {
       sessions.push({
         sessionId: session.sessionId ?? name,
@@ -13606,8 +13655,8 @@ async function dashboardSessions(stateRoot) {
   return sessions;
 }
 async function writeDashboardHtml(file, payload) {
-  await mkdir14(dirname9(file), { recursive: true });
-  await writeFile9(file, `<!doctype html>
+  await mkdir16(dirname9(file), { recursive: true });
+  await writeFile11(file, `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>expo98 dashboard</title></head>
 <body>
@@ -13628,11 +13677,11 @@ function resolveExpoStateRoot11(args = {}) {
   return join18(root, ".scratch", "expo98");
 }
 async function readJsonFile12(file) {
-  return JSON.parse(await readFile23(file, "utf8"));
+  return JSON.parse(await readFile24(file, "utf8"));
 }
 async function writeJsonFile8(file, value) {
-  await mkdir14(dirname9(file), { recursive: true });
-  await writeFile9(file, `${JSON.stringify(value, null, 2)}
+  await mkdir16(dirname9(file), { recursive: true });
+  await writeFile11(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function escapeHtml3(value) {
@@ -13647,19 +13696,19 @@ function requireString23(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function asRecord19(value) {
+function asRecord20(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
 // src/core/policy-redaction/src/main/command-boundary.ts
-import { mkdir as mkdir15, readFile as readFile24, writeFile as writeFile10 } from "node:fs/promises";
+import { mkdir as mkdir17, readFile as readFile25, writeFile as writeFile12 } from "node:fs/promises";
 import { dirname as dirname10, resolve as resolve15 } from "node:path";
 async function policyCommand(args = {}) {
   const action = requireString24(args.action ?? "show", "action");
   if (action !== "show" && action !== "check") {
     throw new Error(`Unknown policy action: ${action}`);
   }
-  const policyPath = requireOptionalString10(args.actionPolicy);
+  const policyPath = requireOptionalString12(args.actionPolicy);
   const resolvedPolicyPath = policyPath ? resolve15(policyPath) : null;
   const policy = resolvedPolicyPath ? await readJsonFile13(resolvedPolicyPath) : null;
   if (action === "show") {
@@ -13702,19 +13751,19 @@ async function policyCommand(args = {}) {
 }
 async function redactCommand(args = {}) {
   const file = resolve15(requireString24(args.file, "file"));
-  const raw = await readFile24(file, "utf8");
+  const raw = await readFile25(file, "utf8");
   let payload;
   try {
     payload = redactJson(JSON.parse(raw));
   } catch {
     payload = redactText(raw);
   }
-  const outputPath = requireOptionalString10(args.outputPath);
+  const outputPath = requireOptionalString12(args.outputPath);
   const resolvedOutputPath = outputPath ? resolve15(outputPath) : null;
   if (resolvedOutputPath) {
-    await mkdir15(dirname10(resolvedOutputPath), { recursive: true });
+    await mkdir17(dirname10(resolvedOutputPath), { recursive: true });
     const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
-    await writeFile10(resolvedOutputPath, `${text}
+    await writeFile12(resolvedOutputPath, `${text}
 `, "utf8");
   }
   return toolJson({
@@ -13726,7 +13775,7 @@ async function redactCommand(args = {}) {
   });
 }
 async function readJsonFile13(file) {
-  return JSON.parse(await readFile24(file, "utf8"));
+  return JSON.parse(await readFile25(file, "utf8"));
 }
 function requireString24(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -13734,14 +13783,14 @@ function requireString24(value, field) {
   }
   return value.trim();
 }
-function requireOptionalString10(value) {
+function requireOptionalString12(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 // src/commands/plugin-self-management/src/main/index.ts
 import { execFile as nodeExecFile12 } from "node:child_process";
 import { existsSync } from "node:fs";
-import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile25, writeFile as writeFile11 } from "node:fs/promises";
+import { access as access6, mkdir as mkdir18, mkdtemp, readdir as readdir14, readFile as readFile26, writeFile as writeFile13 } from "node:fs/promises";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname11, join as join19, resolve as resolve16 } from "node:path";
 var CLI_NAME5 = CURRENT_CLI_NAME;
@@ -13771,7 +13820,7 @@ async function listBundledSkills(deps = {}) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const file = join19(skillsRoot, entry.name, "SKILL.md");
-    const content = await readFile25(file, "utf8").catch(() => null);
+    const content = await readFile26(file, "utf8").catch(() => null);
     if (!content) continue;
     const metadata = parseSkillFrontmatter(content);
     skills.push({
@@ -13830,11 +13879,11 @@ async function releaseCommand(args = {}, deps = defaultPluginSelfManagementDepen
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown release action: ${action}`);
   const outsideCwd = resolve16(String(args.cwd ?? await mkdtemp(join19(deps.tmpDir ?? tmpdir2(), "expo98-release-"))));
-  await mkdir16(outsideCwd, { recursive: true });
+  await mkdir18(outsideCwd, { recursive: true });
   const fixture = join19(outsideCwd, "routes-fixture");
-  await mkdir16(join19(fixture, "app"), { recursive: true });
+  await mkdir18(join19(fixture, "app"), { recursive: true });
   await writeJsonFile9(join19(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
-  await writeFile11(join19(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
+  await writeFile13(join19(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
   const checks = [
     await releaseCheck("version", ["--version"], outsideCwd, (result) => result.stdout.trim() === CLI_VERSION4, deps),
     await releaseCheck("help", ["--help"], outsideCwd, (result) => result.stdout.includes("perf") && result.stdout.includes("dashboard"), deps),
@@ -13897,8 +13946,8 @@ async function pathExists6(file) {
   }
 }
 async function writeJsonFile9(file, value) {
-  await mkdir16(dirname11(file), { recursive: true });
-  await writeFile11(file, `${JSON.stringify(value, null, 2)}
+  await mkdir18(dirname11(file), { recursive: true });
+  await writeFile13(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function requireString25(value, name) {
@@ -14390,7 +14439,7 @@ function materializeLiveBacklogArgv(argv, args, rowDir) {
 function parseBacklogJson(stdout) {
   try {
     const parsed = JSON.parse(stdout);
-    return asRecord20(parsed);
+    return asRecord21(parsed);
   } catch {
     return null;
   }
@@ -14402,7 +14451,7 @@ function classifyLiveBacklogRow(row, exitCode, parsed) {
     if (row.expectedClass === "expected-usage-error") return "expected-usage-error";
     return "defect";
   }
-  const data = asRecord20(parsed?.data) ?? parsed;
+  const data = asRecord21(parsed?.data) ?? parsed;
   const requiresRuntime = row.requirements.some((requirement) => ["metro", "metro-message", "hermes-target", "app-bridge"].includes(requirement));
   if (requiresRuntime && !hasLiveRuntimeEvidence(data, row.requirements)) return "environment-blocked";
   if (data?.available === false) {
@@ -14414,25 +14463,25 @@ function classifyLiveBacklogRow(row, exitCode, parsed) {
   return row.requirements.length > 0 || row.mutatesRuntime ? "live-pass" : "static-pass";
 }
 function hasLiveRuntimeEvidence(data, requirements) {
-  const record = asRecord20(data);
+  const record = asRecord21(data);
   if (!record) return false;
   if (requirements.includes("hermes-target")) {
-    const target = asRecord20(record.target);
-    const cdp = asRecord20(record.cdp);
-    const metro = asRecord20(record.metro);
+    const target = asRecord21(record.target);
+    const cdp = asRecord21(record.cdp);
+    const metro = asRecord21(record.metro);
     const metroTargets2 = Array.isArray(metro?.targets) ? metro.targets : [];
     return Boolean(
-      target?.webSocketDebuggerUrl || Array.isArray(cdp?.calls) && cdp.calls.length > 0 || metroTargets2.some((targetEntry) => Boolean(asRecord20(targetEntry)?.webSocketDebuggerUrl))
+      target?.webSocketDebuggerUrl || Array.isArray(cdp?.calls) && cdp.calls.length > 0 || metroTargets2.some((targetEntry) => Boolean(asRecord21(targetEntry)?.webSocketDebuggerUrl))
     );
   }
   if (requirements.includes("metro")) {
-    const metro = asRecord20(record.metro);
-    const context = asRecord20(record.context);
-    const contextMetro = asRecord20(context?.metro);
+    const metro = asRecord21(record.metro);
+    const context = asRecord21(record.context);
+    const contextMetro = asRecord21(context?.metro);
     return record.status === "available" || metro?.status === "available" || metro?.status === "packager-status:running" || contextMetro?.status === "available" || contextMetro?.status === "packager-status:running" || Number(metro?.targetCount ?? contextMetro?.targetCount ?? 0) > 0 || Array.isArray(record.targets) && record.targets.length > 0 || Array.isArray(metro?.targets) && metro.targets.length > 0;
   }
   if (requirements.includes("metro-message")) {
-    const messageSocket = asRecord20(record.messageSocket);
+    const messageSocket = asRecord21(record.messageSocket);
     return messageSocket?.available === true || record.transport === "metro-message-socket";
   }
   if (requirements.includes("app-bridge")) {
@@ -14441,7 +14490,7 @@ function hasLiveRuntimeEvidence(data, requirements) {
   return true;
 }
 function summarizeBacklogPayload(parsed) {
-  const data = asRecord20(parsed?.data) ?? parsed;
+  const data = asRecord21(parsed?.data) ?? parsed;
   if (!data || typeof data !== "object") return null;
   return {
     ok: parsed?.ok,
@@ -14490,7 +14539,7 @@ function isoStamp3(deps = {}) {
 function firstPositional3(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
 }
-function asRecord20(value) {
+function asRecord21(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function execFile11(file, argv, options) {
@@ -14511,6 +14560,17 @@ function execFile11(file, argv, options) {
 
 // src/bundled-cli.ts
 var CLI_VERSION5 = "0.1.0";
+var runtime;
+var runToolInCurrentRuntime = async (toolName, args) => {
+  const handler = runtime.handlers[toolName];
+  if (!handler) {
+    throw new Error(`Unknown batch tool: ${toolName}`);
+  }
+  return handler(args);
+};
+function runBatchCommand(args) {
+  return batchCommand(args, { runToolAndEmitPayload: runToolInCurrentRuntime });
+}
 var handlerImplementations = {
   doctor: expo98Doctor,
   projectInfo,
@@ -14523,7 +14583,7 @@ var handlerImplementations = {
   getRefCommand,
   findCommand,
   waitCommand,
-  batchCommand,
+  batchCommand: runBatchCommand,
   bootSimulator,
   openUrl,
   launchApp,
@@ -14577,7 +14637,7 @@ var handlerImplementations = {
   liveBacklogCommand,
   traceInteraction
 };
-var runtime = createCliRuntime({
+runtime = createCliRuntime({
   parseCliArgs,
   commandArgs,
   dispatchCommand,

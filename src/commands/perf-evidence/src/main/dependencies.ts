@@ -4,7 +4,15 @@ import { resolve } from "node:path";
 
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroStatusPayload, metroTargets } from "../../../metro-probes/src/main/index.ts";
-import type { PerfDependencies } from "./types.js";
+import type {
+  PerfDependencies,
+  PerfExecResult,
+  PerfFileStat,
+  PerfHermesEvaluation,
+  PerfMetroStatus,
+  PerfMetroTarget,
+  PerfProjectSummary,
+} from "./types.js";
 
 export async function projectCwd(cwd: unknown, deps: PerfDependencies): Promise<string> {
   if (deps.normalizeProjectCwd) {
@@ -14,27 +22,29 @@ export async function projectCwd(cwd: unknown, deps: PerfDependencies): Promise<
   return resolve(String(cwd ?? process.cwd()));
 }
 
-export async function projectSummary(cwd: string, deps: PerfDependencies): Promise<Record<string, any>> {
+export async function projectSummary(cwd: string, deps: PerfDependencies): Promise<PerfProjectSummary> {
   return deps.expoProjectRuntimeSummary ? deps.expoProjectRuntimeSummary(cwd) : { projectRoot: cwd };
 }
 
-export async function metroStatus(args: { metroPort: number }, deps: PerfDependencies): Promise<Record<string, any>> {
-  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : metroStatusPayload(args);
+export async function metroStatus(args: { metroPort: number }, deps: PerfDependencies): Promise<PerfMetroStatus> {
+  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : metroStatusPayload(args) as unknown as Promise<PerfMetroStatus>;
 }
 
-export async function listMetroTargets(metroPort: number, deps: PerfDependencies): Promise<Array<Record<string, any>>> {
-  return deps.metroTargets ? deps.metroTargets(metroPort) : metroTargets(metroPort);
+export async function listMetroTargets(metroPort: number, deps: PerfDependencies): Promise<PerfMetroTarget[]> {
+  return deps.metroTargets ? deps.metroTargets(metroPort) : metroTargets(metroPort) as unknown as Promise<PerfMetroTarget[]>;
 }
 
-export async function evaluateHermes(url: string, expression: string, deps: PerfDependencies): Promise<Record<string, any>> {
-  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5000 }) : sharedEvaluateHermesExpression(url, expression, { timeoutMs: 5000 });
+export async function evaluateHermes(url: string, expression: string, deps: PerfDependencies): Promise<PerfHermesEvaluation> {
+  return deps.evaluateHermesExpression
+    ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5000 })
+    : sharedEvaluateHermesExpression(url, expression, { timeoutMs: 5000 }) as Promise<PerfHermesEvaluation>;
 }
 
 export async function findUpFile(cwd: string, name: string, deps: PerfDependencies): Promise<string | null> {
   return deps.findUp ? deps.findUp(cwd, name) : null;
 }
 
-export async function readJson(file: string, deps: PerfDependencies): Promise<any> {
+export async function readJson(file: string, deps: PerfDependencies): Promise<unknown> {
   if (deps.readJsonFile) return deps.readJsonFile(file);
   return JSON.parse(await readFile(file, "utf8"));
 }
@@ -47,7 +57,7 @@ export async function exists(path: string, deps: PerfDependencies): Promise<bool
   return deps.pathExists ? deps.pathExists(path) : fsStat(path).then(() => true, () => false);
 }
 
-export async function fileStat(path: string, deps: PerfDependencies): Promise<{ isFile(): boolean; size: number } | null> {
+export async function fileStat(path: string, deps: PerfDependencies): Promise<PerfFileStat | null> {
   return deps.stat ? deps.stat(path) : fsStat(path).catch(() => null);
 }
 
@@ -55,7 +65,7 @@ export function execFile(
   file: string,
   argv: string[],
   options: { timeout: number },
-): Promise<{ stdout: string; stderr: string; error: null | { message: string; code?: number | string | null; signal?: string | null } }> {
+): Promise<PerfExecResult> {
   return new Promise((resolveExec) => {
     nodeExecFile(file, argv, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       resolveExec({
