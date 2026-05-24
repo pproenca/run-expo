@@ -145,7 +145,7 @@ export interface NetworkCommandDependencies {
 
 const CLI_NAME = CURRENT_CLI_NAME;
 const CLI_VERSION = "0.1.0";
-const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+const EXPO98_BRIDGE_VERSION = "1.0.0";
 const REDACTED = "[redacted]";
 const UNAVAILABLE_LIMITATIONS = [
   "Network evidence requires dev-only app instrumentation that patches fetch/XHR or an equivalent app network adapter.",
@@ -352,11 +352,13 @@ export function networkExpression(input: {
     const action = ${JSON.stringify(action)};
     const requestId = ${JSON.stringify(requestId ?? null)};
     const limit = ${Number(limit)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+    const expectedBridgeVersion = ${JSON.stringify(EXPO98_BRIDGE_VERSION)};
+    const pluginBridge = globalThis.__EXPO98_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO98_PLUGIN_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
-    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
+    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expo98DevtoolsBridgeMetadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
     const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
     const pluginNetwork = pluginBridge?.network ||
       (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.network : null) ||
@@ -415,8 +417,9 @@ export function networkExpression(input: {
       if (action === 'har-start') return { available: true, action, source: 'react-native-devtools-network', started: true, startedAt: new Date().toISOString() };
       if (action === 'har-stop') return { available: true, action, source: 'react-native-devtools-network', requests: list(), stoppedAt: new Date().toISOString() };
     }
-    const bridge = globalThis.__EXPO_IOS_NETWORK_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.network);
+    const bridge = globalThis.__EXPO98_NETWORK_BRIDGE__ ||
+      globalThis.__EXPO_IOS_NETWORK_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.network || globalThis.__EXPO_IOS_INSTRUMENTATION__?.network);
     if (!bridge) {
       return {
         available: false,

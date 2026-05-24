@@ -549,7 +549,7 @@ describe("expo98 package bin", () => {
       assert.equal(payload.data.source, "app-instrumentation");
       assert.equal(metro.origin, `http://127.0.0.1:${metro.port}`);
       assert.equal(
-        metro.expressions.some((expression) => expression.includes("__EXPO_IOS_RN_BRIDGE__")),
+        metro.expressions.some((expression) => expression.includes("__EXPO98_RN_BRIDGE__")),
         true,
       );
     } finally {

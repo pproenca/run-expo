@@ -270,12 +270,15 @@ function modalExpression(args: {
   text?: unknown;
 }): string {
   const globalName =
+    args.domain === "dialog" ? "__EXPO98_DIALOG_BRIDGE__" : "__EXPO98_SHEET_BRIDGE__";
+  const legacyGlobalName =
     args.domain === "dialog" ? "__EXPO_IOS_DIALOG_BRIDGE__" : "__EXPO_IOS_SHEET_BRIDGE__";
   return `(() => {
     const action = ${JSON.stringify(args.action)};
     const text = ${JSON.stringify(args.text ?? null)};
     const bridge = globalThis.${globalName} ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__[${JSON.stringify(args.domain)}]);
+      globalThis.${legacyGlobalName} ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.[${JSON.stringify(args.domain)}] || globalThis.__EXPO_IOS_INSTRUMENTATION__?.[${JSON.stringify(args.domain)}]);
     if (!bridge) return { available: false, source: 'app-instrumentation', reason: ${JSON.stringify(`${args.domain} bridge is not installed.`)}, action };
     if (action === 'status') return { available: true, source: 'app-instrumentation', action, visible: !!bridge.visible, ${args.domain}: bridge.current || null };
     if (action === 'accept') return { available: true, source: 'app-instrumentation', action, result: bridge.accept ? bridge.accept(text) : { accepted: true, text } };

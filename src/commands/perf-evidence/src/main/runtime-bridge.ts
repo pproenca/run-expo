@@ -11,7 +11,7 @@ import {
   targetSummary,
 } from "./model.js";
 import { redactPerfValue } from "./redaction.js";
-import { EXPO_IOS_BRIDGE_VERSION, type PerfDependencies } from "./types.js";
+import { EXPO98_BRIDGE_VERSION, type PerfDependencies } from "./types.js";
 import { perfValidation } from "./validation.js";
 
 export interface RuntimeBridgeEvidence {
@@ -137,14 +137,16 @@ function runtimeProgram(sections: string[]): string {
 function perfRuntimeInputs(action: string, label: unknown): string {
   return `    const action = ${JSON.stringify(action)};
     const label = ${JSON.stringify(label ?? null)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};`;
+    const expectedBridgeVersion = ${JSON.stringify(EXPO98_BRIDGE_VERSION)};`;
 }
 
 function perfPluginBridgeSection(): string {
-  return `    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+  return `    const pluginBridge = globalThis.__EXPO98_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO98_PLUGIN_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
-    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
+    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expo98DevtoolsBridgeMetadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
     const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
     const pluginPerf = pluginBridge?.performance ||
       pluginBridge?.perf ||
@@ -186,13 +188,16 @@ function perfExpoDevtoolsSection(): string {
 }
 
 function perfInstrumentationSetupSection(): string {
-  return `    const bridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
-    const networkBridge = globalThis.__EXPO_IOS_NETWORK_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.network);
-    const rnBridge = globalThis.__EXPO_IOS_RN_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.rn);
-    const perfState = globalThis.__EXPO_IOS_PERF_STATE__ ||= { interactions: {}, frames: [], lastFrameTs: null };
+  return `    const bridge = globalThis.__EXPO98_PERF_BRIDGE__ ||
+      globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.performance || globalThis.__EXPO_IOS_INSTRUMENTATION__?.performance);
+    const networkBridge = globalThis.__EXPO98_NETWORK_BRIDGE__ ||
+      globalThis.__EXPO_IOS_NETWORK_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.network || globalThis.__EXPO_IOS_INSTRUMENTATION__?.network);
+    const rnBridge = globalThis.__EXPO98_RN_BRIDGE__ ||
+      globalThis.__EXPO_IOS_RN_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.rn || globalThis.__EXPO_IOS_INSTRUMENTATION__?.rn);
+    const perfState = globalThis.__EXPO98_PERF_STATE__ ||= { interactions: {}, frames: [], lastFrameTs: null };
     const readRequests = () => {
       try {
         const raw = networkBridge && typeof networkBridge.requests === 'function' ? networkBridge.requests({ limit: 1000 }) : networkBridge?.requests || [];

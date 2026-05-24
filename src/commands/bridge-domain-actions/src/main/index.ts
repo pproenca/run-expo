@@ -94,7 +94,7 @@ export interface BridgeDomainCommandInput {
 
 export type BridgeDomainPayload = Record<string, any>;
 
-const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+const EXPO98_BRIDGE_VERSION = "1.0.0";
 const MAX_OUTPUT = 40_000;
 const MAX_ARRAY_ITEMS = 1000;
 
@@ -392,11 +392,13 @@ function storageExpression(args: {
     const key = ${JSON.stringify(args.key ?? null)};
     const value = ${JSON.stringify(args.value)};
     const limit = ${Number(args.limit)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+    const expectedBridgeVersion = ${JSON.stringify(EXPO98_BRIDGE_VERSION)};
+    const pluginBridge = globalThis.__EXPO98_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO98_PLUGIN_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
-    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
+    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expo98DevtoolsBridgeMetadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
     const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
     const pluginStorage = pluginBridge?.storage ||
       (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.storage : null) ||
@@ -437,8 +439,9 @@ function storageExpression(args: {
     } else if (pluginBridge) {
       return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'missing-domain', reason: 'Storage bridge domain is not registered.', store, action };
     }
-    const bridge = globalThis.__EXPO_IOS_STORAGE_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.storage);
+    const bridge = globalThis.__EXPO98_STORAGE_BRIDGE__ ||
+      globalThis.__EXPO_IOS_STORAGE_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.storage || globalThis.__EXPO_IOS_INSTRUMENTATION__?.storage);
     if (!bridge) return { available: false, source: 'app-instrumentation', code: 'unavailable-bridge', reason: 'Storage bridge is not installed.', store, action };
     const adapter = bridge[store];
     if (!adapter) return { available: false, source: 'app-instrumentation', reason: 'Unsupported storage store.', store, action };
@@ -454,8 +457,9 @@ function stateExpression(args: { action: unknown; name?: unknown }): string {
   return `(() => {
     const action = ${JSON.stringify(args.action)};
     const name = ${JSON.stringify(args.name ?? null)};
-    const bridge = globalThis.__EXPO_IOS_STATE_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.state);
+    const bridge = globalThis.__EXPO98_STATE_BRIDGE__ ||
+      globalThis.__EXPO_IOS_STATE_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.state || globalThis.__EXPO_IOS_INSTRUMENTATION__?.state);
     if (!bridge) return { available: false, source: 'app-instrumentation', reason: 'State bridge is not installed.', action };
     if (action === 'list') return { available: true, source: 'app-instrumentation', action, states: bridge.list ? bridge.list() : bridge.states || [] };
     if (action === 'save') return { available: true, source: 'app-instrumentation', action, name, result: bridge.save ? bridge.save(name) : { ok: true, name } };
@@ -469,11 +473,13 @@ function controlsExpression(args: { action: unknown; name?: unknown }): string {
   return `(() => {
     const action = ${JSON.stringify(args.action)};
     const name = ${JSON.stringify(args.name ?? null)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+    const expectedBridgeVersion = ${JSON.stringify(EXPO98_BRIDGE_VERSION)};
+    const pluginBridge = globalThis.__EXPO98_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO98_PLUGIN_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
-    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
+    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expo98DevtoolsBridgeMetadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
     const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
     const pluginControls = pluginBridge?.controls ||
       (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.controls : null) ||
@@ -507,8 +513,9 @@ function controlsExpression(args: { action: unknown; name?: unknown }): string {
     } else if (pluginBridge) {
       return { available: false, source: 'plugin-bridge', domain: 'controls', code: 'missing-domain', reason: 'Controls bridge domain is not registered.', action };
     }
-    const bridge = globalThis.__EXPO_IOS_CONTROLS_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.controls);
+    const bridge = globalThis.__EXPO98_CONTROLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_CONTROLS_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.controls || globalThis.__EXPO_IOS_INSTRUMENTATION__?.controls);
     if (!bridge) return { available: false, source: 'app-instrumentation', code: 'unavailable-bridge', reason: 'Controls bridge is not installed.', action };
     if (action === 'list') return { available: true, source: 'app-instrumentation', action, controls: bridge.list ? bridge.list() : bridge.controls || [] };
     if (action === 'get') return { available: true, source: 'app-instrumentation', action, name, control: bridge.get ? bridge.get(name) : (bridge.controls || []).find((control) => control.name === name) || null };

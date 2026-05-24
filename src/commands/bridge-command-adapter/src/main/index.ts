@@ -1,14 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import {
-  toolJson,
-  unwrapToolJson,
-  type ToolTextResult,
-} from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { toolJson } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 declare const process: { cwd(): string };
 
-export const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+export const EXPO98_BRIDGE_VERSION = "1.0.0";
+export const EXPO_IOS_BRIDGE_VERSION = EXPO98_BRIDGE_VERSION;
 export const BRIDGE_SCHEMA_VERSION = 1;
 const BRIDGE_DIR = ".expo98";
 const LEGACY_BRIDGE_DIR = ".expo-ios";
@@ -87,7 +84,7 @@ export interface BridgeInstallPlan {
 
 export interface BridgeMetadata {
   schemaVersion: typeof BRIDGE_SCHEMA_VERSION;
-  bridgeVersion: typeof EXPO_IOS_BRIDGE_VERSION;
+  bridgeVersion: typeof EXPO98_BRIDGE_VERSION;
   developmentOnly: true;
   generatedBy: "expo98";
   domains: string[];
@@ -200,13 +197,13 @@ export async function bridgeInstallStatus(
         message: "Bridge metadata and source file are not both present.",
       });
     } else if (
-      metadataProperty(metadata, "bridgeVersion") !== EXPO_IOS_BRIDGE_VERSION ||
+      metadataProperty(metadata, "bridgeVersion") !== EXPO98_BRIDGE_VERSION ||
       metadataProperty(metadata, "schemaVersion") !== BRIDGE_SCHEMA_VERSION
     ) {
       state = "stale";
       issues.push({
         code: "version-mismatch",
-        message: `Bridge version ${String(metadataProperty(metadata, "bridgeVersion") ?? "unknown")} does not match ${EXPO_IOS_BRIDGE_VERSION}.`,
+        message: `Bridge version ${String(metadataProperty(metadata, "bridgeVersion") ?? "unknown")} does not match ${EXPO98_BRIDGE_VERSION}.`,
       });
     } else if (metadataProperty(metadata, "developmentOnly") !== true) {
       state = "incompatible";
@@ -223,7 +220,7 @@ export async function bridgeInstallStatus(
     projectRoot,
     state,
     bridgeVersion: metadataProperty(metadata, "bridgeVersion") ?? null,
-    expectedBridgeVersion: EXPO_IOS_BRIDGE_VERSION,
+    expectedBridgeVersion: EXPO98_BRIDGE_VERSION,
     developmentOnly: metadataProperty(metadata, "developmentOnly") === true,
     metadataPath,
     sourcePath,
@@ -276,7 +273,7 @@ export function bridgeInstallPlan(status: BridgeInstallStatus): BridgeInstallPla
 export function bridgeMetadata(): BridgeMetadata {
   return {
     schemaVersion: BRIDGE_SCHEMA_VERSION,
-    bridgeVersion: EXPO_IOS_BRIDGE_VERSION,
+    bridgeVersion: EXPO98_BRIDGE_VERSION,
     developmentOnly: true,
     generatedBy: "expo98",
     domains: ["navigation", "network", "storage", "controls", "performance", "snapshot"],
@@ -292,18 +289,23 @@ type Expo98DevtoolsBridgeRegistration =
   | { registered: false; reason: "development-mode-required" | "production-build" }
   | { registered: true; metadata: typeof expo98DevtoolsBridgeMetadata };
 
-export function registerExpoIosDevtoolsBridge(): Expo98DevtoolsBridgeRegistration {
+export function registerExpo98DevtoolsBridge(): Expo98DevtoolsBridgeRegistration {
   if (typeof __DEV__ === "undefined") return { registered: false, reason: "development-mode-required" };
   if (!__DEV__) return { registered: false, reason: "production-build" };
   const bridge = {
     registered: true,
     metadata: expo98DevtoolsBridgeMetadata,
+    expo98DevtoolsBridgeMetadata,
+    expoIosDevtoolsBridgeMetadata,
     bridgeVersion: expo98DevtoolsBridgeMetadata.bridgeVersion,
     domains: expo98DevtoolsBridgeMetadata.domains.map((name) => ({ name })),
   };
+  globalThis.__EXPO98_DEVTOOLS_BRIDGE__ = bridge;
   globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ = bridge;
   return { registered: true, metadata: expo98DevtoolsBridgeMetadata };
 }
+
+export const registerExpoIosDevtoolsBridge = registerExpo98DevtoolsBridge;
 `;
 }
 

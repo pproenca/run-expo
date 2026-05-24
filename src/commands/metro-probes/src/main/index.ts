@@ -2,7 +2,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   toolJson,
-  unwrapToolJson,
   type ToolTextResult,
 } from "../../../../core/tool-json-envelope/src/main/index.ts";
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";

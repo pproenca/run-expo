@@ -496,8 +496,9 @@ export function interactionTraceExpression({
       }
       const top = (object) => Object.entries(object).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, count]) => ({ name, count }));
       const compactEvents = events.map(compactEvent);
-      const perfBridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
-        (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+      const perfBridge = globalThis.__EXPO98_PERF_BRIDGE__ ||
+      globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+        (globalThis.__EXPO98_INSTRUMENTATION__?.performance || globalThis.__EXPO_IOS_INSTRUMENTATION__?.performance);
       const renderPayload = (() => {
         try { return perfBridge?.renders?.read ? perfBridge.renders.read() : null; } catch { return null; }
       })();

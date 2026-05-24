@@ -178,8 +178,9 @@ export function rnExpression({
     const ref = ${JSON.stringify(ref ?? null)};
     const maxDepth = Math.max(1, Math.min(Number(${JSON.stringify(depth ?? 30)}) || 30, 80));
     const maxNodes = Math.max(1, Math.min(Number(${JSON.stringify(limit ?? 500)}) || 500, 2000));
-    const bridge = globalThis.__EXPO_IOS_RN_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.rn);
+    const bridge = globalThis.__EXPO98_RN_BRIDGE__ ||
+      globalThis.__EXPO_IOS_RN_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.rn || globalThis.__EXPO_IOS_INSTRUMENTATION__?.rn);
     const bridgeTree = () => bridge && bridge.tree ? bridge.tree() : bridge ? { available: true, sources: ['runtime', 'app-instrumentation'], action, tree: bridge.tree || [] } : null;
     const isRouterShellOnly = (payload) => {
       const tree = payload && Array.isArray(payload.tree) ? payload.tree : [];
@@ -314,8 +315,9 @@ export function rnExpression({
     }
     if (!bridge) return { available: false, sources: ['runtime', 'app-instrumentation'], source: 'app-instrumentation', reason: 'React Native bridge is not installed.', action };
     if (action === 'fiber') return bridge.fiber ? bridge.fiber(ref) : { available: false, sources: ['runtime', 'app-instrumentation'], action, ref, reason: 'Fiber inspection is not exposed by the app bridge.' };
-    const perfBridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+    const perfBridge = globalThis.__EXPO98_PERF_BRIDGE__ ||
+      globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.performance || globalThis.__EXPO_IOS_INSTRUMENTATION__?.performance);
     if (action === 'renders-start') {
       if (bridge.renders && bridge.renders.start) return bridge.renders.start();
       if (perfBridge?.renders?.start) return perfBridge.renders.start();

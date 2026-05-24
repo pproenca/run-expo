@@ -2,7 +2,7 @@ import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/mai
 
 export type { ToolTextResult };
 
-export const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+export const EXPO98_BRIDGE_VERSION = "1.0.0";
 
 export const PERF_ACTIONS = [
   "summary",

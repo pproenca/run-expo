@@ -222,12 +222,14 @@ function semanticBridgeExpression(filters: SnapshotFilters): string {
       if (typeof payload === 'object') return { available: payload.available !== false, source: payload.source || source, ...payload };
       return null;
     };
-    const instrumentation = globalThis.__EXPO_IOS_INSTRUMENTATION__ || {};
+    const instrumentation = globalThis.__EXPO98_INSTRUMENTATION__ || globalThis.__EXPO_IOS_INSTRUMENTATION__ || {};
     const probes = [
-      ['plugin-bridge-semantic', globalThis.__EXPO_IOS_SEMANTIC_BRIDGE__],
+      ['plugin-bridge-semantic', globalThis.__EXPO98_SEMANTIC_BRIDGE__ ||
+      globalThis.__EXPO_IOS_SEMANTIC_BRIDGE__],
       ['app-instrumentation', instrumentation.semantic],
       ['app-instrumentation', instrumentation.snapshot],
-      ['app-rn-bridge', globalThis.__EXPO_IOS_RN_BRIDGE__],
+      ['app-rn-bridge', globalThis.__EXPO98_RN_BRIDGE__ ||
+      globalThis.__EXPO_IOS_RN_BRIDGE__],
     ];
     const failures = [];
     for (const [source, candidate] of probes) {

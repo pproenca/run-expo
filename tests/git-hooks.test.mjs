@@ -74,7 +74,7 @@ function createSpawn(results) {
   };
 }
 
-test("configurePrepareGitHooks configures hooks through git without using a shell", () => {
+void test("configurePrepareGitHooks configures hooks through git without using a shell", () => {
   const calls = [];
   const spawnSync = (bin, args, options) => {
     calls.push([bin, args, options]);
@@ -111,7 +111,7 @@ test("configurePrepareGitHooks configures hooks through git without using a shel
   ]);
 });
 
-test("configurePrepareGitHooks quietly skips packaged installs without hooks", () => {
+void test("configurePrepareGitHooks quietly skips packaged installs without hooks", () => {
   assert.deepEqual(
     configurePrepareGitHooks({
       cwd: "/package",
@@ -122,7 +122,7 @@ test("configurePrepareGitHooks quietly skips packaged installs without hooks", (
   );
 });
 
-test("configurePrepareGitHooks warns without failing when git config fails", () => {
+void test("configurePrepareGitHooks warns without failing when git config fails", () => {
   const warnings = [];
 
   assert.deepEqual(
@@ -140,7 +140,7 @@ test("configurePrepareGitHooks warns without failing when git config fails", () 
   assert.deepEqual(warnings, ["[prepare] could not configure git hooks: permission denied"]);
 });
 
-test("pre-commit does not treat staged filenames as git-add flags", (t) => {
+void test("pre-commit does not treat staged filenames as git-add flags", (t) => {
   const dir = makeTempRepoRoot("expo98-pre-commit-");
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   run(dir, "git", ["init", "-q", "--initial-branch=main"]);
@@ -159,7 +159,7 @@ test("pre-commit does not treat staged filenames as git-add flags", (t) => {
   assert.deepEqual(staged, ["--all"]);
 });
 
-test("pre-commit does not re-add staged paths ignored by gitignore", (t) => {
+void test("pre-commit does not re-add staged paths ignored by gitignore", (t) => {
   const dir = makeTempRepoRoot("expo98-pre-commit-ignored-");
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   run(dir, "git", ["init", "-q", "--initial-branch=main"]);

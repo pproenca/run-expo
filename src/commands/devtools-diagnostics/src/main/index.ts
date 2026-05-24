@@ -660,7 +660,7 @@ export function diagnosticsExpression({ kind, limit }: { kind: string; limit: nu
   return `(() => {
     const kind = ${JSON.stringify(kind)};
     const limit = ${Number(limit)};
-    const diagnostics = globalThis.__EXPO_IOS_DIAGNOSTICS__ || globalThis.__CODEX_DIAGNOSTICS__ || {};
+    const diagnostics = globalThis.__EXPO98_DIAGNOSTICS__ || globalThis.__EXPO_IOS_DIAGNOSTICS__ || globalThis.__CODEX_DIAGNOSTICS__ || {};
     const raw = diagnostics[kind] || diagnostics[kind === 'errors' ? 'error' : 'logs'] || [];
     const messages = Array.isArray(raw) ? raw.slice(-limit).map((entry, index) => ({
       index,
@@ -872,7 +872,7 @@ async function metroTargetDiscovery(
 
 function clearDiagnosticsExpression(kind: string): string {
   return `(() => {
-      const diagnostics = globalThis.__EXPO_IOS_DIAGNOSTICS__ || globalThis.__CODEX_DIAGNOSTICS__;
+      const diagnostics = globalThis.__EXPO98_DIAGNOSTICS__ || globalThis.__EXPO_IOS_DIAGNOSTICS__ || globalThis.__CODEX_DIAGNOSTICS__;
       if (!diagnostics) return { available: false, cleared: false, reason: 'Runtime diagnostics buffer is not installed.' };
       if (Array.isArray(diagnostics[${JSON.stringify(kind)}])) diagnostics[${JSON.stringify(kind)}].length = 0;
       return { available: true, cleared: true };

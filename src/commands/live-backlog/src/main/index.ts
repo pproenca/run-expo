@@ -175,7 +175,7 @@ const ADAPTER_SELF_CHECK_FINDINGS: AdapterFinding[] = [
     domain: "react-native",
     status: "wired",
     reason:
-      "React Native introspection delegates to bridge-domain Runtime.evaluate using __EXPO_IOS_RN_BRIDGE__ and instrumentation fallbacks.",
+      "React Native introspection delegates to bridge-domain Runtime.evaluate using __EXPO98_RN_BRIDGE__ and instrumentation fallbacks.",
     sourceFile: "src/commands/rn-introspection/src/main/index.ts",
     recommendedFix: null,
   },

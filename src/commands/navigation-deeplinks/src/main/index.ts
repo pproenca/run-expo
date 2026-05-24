@@ -108,7 +108,7 @@ export interface OpenRouteResult {
   [key: string]: unknown;
 }
 
-const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+const EXPO98_BRIDGE_VERSION = "1.0.0";
 const NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
   "Use open-route or navigation deep-link when only URL navigation is available.",
@@ -363,8 +363,10 @@ export function navigationExpression(args: { action: string; tab?: unknown }): s
   return `(() => {
     const action = ${JSON.stringify(args.action)};
     const tab = ${JSON.stringify(args.tab ?? null)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+    const expectedBridgeVersion = ${JSON.stringify(EXPO98_BRIDGE_VERSION)};
+    const pluginBridge = globalThis.__EXPO98_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO98_PLUGIN_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
     if (pluginBridge && typeof pluginBridge === 'object') {
@@ -417,8 +419,9 @@ export function navigationExpression(args: { action: string; tab?: unknown }): s
         }
       }
     }
-    const bridge = globalThis.__EXPO_IOS_NAVIGATION_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.navigation);
+    const bridge = globalThis.__EXPO98_NAVIGATION_BRIDGE__ ||
+      globalThis.__EXPO_IOS_NAVIGATION_BRIDGE__ ||
+      (globalThis.__EXPO98_INSTRUMENTATION__?.navigation || globalThis.__EXPO_IOS_INSTRUMENTATION__?.navigation);
     if (!bridge) {
       return {
         available: false,
