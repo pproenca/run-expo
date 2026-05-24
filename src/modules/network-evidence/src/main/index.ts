@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
+import { realValidation } from "../../../real-validation/src/main/index.ts";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -161,7 +162,7 @@ export async function networkCommand(
   deps: NetworkCommandDependencies = defaultNetworkDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "status", "action");
-  if (!["status", "requests", "request", "clear", "har"].includes(action)) {
+  if (!["status", "requests", "request", "clear", "har", "waterfall"].includes(action)) {
     throw new Error(`Unknown network action: ${action}`);
   }
   const harAction = action === "har" ? requireString(args.harAction ?? "start", "harAction") : null;
@@ -243,7 +244,7 @@ export async function networkCommand(
     });
   }
 
-  return toolJson({
+  const payload = {
     ...redacted,
     action: bridgeAction,
     metroPort,
@@ -252,7 +253,8 @@ export async function networkCommand(
     evidenceSource: redacted.source ?? "unknown",
     limitations: networkLimitations(redacted),
     captureTiming: networkCaptureTiming(redacted, clock),
-  });
+  };
+  return toolJson(action === "waterfall" ? networkWaterfallPayload(payload) : payload);
 }
 
 const defaultNetworkDependencies: NetworkCommandDependencies = {
@@ -347,6 +349,17 @@ export function networkUnavailable(input: {
     },
     requests: [],
     limitations: UNAVAILABLE_LIMITATIONS,
+    realValidation: realValidation({
+      state: code === "no-runtime-target" ? "environment-blocked" : "unvalidated",
+      evidence: [{ source: evidenceSource, command: `network.${input.action}`, confidence: "low" }],
+      missingEvidence: [{
+        signal: code === "no-runtime-target" ? "metro-hermes-target" : "network-bridge",
+        reason: input.reason,
+        recommendedFix: code === "no-runtime-target"
+          ? "Start Metro, launch the app in a Hermes dev client, and rerun with --metro-port."
+          : "Install or mount the dev-only network bridge, then rerun network requests.",
+      }],
+    }),
   };
 }
 
@@ -384,7 +397,7 @@ export function networkExpression(input: { action: string; requestId?: unknown; 
         return Array.isArray(raw) ? raw.slice(-limit) : raw;
       };
       if (action === 'status') return { available: true, action, source: 'plugin-bridge', domain: 'network', bridgeVersion: pluginVersion, hooks: pluginNetwork?.hooks || callNetwork('status') || { fetch: true, xhr: true } };
-      if (action === 'requests') return { available: true, action, source: 'plugin-bridge', domain: 'network', bridgeVersion: pluginVersion, requests: list() };
+      if (action === 'requests' || action === 'waterfall') return { available: true, action, source: 'plugin-bridge', domain: 'network', bridgeVersion: pluginVersion, requests: list() };
       if (action === 'request') {
         const requests = list();
         if (!Array.isArray(requests)) return { available: false, action, source: 'plugin-bridge', code: 'malformed-payload', reason: 'Network plugin bridge returned a malformed request list.', requests: [] };
@@ -409,7 +422,7 @@ export function networkExpression(input: { action: string; requestId?: unknown; 
         return Array.isArray(raw) ? raw.slice(-limit) : raw;
       };
       if (action === 'status') return { available: true, action, source: 'react-native-devtools-network', hooks: devtoolsNetwork.hooks || { fetch: true, xhr: true } };
-      if (action === 'requests') return { available: true, action, source: 'react-native-devtools-network', requests: list() };
+      if (action === 'requests' || action === 'waterfall') return { available: true, action, source: 'react-native-devtools-network', requests: list() };
       if (action === 'request') {
         const found = list().find((request) => request && request.id === requestId) || null;
         return found
@@ -443,7 +456,7 @@ export function networkExpression(input: { action: string; requestId?: unknown; 
         hooks: typeof bridge.status === 'function' ? bridge.status() : (bridge.hooks || { fetch: true, xhr: true })
       };
     }
-    if (action === 'requests') {
+    if (action === 'requests' || action === 'waterfall') {
       return { available: true, action, source: 'app-instrumentation', requests: list() };
     }
     if (action === 'request') {
@@ -471,8 +484,8 @@ export function networkExpression(input: { action: string; requestId?: unknown; 
 export function redactNetworkEvidence<T>(value: T): T {
   if (!isRecord(value)) return value;
   const clone = { ...value } as Record<string, unknown>;
-  if (Array.isArray(clone.requests)) clone.requests = clone.requests.map(redactNetworkRequest);
-  if (clone.request) clone.request = redactNetworkRequest(clone.request);
+  if (Array.isArray(clone.requests)) clone.requests = clone.requests.map(redactNetworkRequest).map(normalizeNetworkRequest);
+  if (clone.request) clone.request = normalizeNetworkRequest(redactNetworkRequest(clone.request));
   if (clone.har) clone.har = redactHar(clone.har);
   return clone as T;
 }
@@ -499,7 +512,9 @@ export function normalizeNetworkEvidence(value: unknown, action: string): Networ
       requests: [],
     };
   }
-  if ((action === "requests" || action === "har-stop") && normalized.available !== false && Array.isArray(normalized.requests) && normalized.requests.length === 0) {
+  if (Array.isArray(normalized.requests)) normalized.requests = normalized.requests.map(normalizeNetworkRequest);
+  if (normalized.request) normalized.request = normalizeNetworkRequest(normalized.request) as NetworkRequest;
+  if ((action === "requests" || action === "waterfall" || action === "har-stop") && normalized.available !== false && Array.isArray(normalized.requests) && normalized.requests.length === 0) {
     return {
       ...normalized,
       available: false,
@@ -507,9 +522,21 @@ export function normalizeNetworkEvidence(value: unknown, action: string): Networ
       code: "no-observed-traffic",
       reason: "No network traffic was observed by the selected upstream/bridge path.",
       requests: [],
+      realValidation: realValidation({
+        state: "partial",
+        evidence: [{ source: String(normalized.source ?? "network"), command: `network.${action}`, confidence: "low" }],
+        missingEvidence: [{
+          signal: "observed-network-traffic",
+          reason: "No network traffic was observed by the selected upstream/bridge path.",
+          recommendedFix: "Start capture before the interaction or verify the app network bridge patches fetch/XHR.",
+        }],
+      }),
     };
   }
-  return normalized;
+  return {
+    ...normalized,
+    realValidation: networkRealValidation(normalized, action),
+  };
 }
 
 export function networkTransport(metroPort: number, target: NetworkTarget | null, cdp: unknown = null): NetworkTransport {
@@ -537,6 +564,41 @@ export function networkLimitations(value: unknown): string[] {
   return limitations;
 }
 
+export function networkWaterfallPayload(payload: NetworkEvidencePayload): NetworkEvidencePayload {
+  const requests = Array.isArray(payload.requests) ? payload.requests.map(normalizeNetworkRequest) as NetworkRequest[] : [];
+  const rankedRequests = [...requests]
+    .filter((request) => typeof request.durationMs === "number")
+    .sort((a, b) => Number(b.durationMs ?? 0) - Number(a.durationMs ?? 0))
+    .slice(0, 50);
+  const duplicateGroups = duplicateNetworkRequests(requests);
+  const slowThresholdMs = 500;
+  const waterfall = {
+    requestCount: requests.length,
+    slowThresholdMs,
+    slowRequestCount: rankedRequests.filter((request) => Number(request.durationMs ?? 0) >= slowThresholdMs).length,
+    rankedRequests,
+    duplicateGroups,
+    timings: requests.map((request) => ({
+      requestId: request.requestId ?? request.id ?? null,
+      method: request.method ?? "GET",
+      origin: request.origin ?? null,
+      path: request.path ?? null,
+      startedAt: request.startedAt ?? null,
+      endedAt: request.endedAt ?? null,
+      durationMs: request.durationMs ?? null,
+      status: request.status ?? null,
+      initiator: request.initiator ?? null,
+    })),
+  };
+  return {
+    ...payload,
+    action: "waterfall",
+    requests,
+    waterfall,
+    realValidation: networkRealValidation({ ...payload, requests }, "waterfall"),
+  };
+}
+
 export function networkCaptureTiming(value: unknown, clock = systemClock): NetworkCaptureTiming {
   const record = isRecord(value) ? value : {};
   const requests = Array.isArray(record.requests) ? record.requests : record.request ? [record.request] : [];
@@ -549,6 +611,87 @@ export function networkCaptureTiming(value: unknown, clock = systemClock): Netwo
     stoppedAt: typeof record.stoppedAt === "string" ? record.stoppedAt : clock.now().toISOString(),
     observedRequestCount: requests.length,
   };
+}
+
+function networkRealValidation(value: NetworkEvidencePayload, action: string) {
+  const requests = Array.isArray(value.requests) ? value.requests : value.request ? [value.request] : [];
+  const hasTimedRequests = requests.some((request) => typeof request?.durationMs === "number");
+  const hasWaterfallMetadata = requests.some((request) => typeof request?.startedAt === "string" && typeof request?.endedAt === "string");
+  return realValidation({
+    state: value.available === false ? "unvalidated" : hasTimedRequests ? (action === "waterfall" && !hasWaterfallMetadata ? "partial" : "validated") : "partial",
+    claimsAllowed: {
+      networkLatency: hasTimedRequests,
+      networkWaterfall: action === "waterfall" && hasWaterfallMetadata,
+    },
+    evidence: [{
+      source: String(value.source ?? value.evidenceSource ?? "network"),
+      command: `network.${action}`,
+      timestamp: new Date().toISOString(),
+      confidence: hasTimedRequests ? "medium" : "low",
+    }],
+    missingEvidence: [
+      ...(!hasTimedRequests ? [{
+        signal: "request-duration",
+        reason: "No timed network request rows were present.",
+        recommendedFix: "Run network requests after a real interaction or mount a bridge that records durationMs.",
+      }] : []),
+      ...(action === "waterfall" && !hasWaterfallMetadata ? [{
+        signal: "network-phase-timestamps",
+        reason: "Request rows do not include complete endedAt/phase timing metadata.",
+        recommendedFix: "Upgrade the app bridge to record endedAt and phase timing metadata.",
+      }] : []),
+    ],
+  });
+}
+
+function normalizeNetworkRequest(request: unknown): unknown {
+  if (!isRecord(request)) return request;
+  const url = String(request.url ?? (isRecord(request.request) ? request.request.url : "") ?? "");
+  const parsed = parseUrlParts(url);
+  const startedAt = optionalString(request.startedAt);
+  const durationMs = numberOrNull(request.durationMs);
+  const endedAt = optionalString(request.endedAt ?? request.completedAt) ?? inferEndedAt(startedAt, durationMs);
+  const response = isRecord(request.response) ? request.response : {};
+  const status = numberOrNull(request.status) ?? numberOrNull(response.status);
+  return {
+    ...request,
+    id: optionalString(request.id) ?? optionalString(request.requestId) ?? null,
+    requestId: optionalString(request.requestId) ?? optionalString(request.id) ?? null,
+    method: optionalString(request.method) ?? optionalString(isRecord(request.request) ? request.request.method : null) ?? "GET",
+    url,
+    origin: parsed.origin,
+    path: parsed.path,
+    startedAt,
+    endedAt,
+    durationMs,
+    status,
+    ok: typeof request.ok === "boolean" ? request.ok : (typeof status === "number" ? status >= 200 && status < 400 : undefined),
+    requestBytes: numberOrNull(request.requestBytes ?? request.encodedRequestBytes),
+    responseBytes: numberOrNull(request.responseBytes ?? request.encodedResponseBytes ?? response.encodedBodySize ?? response.size),
+    cache: isRecord(request.cache) ? request.cache : undefined,
+    retryCount: numberOrNull(request.retryCount) ?? 0,
+    aborted: request.aborted === true,
+    error: optionalString(request.error),
+    initiator: normalizeInitiator(request.initiator),
+  };
+}
+
+function duplicateNetworkRequests(requests: NetworkRequest[]): Array<Record<string, unknown>> {
+  const groups = new Map<string, NetworkRequest[]>();
+  for (const request of requests) {
+    const key = `${request.method ?? "GET"} ${request.origin ?? ""}${request.path ?? request.url ?? ""}`;
+    const group = groups.get(key) ?? [];
+    group.push(request);
+    groups.set(key, group);
+  }
+  return [...groups.entries()]
+    .filter(([, group]) => group.length > 1)
+    .map(([key, group]) => ({
+      key,
+      count: group.length,
+      requestIds: group.map((request) => request.requestId ?? request.id ?? null).filter(Boolean),
+      totalDurationMs: group.reduce((sum, request) => sum + Number(request.durationMs ?? 0), 0),
+    }));
 }
 
 export function harFromNetworkRequests(requests: NetworkRequest[], clock = systemClock): Record<string, unknown> {
@@ -571,7 +714,7 @@ export function harFromNetworkRequests(requests: NetworkRequest[], clock = syste
           statusText: request.response?.statusText ?? "",
           headers: request.response?.headers ?? {},
           cookies: [],
-          content: { size: 0, mimeType: request.response?.mimeType ?? "", text: request.response?.body ?? "" },
+          content: { size: request.responseBytes ?? 0, mimeType: request.response?.mimeType ?? "" },
         },
       })),
     },
@@ -634,7 +777,7 @@ function requireString(value: unknown, field: string): string {
 function redactNetworkRequest(request: unknown): unknown {
   if (!isRecord(request)) return request;
   const content = isRecord(request.content)
-    ? { ...request.content, text: request.content.text ? REDACTED : request.content.text }
+    ? { ...request.content, text: undefined }
     : undefined;
   return {
     ...request,
@@ -643,8 +786,8 @@ function redactNetworkRequest(request: unknown): unknown {
     response: request.response ? redactNetworkMessage(request.response) : undefined,
     headers: request.headers ? redactHeaders(request.headers) : undefined,
     cookies: request.cookies ? REDACTED : undefined,
-    body: request.body ? REDACTED : undefined,
-    postData: request.postData ? REDACTED : undefined,
+    body: undefined,
+    postData: undefined,
     content,
   };
 }
@@ -652,15 +795,15 @@ function redactNetworkRequest(request: unknown): unknown {
 function redactNetworkMessage(message: unknown): unknown {
   if (!isRecord(message)) return message;
   const content = isRecord(message.content)
-    ? { ...message.content, text: message.content.text ? REDACTED : message.content.text }
+    ? { ...message.content, text: undefined }
     : undefined;
   return {
     ...message,
     url: redactNetworkUrl(message.url),
     headers: message.headers ? redactHeaders(message.headers) : undefined,
     cookies: message.cookies ? REDACTED : undefined,
-    body: message.body ? REDACTED : undefined,
-    postData: message.postData ? REDACTED : undefined,
+    body: undefined,
+    postData: undefined,
     content,
   };
 }
@@ -718,6 +861,46 @@ function cloneJson<T>(value: T): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseUrlParts(url: string): { origin: string | null; path: string | null } {
+  if (!url) return { origin: null, path: null };
+  try {
+    const parsed = new URL(url);
+    return { origin: parsed.origin, path: `${parsed.pathname}${parsed.search}` };
+  } catch {
+    return { origin: null, path: url || null };
+  }
+}
+
+function inferEndedAt(startedAt: string | null, durationMs: number | null): string | null {
+  if (!startedAt || typeof durationMs !== "number") return null;
+  const started = Date.parse(startedAt);
+  if (!Number.isFinite(started)) return null;
+  return new Date(started + durationMs).toISOString();
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizeInitiator(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out = {
+    route: optionalString(value.route),
+    screen: optionalString(value.screen),
+    interactionId: optionalString(value.interactionId),
+    interactionName: optionalString(value.interactionName),
+    queryKey: optionalString(value.queryKey),
+    component: optionalString(value.component),
+    source: isRecord(value.source) ? value.source : undefined,
+  };
+  return Object.values(out).some((item) => item !== undefined && item !== null) ? out : undefined;
 }
 
 const systemClock = {

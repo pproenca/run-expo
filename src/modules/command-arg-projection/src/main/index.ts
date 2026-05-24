@@ -493,8 +493,9 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         action: command === "profiler" ? "ettrace" : args.action ?? args._[0] ?? "summary",
         subaction: command === "profiler"
           ? args.subaction ?? args.action ?? args._[0] ?? "start"
-          : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph"].includes(String(args._[0])) ? args._[1] : undefined),
-        label: args.label ?? (args._[0] === "action" ? args._[1] : args._[0] === "measure" ? args._[2] : undefined),
+          : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph", "interaction"].includes(String(args._[0])) ? args._[1] : undefined),
+        label: args.label ?? (args._[0] === "action" ? args._[1] : ["measure", "interaction"].includes(String(args._[0])) ? args._[2] : undefined),
+        interaction: args.interaction ?? (args._[0] === "report" ? args._[1] : undefined),
         bundleArtifact: args.bundleArtifact ?? (args._[0] === "bundle" ? args._[1] : undefined),
         baseline: args.baseline,
         candidate: args.candidate,

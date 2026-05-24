@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { bridgeDomainCommand } from "../../../bridge-domain-actions/src/main/index.ts";
+import { realValidation } from "../../../real-validation/src/main/index.ts";
 
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
@@ -74,6 +75,7 @@ export async function rnCommand(
     ...outputPayload,
     action,
     ...(subaction ? { subaction, bridgeAction } : {}),
+    realValidation: rnRealValidation(outputPayload, action, subaction),
     limitations: rnLimitations(outputPayload.limitations),
   });
 }
@@ -272,11 +274,57 @@ export function rnExpression({ action, ref, depth, limit }: { action: string; re
     }
     if (!bridge) return { available: false, sources: ['runtime', 'app-instrumentation'], source: 'app-instrumentation', reason: 'React Native bridge is not installed.', action };
     if (action === 'fiber') return bridge.fiber ? bridge.fiber(ref) : { available: false, sources: ['runtime', 'app-instrumentation'], action, ref, reason: 'Fiber inspection is not exposed by the app bridge.' };
-    if (action === 'renders-start') return bridge.renders && bridge.renders.start ? bridge.renders.start() : { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: true } };
-    if (action === 'renders-stop') return bridge.renders && bridge.renders.stop ? bridge.renders.stop() : { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false } };
-    if (action === 'renders-read') return bridge.renders && bridge.renders.read ? bridge.renders.read() : { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false, commits: [] } };
+    const perfBridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+    if (action === 'renders-start') {
+      if (bridge.renders && bridge.renders.start) return bridge.renders.start();
+      if (perfBridge?.renders?.start) return perfBridge.renders.start();
+      return { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: true, commits: [] } };
+    }
+    if (action === 'renders-stop') {
+      if (bridge.renders && bridge.renders.stop) return bridge.renders.stop();
+      if (perfBridge?.renders?.stop) return perfBridge.renders.stop();
+      return { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false, commits: [] } };
+    }
+    if (action === 'renders-read') {
+      if (bridge.renders && bridge.renders.read) return bridge.renders.read();
+      if (perfBridge?.renders?.read) return perfBridge.renders.read();
+      return { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false, commits: [] } };
+    }
     return { available: false, sources: ['runtime', 'app-instrumentation'], source: 'app-instrumentation', reason: 'Unsupported React Native bridge action.', action };
   })()`;
+}
+
+export function rnRealValidation(payload: Record<string, any>, action: string, subaction: string | null) {
+  if (payload.available === false) {
+    return realValidation({
+      state: "unvalidated",
+      evidence: [{ source: String(payload.source ?? "react-native"), command: `rn.${action}`, confidence: "low" }],
+      missingEvidence: [{
+        signal: "react-native-runtime-bridge",
+        reason: String(payload.reason ?? "React Native runtime evidence was unavailable."),
+        recommendedFix: "Launch a Hermes dev target and mount the dev-only RN bridge/profiler instrumentation.",
+      }],
+    });
+  }
+  const commits = Array.isArray(payload.renders?.commits) ? payload.renders.commits : [];
+  const hasCommitDurations = commits.some((commit: any) => Number.isFinite(Number(commit.durationMs ?? commit.actualDuration)));
+  if (action === "renders") {
+    return realValidation({
+      state: hasCommitDurations ? "validated" : "partial",
+      claimsAllowed: { renderCost: hasCommitDurations },
+      evidence: [{ source: String(payload.source ?? payload.sources?.[0] ?? "app-instrumentation"), command: `rn.renders.${subaction ?? "read"}`, confidence: hasCommitDurations ? "medium" : "low" }],
+      missingEvidence: hasCommitDurations ? [] : [{
+        signal: "react-profiler-commit-durations",
+        reason: "Render bridge returned no commit duration records.",
+        recommendedFix: "Mount a React Profiler wrapper in development and rerun rn renders start/read/stop.",
+      }],
+    });
+  }
+  return realValidation({
+    state: "validated",
+    evidence: [{ source: String(payload.source ?? payload.sources?.[0] ?? "react-native"), command: `rn.${action}`, confidence: "medium" }],
+  });
 }
 
 export function rnLimitations(extra: unknown[] = []): string[] {

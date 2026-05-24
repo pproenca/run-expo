@@ -1,5 +1,6 @@
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+import { realValidation } from "../../../real-validation/src/main/index.ts";
 
 export interface InteractionTraceExpressionArgs {
   action: unknown;
@@ -67,13 +68,15 @@ export async function traceInteraction(
   const expression = interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8000 });
 
+  const trace = getPath(result, ["result", "result", "value"]) ?? null;
   return toolJson({
     action,
     metroPort,
     target: targetSummary(targetList[0]),
-    trace: getPath(result, ["result", "result", "value"]) ?? null,
+    trace,
     protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord(result)?.error ?? null,
     cdp: asRecord(result)?.diagnostics ?? asRecord(result)?.cdp ?? null,
+    realValidation: traceRealValidation(trace, action),
   });
 }
 
@@ -477,6 +480,17 @@ export function interactionTraceExpression({ action, maxEvents, componentFilter,
       }
       const top = (object) => Object.entries(object).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, count]) => ({ name, count }));
       const compactEvents = events.map(compactEvent);
+      const perfBridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+        (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+      const renderPayload = (() => {
+        try { return perfBridge?.renders?.read ? perfBridge.renders.read() : null; } catch { return null; }
+      })();
+      const commits = Array.isArray(renderPayload?.renders?.commits) ? renderPayload.renders.commits : Array.isArray(renderPayload?.commits) ? renderPayload.commits : [];
+      const frameEvents = events.filter((event) => event.type === 'animationFrame' && event.frameTime != null);
+      const frameDeltas = [];
+      for (let index = 1; index < frameEvents.length; index += 1) {
+        frameDeltas.push(Math.round((Number(frameEvents[index].frameTime) - Number(frameEvents[index - 1].frameTime)) * 10) / 10);
+      }
       const response = {
         available: true,
         installed: tracer.installed,
@@ -489,6 +503,17 @@ export function interactionTraceExpression({ action, maxEvents, componentFilter,
         topComponents: top(components),
         activeElements: Array.from(activeElements.values()).slice(-30),
         layoutChanges: layoutChanges.slice(-40).map(compactChange).filter(Boolean),
+        renderSummary: {
+          commitCount: commits.length,
+          worstCommitMs: commits.reduce((max, commit) => Math.max(max, Number(commit.durationMs ?? commit.actualDuration) || 0), 0),
+          commits: commits.slice(-40)
+        },
+        frameSummary: {
+          sampleCount: frameDeltas.length,
+          worstFrameMs: frameDeltas.length ? Math.max(...frameDeltas) : null,
+          droppedFrameCount: frameDeltas.filter((delta) => delta > 33.4).length,
+          longFrameCount: frameDeltas.filter((delta) => delta > 16.7).length
+        },
         recentEvents: compactEvents.slice(-20),
         errors: tracer.errors.slice(-20),
         interpretationHints: [
@@ -544,6 +569,44 @@ export function targetSummary(target: unknown): Record<string, unknown> | null {
     deviceName: record.deviceName,
     description: record.description,
   };
+}
+
+export function traceRealValidation(trace: unknown, action: unknown) {
+  const record = asRecord(trace);
+  if (!record || record.available === false) {
+    return realValidation({
+      state: "unvalidated",
+      evidence: [{ source: "trace", command: `trace.${String(action ?? "read")}`, confidence: "low" }],
+      missingEvidence: [{
+        signal: "trace-runtime",
+        reason: "No Hermes trace payload was returned.",
+        recommendedFix: "Start Metro, launch a Hermes target, and run trace --action start before reading.",
+      }],
+    });
+  }
+  const hasCommits = Number(asRecord(record.renderSummary)?.commitCount ?? 0) > 0;
+  const hasFrames = Number(asRecord(record.frameSummary)?.sampleCount ?? 0) > 0;
+  const hasEvents = Number(record.eventCount ?? 0) > 0;
+  return realValidation({
+    state: hasEvents && (hasCommits || hasFrames) ? "validated" : "partial",
+    claimsAllowed: {
+      renderCost: hasCommits,
+      frameJank: hasFrames,
+    },
+    evidence: [{ source: "hermes-runtime-trace", command: `trace.${String(action ?? "read")}`, confidence: hasEvents ? "medium" : "low" }],
+    missingEvidence: [
+      ...(!hasCommits ? [{
+        signal: "react-profiler-commits",
+        reason: "Trace did not include React Profiler commit durations.",
+        recommendedFix: "Mount the dev-only Profiler bridge or run rn renders with commit recording.",
+      }] : []),
+      ...(!hasFrames ? [{
+        signal: "frame-deltas",
+        reason: "Trace did not observe enough animation frames to compute frame deltas.",
+        recommendedFix: "Start trace before an animated interaction and rerun trace read/stop.",
+      }] : []),
+    ],
+  });
 }
 
 export function requireOptionalString(value: unknown): string | null {
