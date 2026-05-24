@@ -58,6 +58,15 @@ export async function traceInteraction(
       action,
       reason: "No Metro inspector target.",
       metroPort,
+      realValidation: realValidation({
+        state: "environment-blocked",
+        evidence: [{ source: "metro", command: `trace.${String(action ?? "read")}`, confidence: "low" }],
+        missingEvidence: [{
+          signal: "metro-hermes-target",
+          reason: "No Metro inspector target.",
+          recommendedFix: "Start Metro, launch the app in a Hermes dev client, and rerun with --metro-port.",
+        }],
+      }),
       limitations: [
         "No Hermes Runtime.evaluate trace was collected.",
         "React commits, layout changes, animation frames, and handler-bearing components are unavailable for this read.",

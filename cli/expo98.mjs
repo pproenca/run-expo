@@ -611,8 +611,9 @@ function commandArgs(command, args, globals = {}) {
     case "profiler":
       return pickDefined({
         action: command === "profiler" ? "ettrace" : args.action ?? args._[0] ?? "summary",
-        subaction: command === "profiler" ? args.subaction ?? args.action ?? args._[0] ?? "start" : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph"].includes(String(args._[0])) ? args._[1] : void 0),
-        label: args.label ?? (args._[0] === "action" ? args._[1] : args._[0] === "measure" ? args._[2] : void 0),
+        subaction: command === "profiler" ? args.subaction ?? args.action ?? args._[0] ?? "start" : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph", "interaction"].includes(String(args._[0])) ? args._[1] : void 0),
+        label: args.label ?? (args._[0] === "action" ? args._[1] : ["measure", "interaction"].includes(String(args._[0])) ? args._[2] : void 0),
+        interaction: args.interaction ?? (args._[0] === "report" ? args._[1] : void 0),
         bundleArtifact: args.bundleArtifact ?? (args._[0] === "bundle" ? args._[1] : void 0),
         baseline: args.baseline,
         candidate: args.candidate,
@@ -1146,7 +1147,7 @@ var EVIDENCE_AND_RUNTIME_COMMANDS = [
   "errors                 Read bounded JS error diagnostics",
   "metro status           Report Metro status, targets, and symbolication",
   "navigation             Read or drive app navigation bridge state",
-  "network                Read app network evidence and write redacted HAR",
+  "network                Read metadata-only app network evidence, waterfall, and redacted HAR",
   "storage                Read or mutate app storage through policy gates",
   "state                  List/save/load/clear app state snapshots",
   "controls               List, inspect, or press app-defined controls",
@@ -1158,7 +1159,7 @@ var EVIDENCE_AND_RUNTIME_COMMANDS = [
   "diff                   Write snapshot or screenshot diff artifacts",
   "expo                   Inspect Expo modules, config, doctor, upstream policy, and prebuild risk",
   "rn                     Inspect React Native tree, refs, renders, and fiber evidence",
-  "perf                   Measure summary, startup, action, and bundle evidence",
+  "perf                   Measure summary, interaction, report, frame, native, and bundle evidence",
   "dashboard              Start, stop, or report local session observability",
   "skills                 List or print bundled companion skill guidance",
   "install                Check local install target paths",
@@ -1205,6 +1206,7 @@ var EXAMPLES = [
   "expo-ios --json navigation state --metro-port 8081",
   "expo-ios --json navigation deep-link /customers --scheme myapp",
   "expo-ios --json network requests --metro-port 8081",
+  "expo-ios --json network waterfall --metro-port 8081",
   "expo-ios --json network har stop network.har --metro-port 8081",
   "expo-ios --json storage async list --metro-port 8081",
   "expo-ios --json controls list --metro-port 8081",
@@ -1216,8 +1218,12 @@ var EXAMPLES = [
   "expo-ios --json diff snapshot --baseline before.json",
   "expo-ios --json expo modules --cwd apps/mobile",
   "expo-ios --json rn tree --metro-port 8081",
+  "expo-ios --json rn renders read --metro-port 8081",
   "expo-ios --json rn inspect @e1",
   "expo-ios --json perf summary --metro-port 8081",
+  'expo-ios --json perf interaction start "tab-customers" --metro-port 8081',
+  'expo-ios --json perf interaction stop "tab-customers" --metro-port 8081',
+  'expo-ios --json perf report "tab-customers" --metro-port 8081 --native-artifact sample.txt',
   'expo-ios --json perf action "open customer" --metro-port 8081',
   "expo-ios --json perf bundle dist/index.ios.bundle",
   "expo-ios --json perf compare --baseline before.json --candidate after.json",
@@ -5655,6 +5661,24 @@ import * as fs7 from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { basename as basename4, join as joinPath2 } from "node:path";
 
+// src/modules/real-validation/src/main/index.ts
+function realValidation(input) {
+  return {
+    state: input.state,
+    claimsAllowed: {
+      networkLatency: false,
+      networkWaterfall: false,
+      renderCost: false,
+      frameJank: false,
+      nativeCpu: false,
+      releasePerformance: false,
+      ...input.claimsAllowed ?? {}
+    },
+    evidence: input.evidence ?? [],
+    missingEvidence: input.missingEvidence ?? []
+  };
+}
+
 // src/modules/interaction-trace-expression/src/main/index.ts
 async function traceInteraction(args = {}, deps = defaultTraceInteractionDependencies) {
   const metroPort = clampNumber9(args.metroPort ?? 8081, 1, 65535);
@@ -5671,6 +5695,15 @@ async function traceInteraction(args = {}, deps = defaultTraceInteractionDepende
       action,
       reason: "No Metro inspector target.",
       metroPort,
+      realValidation: realValidation({
+        state: "environment-blocked",
+        evidence: [{ source: "metro", command: `trace.${String(action ?? "read")}`, confidence: "low" }],
+        missingEvidence: [{
+          signal: "metro-hermes-target",
+          reason: "No Metro inspector target.",
+          recommendedFix: "Start Metro, launch the app in a Hermes dev client, and rerun with --metro-port."
+        }]
+      }),
       limitations: [
         "No Hermes Runtime.evaluate trace was collected.",
         "React commits, layout changes, animation frames, and handler-bearing components are unavailable for this read."
@@ -5679,13 +5712,15 @@ async function traceInteraction(args = {}, deps = defaultTraceInteractionDepende
   }
   const expression = interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8e3 });
+  const trace = getPath(result, ["result", "result", "value"]) ?? null;
   return toolJson10({
     action,
     metroPort,
     target: targetSummary2(targetList[0]),
-    trace: getPath(result, ["result", "result", "value"]) ?? null,
+    trace,
     protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord4(result)?.error ?? null,
-    cdp: asRecord4(result)?.diagnostics ?? asRecord4(result)?.cdp ?? null
+    cdp: asRecord4(result)?.diagnostics ?? asRecord4(result)?.cdp ?? null,
+    realValidation: traceRealValidation(trace, action)
   });
 }
 var defaultTraceInteractionDependencies = {
@@ -6075,6 +6110,17 @@ function interactionTraceExpression({ action, maxEvents, componentFilter, includ
       }
       const top = (object) => Object.entries(object).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, count]) => ({ name, count }));
       const compactEvents = events.map(compactEvent);
+      const perfBridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+        (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+      const renderPayload = (() => {
+        try { return perfBridge?.renders?.read ? perfBridge.renders.read() : null; } catch { return null; }
+      })();
+      const commits = Array.isArray(renderPayload?.renders?.commits) ? renderPayload.renders.commits : Array.isArray(renderPayload?.commits) ? renderPayload.commits : [];
+      const frameEvents = events.filter((event) => event.type === 'animationFrame' && event.frameTime != null);
+      const frameDeltas = [];
+      for (let index = 1; index < frameEvents.length; index += 1) {
+        frameDeltas.push(Math.round((Number(frameEvents[index].frameTime) - Number(frameEvents[index - 1].frameTime)) * 10) / 10);
+      }
       const response = {
         available: true,
         installed: tracer.installed,
@@ -6087,6 +6133,17 @@ function interactionTraceExpression({ action, maxEvents, componentFilter, includ
         topComponents: top(components),
         activeElements: Array.from(activeElements.values()).slice(-30),
         layoutChanges: layoutChanges.slice(-40).map(compactChange).filter(Boolean),
+        renderSummary: {
+          commitCount: commits.length,
+          worstCommitMs: commits.reduce((max, commit) => Math.max(max, Number(commit.durationMs ?? commit.actualDuration) || 0), 0),
+          commits: commits.slice(-40)
+        },
+        frameSummary: {
+          sampleCount: frameDeltas.length,
+          worstFrameMs: frameDeltas.length ? Math.max(...frameDeltas) : null,
+          droppedFrameCount: frameDeltas.filter((delta) => delta > 33.4).length,
+          longFrameCount: frameDeltas.filter((delta) => delta > 16.7).length
+        },
         recentEvents: compactEvents.slice(-20),
         errors: tracer.errors.slice(-20),
         interpretationHints: [
@@ -6141,6 +6198,43 @@ function targetSummary2(target) {
     deviceName: record.deviceName,
     description: record.description
   };
+}
+function traceRealValidation(trace, action) {
+  const record = asRecord4(trace);
+  if (!record || record.available === false) {
+    return realValidation({
+      state: "unvalidated",
+      evidence: [{ source: "trace", command: `trace.${String(action ?? "read")}`, confidence: "low" }],
+      missingEvidence: [{
+        signal: "trace-runtime",
+        reason: "No Hermes trace payload was returned.",
+        recommendedFix: "Start Metro, launch a Hermes target, and run trace --action start before reading."
+      }]
+    });
+  }
+  const hasCommits = Number(asRecord4(record.renderSummary)?.commitCount ?? 0) > 0;
+  const hasFrames = Number(asRecord4(record.frameSummary)?.sampleCount ?? 0) > 0;
+  const hasEvents = Number(record.eventCount ?? 0) > 0;
+  return realValidation({
+    state: hasEvents && (hasCommits || hasFrames) ? "validated" : "partial",
+    claimsAllowed: {
+      renderCost: hasCommits,
+      frameJank: hasFrames
+    },
+    evidence: [{ source: "hermes-runtime-trace", command: `trace.${String(action ?? "read")}`, confidence: hasEvents ? "medium" : "low" }],
+    missingEvidence: [
+      ...!hasCommits ? [{
+        signal: "react-profiler-commits",
+        reason: "Trace did not include React Profiler commit durations.",
+        recommendedFix: "Mount the dev-only Profiler bridge or run rn renders with commit recording."
+      }] : [],
+      ...!hasFrames ? [{
+        signal: "frame-deltas",
+        reason: "Trace did not observe enough animation frames to compute frame deltas.",
+        recommendedFix: "Start trace before an animated interaction and rerun trace read/stop."
+      }] : []
+    ]
+  });
 }
 function requireOptionalString3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -9735,7 +9829,7 @@ function clampNumber18(value, min, max) {
 }
 async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   const action = requireString12(args.action ?? "status", "action");
-  if (!["status", "requests", "request", "clear", "har"].includes(action)) {
+  if (!["status", "requests", "request", "clear", "har", "waterfall"].includes(action)) {
     throw new Error(`Unknown network action: ${action}`);
   }
   const harAction = action === "har" ? requireString12(args.harAction ?? "start", "harAction") : null;
@@ -9812,7 +9906,7 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
       har
     });
   }
-  return toolJson19({
+  const payload = {
     ...redacted,
     action: bridgeAction,
     metroPort,
@@ -9821,7 +9915,8 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     evidenceSource: redacted.source ?? "unknown",
     limitations: networkLimitations(redacted),
     captureTiming: networkCaptureTiming(redacted, clock)
-  });
+  };
+  return toolJson19(action === "waterfall" ? networkWaterfallPayload(payload) : payload);
 }
 var defaultNetworkDependencies = {
   metroTargets: defaultMetroTargets,
@@ -9857,7 +9952,16 @@ function networkUnavailable(input) {
       cdp: null
     },
     requests: [],
-    limitations: UNAVAILABLE_LIMITATIONS
+    limitations: UNAVAILABLE_LIMITATIONS,
+    realValidation: realValidation({
+      state: code === "no-runtime-target" ? "environment-blocked" : "unvalidated",
+      evidence: [{ source: evidenceSource, command: `network.${input.action}`, confidence: "low" }],
+      missingEvidence: [{
+        signal: code === "no-runtime-target" ? "metro-hermes-target" : "network-bridge",
+        reason: input.reason,
+        recommendedFix: code === "no-runtime-target" ? "Start Metro, launch the app in a Hermes dev client, and rerun with --metro-port." : "Install or mount the dev-only network bridge, then rerun network requests."
+      }]
+    })
   };
 }
 function networkExpression(input) {
@@ -9894,7 +9998,7 @@ function networkExpression(input) {
         return Array.isArray(raw) ? raw.slice(-limit) : raw;
       };
       if (action === 'status') return { available: true, action, source: 'plugin-bridge', domain: 'network', bridgeVersion: pluginVersion, hooks: pluginNetwork?.hooks || callNetwork('status') || { fetch: true, xhr: true } };
-      if (action === 'requests') return { available: true, action, source: 'plugin-bridge', domain: 'network', bridgeVersion: pluginVersion, requests: list() };
+      if (action === 'requests' || action === 'waterfall') return { available: true, action, source: 'plugin-bridge', domain: 'network', bridgeVersion: pluginVersion, requests: list() };
       if (action === 'request') {
         const requests = list();
         if (!Array.isArray(requests)) return { available: false, action, source: 'plugin-bridge', code: 'malformed-payload', reason: 'Network plugin bridge returned a malformed request list.', requests: [] };
@@ -9919,7 +10023,7 @@ function networkExpression(input) {
         return Array.isArray(raw) ? raw.slice(-limit) : raw;
       };
       if (action === 'status') return { available: true, action, source: 'react-native-devtools-network', hooks: devtoolsNetwork.hooks || { fetch: true, xhr: true } };
-      if (action === 'requests') return { available: true, action, source: 'react-native-devtools-network', requests: list() };
+      if (action === 'requests' || action === 'waterfall') return { available: true, action, source: 'react-native-devtools-network', requests: list() };
       if (action === 'request') {
         const found = list().find((request) => request && request.id === requestId) || null;
         return found
@@ -9953,7 +10057,7 @@ function networkExpression(input) {
         hooks: typeof bridge.status === 'function' ? bridge.status() : (bridge.hooks || { fetch: true, xhr: true })
       };
     }
-    if (action === 'requests') {
+    if (action === 'requests' || action === 'waterfall') {
       return { available: true, action, source: 'app-instrumentation', requests: list() };
     }
     if (action === 'request') {
@@ -9980,8 +10084,8 @@ function networkExpression(input) {
 function redactNetworkEvidence(value) {
   if (!isRecord8(value)) return value;
   const clone = { ...value };
-  if (Array.isArray(clone.requests)) clone.requests = clone.requests.map(redactNetworkRequest);
-  if (clone.request) clone.request = redactNetworkRequest(clone.request);
+  if (Array.isArray(clone.requests)) clone.requests = clone.requests.map(redactNetworkRequest).map(normalizeNetworkRequest);
+  if (clone.request) clone.request = normalizeNetworkRequest(redactNetworkRequest(clone.request));
   if (clone.har) clone.har = redactHar(clone.har);
   return clone;
 }
@@ -10007,17 +10111,31 @@ function normalizeNetworkEvidence(value, action) {
       requests: []
     };
   }
-  if ((action === "requests" || action === "har-stop") && normalized.available !== false && Array.isArray(normalized.requests) && normalized.requests.length === 0) {
+  if (Array.isArray(normalized.requests)) normalized.requests = normalized.requests.map(normalizeNetworkRequest);
+  if (normalized.request) normalized.request = normalizeNetworkRequest(normalized.request);
+  if ((action === "requests" || action === "waterfall" || action === "har-stop") && normalized.available !== false && Array.isArray(normalized.requests) && normalized.requests.length === 0) {
     return {
       ...normalized,
       available: false,
       action,
       code: "no-observed-traffic",
       reason: "No network traffic was observed by the selected upstream/bridge path.",
-      requests: []
+      requests: [],
+      realValidation: realValidation({
+        state: "partial",
+        evidence: [{ source: String(normalized.source ?? "network"), command: `network.${action}`, confidence: "low" }],
+        missingEvidence: [{
+          signal: "observed-network-traffic",
+          reason: "No network traffic was observed by the selected upstream/bridge path.",
+          recommendedFix: "Start capture before the interaction or verify the app network bridge patches fetch/XHR."
+        }]
+      })
     };
   }
-  return normalized;
+  return {
+    ...normalized,
+    realValidation: networkRealValidation(normalized, action)
+  };
 }
 function networkTransport(metroPort, target, cdp = null) {
   return {
@@ -10042,6 +10160,37 @@ function networkLimitations(value) {
   }
   return limitations;
 }
+function networkWaterfallPayload(payload) {
+  const requests = Array.isArray(payload.requests) ? payload.requests.map(normalizeNetworkRequest) : [];
+  const rankedRequests = [...requests].filter((request) => typeof request.durationMs === "number").sort((a, b) => Number(b.durationMs ?? 0) - Number(a.durationMs ?? 0)).slice(0, 50);
+  const duplicateGroups = duplicateNetworkRequests(requests);
+  const slowThresholdMs = 500;
+  const waterfall = {
+    requestCount: requests.length,
+    slowThresholdMs,
+    slowRequestCount: rankedRequests.filter((request) => Number(request.durationMs ?? 0) >= slowThresholdMs).length,
+    rankedRequests,
+    duplicateGroups,
+    timings: requests.map((request) => ({
+      requestId: request.requestId ?? request.id ?? null,
+      method: request.method ?? "GET",
+      origin: request.origin ?? null,
+      path: request.path ?? null,
+      startedAt: request.startedAt ?? null,
+      endedAt: request.endedAt ?? null,
+      durationMs: request.durationMs ?? null,
+      status: request.status ?? null,
+      initiator: request.initiator ?? null
+    }))
+  };
+  return {
+    ...payload,
+    action: "waterfall",
+    requests,
+    waterfall,
+    realValidation: networkRealValidation({ ...payload, requests }, "waterfall")
+  };
+}
 function networkCaptureTiming(value, clock = systemClock2) {
   const record = isRecord8(value) ? value : {};
   const requests = Array.isArray(record.requests) ? record.requests : record.request ? [record.request] : [];
@@ -10051,6 +10200,82 @@ function networkCaptureTiming(value, clock = systemClock2) {
     stoppedAt: typeof record.stoppedAt === "string" ? record.stoppedAt : clock.now().toISOString(),
     observedRequestCount: requests.length
   };
+}
+function networkRealValidation(value, action) {
+  const requests = Array.isArray(value.requests) ? value.requests : value.request ? [value.request] : [];
+  const hasTimedRequests = requests.some((request) => typeof request?.durationMs === "number");
+  const hasWaterfallMetadata = requests.some((request) => typeof request?.startedAt === "string" && typeof request?.endedAt === "string");
+  return realValidation({
+    state: value.available === false ? "unvalidated" : hasTimedRequests ? action === "waterfall" && !hasWaterfallMetadata ? "partial" : "validated" : "partial",
+    claimsAllowed: {
+      networkLatency: hasTimedRequests,
+      networkWaterfall: action === "waterfall" && hasWaterfallMetadata
+    },
+    evidence: [{
+      source: String(value.source ?? value.evidenceSource ?? "network"),
+      command: `network.${action}`,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      confidence: hasTimedRequests ? "medium" : "low"
+    }],
+    missingEvidence: [
+      ...!hasTimedRequests ? [{
+        signal: "request-duration",
+        reason: "No timed network request rows were present.",
+        recommendedFix: "Run network requests after a real interaction or mount a bridge that records durationMs."
+      }] : [],
+      ...action === "waterfall" && !hasWaterfallMetadata ? [{
+        signal: "network-phase-timestamps",
+        reason: "Request rows do not include complete endedAt/phase timing metadata.",
+        recommendedFix: "Upgrade the app bridge to record endedAt and phase timing metadata."
+      }] : []
+    ]
+  });
+}
+function normalizeNetworkRequest(request) {
+  if (!isRecord8(request)) return request;
+  const url = String(request.url ?? (isRecord8(request.request) ? request.request.url : "") ?? "");
+  const parsed = parseUrlParts(url);
+  const startedAt = optionalString6(request.startedAt);
+  const durationMs = numberOrNull2(request.durationMs);
+  const endedAt = optionalString6(request.endedAt ?? request.completedAt) ?? inferEndedAt(startedAt, durationMs);
+  const response = isRecord8(request.response) ? request.response : {};
+  const status = numberOrNull2(request.status) ?? numberOrNull2(response.status);
+  return {
+    ...request,
+    id: optionalString6(request.id) ?? optionalString6(request.requestId) ?? null,
+    requestId: optionalString6(request.requestId) ?? optionalString6(request.id) ?? null,
+    method: optionalString6(request.method) ?? optionalString6(isRecord8(request.request) ? request.request.method : null) ?? "GET",
+    url,
+    origin: parsed.origin,
+    path: parsed.path,
+    startedAt,
+    endedAt,
+    durationMs,
+    status,
+    ok: typeof request.ok === "boolean" ? request.ok : typeof status === "number" ? status >= 200 && status < 400 : void 0,
+    requestBytes: numberOrNull2(request.requestBytes ?? request.encodedRequestBytes),
+    responseBytes: numberOrNull2(request.responseBytes ?? request.encodedResponseBytes ?? response.encodedBodySize ?? response.size),
+    cache: isRecord8(request.cache) ? request.cache : void 0,
+    retryCount: numberOrNull2(request.retryCount) ?? 0,
+    aborted: request.aborted === true,
+    error: optionalString6(request.error),
+    initiator: normalizeInitiator(request.initiator)
+  };
+}
+function duplicateNetworkRequests(requests) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const request of requests) {
+    const key = `${request.method ?? "GET"} ${request.origin ?? ""}${request.path ?? request.url ?? ""}`;
+    const group = groups.get(key) ?? [];
+    group.push(request);
+    groups.set(key, group);
+  }
+  return [...groups.entries()].filter(([, group]) => group.length > 1).map(([key, group]) => ({
+    key,
+    count: group.length,
+    requestIds: group.map((request) => request.requestId ?? request.id ?? null).filter(Boolean),
+    totalDurationMs: group.reduce((sum, request) => sum + Number(request.durationMs ?? 0), 0)
+  }));
 }
 function harFromNetworkRequests(requests, clock = systemClock2) {
   return {
@@ -10072,7 +10297,7 @@ function harFromNetworkRequests(requests, clock = systemClock2) {
           statusText: request.response?.statusText ?? "",
           headers: request.response?.headers ?? {},
           cookies: [],
-          content: { size: 0, mimeType: request.response?.mimeType ?? "", text: request.response?.body ?? "" }
+          content: { size: request.responseBytes ?? 0, mimeType: request.response?.mimeType ?? "" }
         }
       }))
     }
@@ -10124,7 +10349,7 @@ function requireString12(value, field) {
 }
 function redactNetworkRequest(request) {
   if (!isRecord8(request)) return request;
-  const content = isRecord8(request.content) ? { ...request.content, text: request.content.text ? REDACTED4 : request.content.text } : void 0;
+  const content = isRecord8(request.content) ? { ...request.content, text: void 0 } : void 0;
   return {
     ...request,
     url: redactNetworkUrl(request.url),
@@ -10132,21 +10357,21 @@ function redactNetworkRequest(request) {
     response: request.response ? redactNetworkMessage(request.response) : void 0,
     headers: request.headers ? redactHeaders(request.headers) : void 0,
     cookies: request.cookies ? REDACTED4 : void 0,
-    body: request.body ? REDACTED4 : void 0,
-    postData: request.postData ? REDACTED4 : void 0,
+    body: void 0,
+    postData: void 0,
     content
   };
 }
 function redactNetworkMessage(message) {
   if (!isRecord8(message)) return message;
-  const content = isRecord8(message.content) ? { ...message.content, text: message.content.text ? REDACTED4 : message.content.text } : void 0;
+  const content = isRecord8(message.content) ? { ...message.content, text: void 0 } : void 0;
   return {
     ...message,
     url: redactNetworkUrl(message.url),
     headers: message.headers ? redactHeaders(message.headers) : void 0,
     cookies: message.cookies ? REDACTED4 : void 0,
-    body: message.body ? REDACTED4 : void 0,
-    postData: message.postData ? REDACTED4 : void 0,
+    body: void 0,
+    postData: void 0,
     content
   };
 }
@@ -10199,6 +10424,41 @@ function cloneJson(value) {
 }
 function isRecord8(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
+}
+function parseUrlParts(url) {
+  if (!url) return { origin: null, path: null };
+  try {
+    const parsed = new URL(url);
+    return { origin: parsed.origin, path: `${parsed.pathname}${parsed.search}` };
+  } catch {
+    return { origin: null, path: url || null };
+  }
+}
+function inferEndedAt(startedAt, durationMs) {
+  if (!startedAt || typeof durationMs !== "number") return null;
+  const started = Date.parse(startedAt);
+  if (!Number.isFinite(started)) return null;
+  return new Date(started + durationMs).toISOString();
+}
+function optionalString6(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function numberOrNull2(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+function normalizeInitiator(value) {
+  if (!isRecord8(value)) return void 0;
+  const out = {
+    route: optionalString6(value.route),
+    screen: optionalString6(value.screen),
+    interactionId: optionalString6(value.interactionId),
+    interactionName: optionalString6(value.interactionName),
+    queryKey: optionalString6(value.queryKey),
+    component: optionalString6(value.component),
+    source: isRecord8(value.source) ? value.source : void 0
+  };
+  return Object.values(out).some((item) => item !== void 0 && item !== null) ? out : void 0;
 }
 var systemClock2 = {
   now: () => /* @__PURE__ */ new Date()
@@ -10392,7 +10652,7 @@ async function policyDecision(args, action, sideEffect, deps = {}) {
   if (sideEffect === "read") {
     return { checked: true, action, sideEffect, allowed: true, source: null, reason: "Read action does not require policy approval." };
   }
-  const policyPath = optionalString6(args.actionPolicy);
+  const policyPath = optionalString7(args.actionPolicy);
   if (!policyPath) {
     return { checked: true, action, sideEffect, allowed: false, source: null, reason: "No action policy allowed this state-changing operation." };
   }
@@ -10580,7 +10840,7 @@ function requireString13(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function optionalString6(value) {
+function optionalString7(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 function sanitizePayload2(value) {
@@ -12149,6 +12409,7 @@ async function rnCommand(args = {}, deps = defaultRnDependencies) {
     ...outputPayload,
     action,
     ...subaction ? { subaction, bridgeAction } : {},
+    realValidation: rnRealValidation(outputPayload, action, subaction),
     limitations: rnLimitations(outputPayload.limitations)
   });
 }
@@ -12340,11 +12601,56 @@ function rnExpression({ action, ref, depth, limit }) {
     }
     if (!bridge) return { available: false, sources: ['runtime', 'app-instrumentation'], source: 'app-instrumentation', reason: 'React Native bridge is not installed.', action };
     if (action === 'fiber') return bridge.fiber ? bridge.fiber(ref) : { available: false, sources: ['runtime', 'app-instrumentation'], action, ref, reason: 'Fiber inspection is not exposed by the app bridge.' };
-    if (action === 'renders-start') return bridge.renders && bridge.renders.start ? bridge.renders.start() : { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: true } };
-    if (action === 'renders-stop') return bridge.renders && bridge.renders.stop ? bridge.renders.stop() : { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false } };
-    if (action === 'renders-read') return bridge.renders && bridge.renders.read ? bridge.renders.read() : { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false, commits: [] } };
+    const perfBridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+    if (action === 'renders-start') {
+      if (bridge.renders && bridge.renders.start) return bridge.renders.start();
+      if (perfBridge?.renders?.start) return perfBridge.renders.start();
+      return { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: true, commits: [] } };
+    }
+    if (action === 'renders-stop') {
+      if (bridge.renders && bridge.renders.stop) return bridge.renders.stop();
+      if (perfBridge?.renders?.stop) return perfBridge.renders.stop();
+      return { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false, commits: [] } };
+    }
+    if (action === 'renders-read') {
+      if (bridge.renders && bridge.renders.read) return bridge.renders.read();
+      if (perfBridge?.renders?.read) return perfBridge.renders.read();
+      return { available: true, sources: ['runtime', 'app-instrumentation'], action, renders: { recording: false, commits: [] } };
+    }
     return { available: false, sources: ['runtime', 'app-instrumentation'], source: 'app-instrumentation', reason: 'Unsupported React Native bridge action.', action };
   })()`;
+}
+function rnRealValidation(payload, action, subaction) {
+  if (payload.available === false) {
+    return realValidation({
+      state: "unvalidated",
+      evidence: [{ source: String(payload.source ?? "react-native"), command: `rn.${action}`, confidence: "low" }],
+      missingEvidence: [{
+        signal: "react-native-runtime-bridge",
+        reason: String(payload.reason ?? "React Native runtime evidence was unavailable."),
+        recommendedFix: "Launch a Hermes dev target and mount the dev-only RN bridge/profiler instrumentation."
+      }]
+    });
+  }
+  const commits = Array.isArray(payload.renders?.commits) ? payload.renders.commits : [];
+  const hasCommitDurations = commits.some((commit) => Number.isFinite(Number(commit.durationMs ?? commit.actualDuration)));
+  if (action === "renders") {
+    return realValidation({
+      state: hasCommitDurations ? "validated" : "partial",
+      claimsAllowed: { renderCost: hasCommitDurations },
+      evidence: [{ source: String(payload.source ?? payload.sources?.[0] ?? "app-instrumentation"), command: `rn.renders.${subaction ?? "read"}`, confidence: hasCommitDurations ? "medium" : "low" }],
+      missingEvidence: hasCommitDurations ? [] : [{
+        signal: "react-profiler-commit-durations",
+        reason: "Render bridge returned no commit duration records.",
+        recommendedFix: "Mount a React Profiler wrapper in development and rerun rn renders start/read/stop."
+      }]
+    });
+  }
+  return realValidation({
+    state: "validated",
+    evidence: [{ source: String(payload.source ?? payload.sources?.[0] ?? "react-native"), command: `rn.${action}`, confidence: "medium" }]
+  });
 }
 function rnLimitations(extra = []) {
   return [
@@ -12419,7 +12725,7 @@ function summarizeRnTreePayload(payload) {
       path: componentPath
     },
     counts: {
-      sampledElements: numberOrNull2(payload.elementCount) ?? (elements.length || null),
+      sampledElements: numberOrNull3(payload.elementCount) ?? (elements.length || null),
       relevantNodes: countRelevantNodes(structure),
       visibleText: visibleText.length,
       controls: controls.length,
@@ -12642,10 +12948,10 @@ function elementDetails(element) {
 function boxFromFrame(value) {
   const frame = asRecord18(value);
   if (!frame) return void 0;
-  const x = numberOrNull2(frame.x ?? frame.left);
-  const y = numberOrNull2(frame.y ?? frame.top);
-  const width = numberOrNull2(frame.width);
-  const height = numberOrNull2(frame.height);
+  const x = numberOrNull3(frame.x ?? frame.left);
+  const y = numberOrNull3(frame.y ?? frame.top);
+  const width = numberOrNull3(frame.width);
+  const height = numberOrNull3(frame.height);
   if (x == null || y == null || width == null || height == null) return void 0;
   return { x: round(x), y: round(y), width: round(width), height: round(height) };
 }
@@ -12663,7 +12969,7 @@ function arrayOfStrings(value) {
 function optionalNonemptyString(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : void 0;
 }
-function numberOrNull2(value) {
+function numberOrNull3(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -12687,7 +12993,7 @@ import { execFile as nodeExecFile11 } from "node:child_process";
 import { mkdir as fsMkdir2, readFile as readFile19, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
 import { basename as basename10, dirname as dirname7, join as join15, resolve as resolve10 } from "node:path";
 var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
-var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph"];
+var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph", "interaction", "report"];
 function toolJson29(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
@@ -12701,6 +13007,8 @@ async function perfCommand(args = {}, deps = {}) {
   if (action === "budget") return toolJson29(await perfBudgetPayload(args, deps));
   if (action === "memory") return toolJson29(await perfMemoryPayload(args, deps));
   if (action === "ettrace" || action === "memgraph") return toolJson29(await perfNativeProfilerPayload(args, action, deps));
+  if (action === "interaction") return toolJson29(await perfInteractionPayload(args, deps));
+  if (action === "report") return toolJson29(await perfReportPayload(args, deps));
   if (["mark", "measure", "js-thread", "frames"].includes(action)) return toolJson29(await perfInstrumentedPayload(args, action, deps));
   return toolJson29(await perfRuntimePayload(args, action, deps));
 }
@@ -12744,7 +13052,7 @@ async function perfSummaryPayload(args = {}, deps = {}) {
   unavailableSources.push({ source: "plugin-bridge-performance", reason: "Run perf startup/action/mark against an app with the performance bridge domain registered." });
   unavailableSources.push({ source: "expo-devtools-performance", reason: "No machine-readable Expo DevTools performance domain was confirmed." });
   unavailableSources.push({ source: "bundle-artifact", reason: "Pass an existing bundle artifact to perf bundle for byte evidence." });
-  return {
+  const payload = {
     available: true,
     action: "summary",
     mode: "development",
@@ -12755,6 +13063,10 @@ async function perfSummaryPayload(args = {}, deps = {}) {
     metrics,
     unavailableSources,
     limitations: perfDevelopmentLimitations(["Summary reports evidence availability and lightweight signals; it is not a performance score."])
+  };
+  return {
+    ...payload,
+    realValidation: perfValidation(payload, "summary")
   };
 }
 async function perfRuntimePayload(args = {}, action, deps = {}) {
@@ -12786,7 +13098,7 @@ async function perfRuntimePayload(args = {}, action, deps = {}) {
     confidence: perfOverallConfidence(basePayload.metrics ?? []),
     limitations: perfDevelopmentLimitations(basePayload.limitations)
   };
-  return writePerfArtifact(args, action, payload, deps);
+  return writePerfArtifact(args, action, { ...payload, realValidation: perfValidation(payload, action) }, deps);
 }
 async function perfInstrumentedPayload(args = {}, action, deps = {}) {
   const subaction = requireOptionalString9(args.subaction);
@@ -12809,7 +13121,7 @@ async function perfInstrumentedPayload(args = {}, action, deps = {}) {
     code: target ? "malformed-payload" : "no-runtime-target",
     reason: target ? "Performance bridge did not return a value." : "No Metro inspector target."
   };
-  return writePerfArtifact(args, action, {
+  const payload = {
     ...basePayload,
     action,
     subaction,
@@ -12820,12 +13132,84 @@ async function perfInstrumentedPayload(args = {}, action, deps = {}) {
     evidenceSource: perfEvidenceSource(basePayload),
     confidence: perfOverallConfidence(basePayload.metrics ?? []),
     limitations: perfDevelopmentLimitations(basePayload.limitations)
-  }, deps);
+  };
+  return writePerfArtifact(args, action, { ...payload, realValidation: perfValidation(payload, action) }, deps);
 }
 function perfBridgeAction(action, subaction) {
   if (action === "mark") return `mark-${subaction ?? "list"}`;
   if (action === "measure") return `measure-${subaction ?? "start"}`;
+  if (action === "interaction") return `interaction-${subaction ?? "read"}`;
   return action;
+}
+async function perfInteractionPayload(args = {}, deps = {}) {
+  const subaction = requireString22(args.subaction ?? "read", "subaction");
+  if (!["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown performance interaction action: ${subaction}`);
+  const label = requireOptionalString9(args.label ?? args.interaction);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
+  const targets = await listMetroTargets(metroPort, deps);
+  const target = targets[0] ?? null;
+  const projectRoot = await projectCwd(args.cwd, deps);
+  const metro = target ? { available: true, metroPort, status: "available", targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
+  let bridgePayload = null;
+  let diagnostics = null;
+  if (target?.webSocketDebuggerUrl) {
+    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression({ action: `interaction-${subaction}`, label }), deps);
+    bridgePayload = result?.result?.result?.value ?? null;
+    diagnostics = result?.diagnostics ?? null;
+  }
+  const basePayload = bridgePayload && typeof bridgePayload === "object" ? normalizePerfBridgePayload(redactValue8(bridgePayload), "interaction") : {
+    available: false,
+    sources: ["runtime", "app-instrumentation"],
+    metrics: [],
+    code: target ? "malformed-payload" : "no-runtime-target",
+    reason: target ? "Performance interaction bridge did not return a value." : "No Metro inspector target."
+  };
+  const payload = {
+    ...basePayload,
+    action: "interaction",
+    subaction,
+    interaction: label,
+    mode: "development",
+    context: await perfContext({ args, projectRoot, metro, target }),
+    transport: perfTransport(metroPort, target, diagnostics),
+    evidenceSource: perfEvidenceSource(basePayload),
+    confidence: perfOverallConfidence(basePayload.metrics ?? []),
+    limitations: perfDevelopmentLimitations(basePayload.limitations)
+  };
+  return writePerfArtifact(args, "interaction", { ...payload, realValidation: perfValidation(payload, "interaction") }, deps);
+}
+async function perfReportPayload(args = {}, deps = {}) {
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
+  const targets = await listMetroTargets(metroPort, deps);
+  const target = targets[0] ?? null;
+  const projectRoot = await projectCwd(args.cwd, deps);
+  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
+  let runtimePayload = null;
+  let diagnostics = null;
+  if (target?.webSocketDebuggerUrl) {
+    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression({ action: "report", label: args.interaction ?? args.label }), deps);
+    runtimePayload = result?.result?.result?.value ?? null;
+    diagnostics = result?.diagnostics ?? null;
+  }
+  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve10(nativeArtifact), deps) : null;
+  const report = normalizePerfReport(runtimePayload, nativeSummary);
+  const metro = target ? { available: true, metroPort, status: "available", targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
+  const payload = {
+    available: report.available,
+    action: "report",
+    interaction: args.interaction ?? args.label ?? null,
+    mode: "development",
+    sources: report.sources,
+    findings: report.findings,
+    metrics: report.metrics,
+    runtime: report.runtime,
+    nativeSummary,
+    context: await perfContext({ args, projectRoot, metro, target }),
+    transport: perfTransport(metroPort, target, diagnostics),
+    confidence: report.confidence,
+    limitations: perfDevelopmentLimitations(report.limitations)
+  };
+  return writePerfArtifact(args, "report", { ...payload, realValidation: perfValidation(payload, "report") }, deps);
 }
 async function perfComparePayload(args = {}, deps = {}) {
   const baselinePath = resolve10(requireString22(args.baseline, "baseline"));
@@ -12896,7 +13280,7 @@ async function perfMemoryPayload(args = {}, deps = {}) {
     confidence: samples >= 2 || nativeArtifact ? "medium" : "low"
   })];
   const leakAllowed = samples >= 2 || Boolean(nativeArtifact);
-  return writePerfArtifact(args, "memory", {
+  const payload = {
     available: true,
     action: "memory",
     mode: "development",
@@ -12910,7 +13294,8 @@ async function perfMemoryPayload(args = {}, deps = {}) {
     nativeArtifact: nativeArtifact ? resolve10(nativeArtifact) : null,
     confidence: perfOverallConfidence(metrics),
     limitations: perfDevelopmentLimitations(["A single memory sample is only a hint, not leak evidence."])
-  }, deps);
+  };
+  return writePerfArtifact(args, "memory", { ...payload, realValidation: perfValidation(payload, "memory") }, deps);
 }
 async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
   const subaction = requireString22(args.subaction ?? (profiler === "memgraph" ? "capture" : "stop"), "subaction");
@@ -12920,16 +13305,21 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
   const nativeArtifact = resolve10(args.nativeArtifact ?? join15(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
   await (deps.mkdir ?? fsMkdir2)(dirname7(nativeArtifact), { recursive: true });
   let sampleResult = null;
+  let samplePid = null;
+  let sampleSeconds = null;
   if (profiler === "ettrace" && subaction === "start" && args.pid !== void 0) {
     const pid = requirePid(args.pid);
+    samplePid = pid;
     const seconds = String(clampNumber22(args.seconds ?? 1, 1, 30));
+    sampleSeconds = Number(seconds);
     sampleResult = await execFile9("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1e3 });
   } else if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
     await (deps.writeFile ?? fsWriteFile2)(nativeArtifact, `${profiler} placeholder
 `, "utf8");
   }
   const projectRoot = await projectCwd(args.cwd, deps);
-  return writePerfArtifact(args, profiler, {
+  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact, deps);
+  const payload = {
     available: true,
     action: profiler,
     subaction,
@@ -12937,7 +13327,10 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
     mode: "development",
     sources: ["native-profiler"],
     nativeArtifact,
+    pid: samplePid,
+    seconds: sampleSeconds,
     sample: sampleResult,
+    nativeSummary,
     metrics: [],
     context: await perfContext({ args, projectRoot, metro: null }),
     confidence: subaction === "start" ? "low" : "high",
@@ -12945,7 +13338,8 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
       `${profiler} metadata records native profiler evidence boundaries; collect and symbolicate native profiler artifacts before making native CPU or memory claims.`,
       "Native profiler workflows are heavier than routine runtime evidence and may require platform tooling outside this CLI."
     ]
-  }, deps);
+  };
+  return writePerfArtifact(args, profiler, { ...payload, realValidation: perfValidation(payload, profiler) }, deps);
 }
 function requirePid(value) {
   const pid = Number(value);
@@ -13009,6 +13403,77 @@ function normalizePerfBridgePayload(value, action) {
   }));
   return { ...value, action, metrics };
 }
+function normalizePerfReport(runtimePayload, nativeSummary) {
+  const runtime2 = runtimePayload && typeof runtimePayload === "object" && !Array.isArray(runtimePayload) ? redactValue8(runtimePayload) : null;
+  const requests = Array.isArray(runtime2?.network?.requests) ? runtime2.network.requests : [];
+  const renders = Array.isArray(runtime2?.renders?.commits) ? runtime2.renders.commits : [];
+  const frames = Array.isArray(runtime2?.frames?.samples) ? runtime2.frames.samples : [];
+  const findings = [];
+  const slowRequests = requests.filter((request) => Number(request.durationMs) >= 500).sort((a, b) => Number(b.durationMs ?? 0) - Number(a.durationMs ?? 0));
+  if (slowRequests[0]) {
+    findings.push({
+      type: "network-latency",
+      severity: Number(slowRequests[0].durationMs) >= 1e3 ? "high" : "medium",
+      summary: `Slow network request: ${slowRequests[0].method ?? "GET"} ${slowRequests[0].url ?? ""}`,
+      evidence: { durationMs: slowRequests[0].durationMs, status: slowRequests[0].status ?? null }
+    });
+  }
+  const worstCommit = renders.reduce((worst, commit) => Number(commit.durationMs ?? commit.actualDuration ?? 0) > Number(worst?.durationMs ?? worst?.actualDuration ?? 0) ? commit : worst, null);
+  if (worstCommit && Number(worstCommit.durationMs ?? worstCommit.actualDuration ?? 0) >= 16.7) {
+    findings.push({
+      type: "render-cost",
+      severity: Number(worstCommit.durationMs ?? worstCommit.actualDuration ?? 0) >= 50 ? "high" : "medium",
+      summary: "React render commit exceeded one frame budget.",
+      evidence: worstCommit
+    });
+  }
+  const droppedFrames = Number(runtime2?.frames?.droppedFrameCount ?? frames.filter((frame) => Number(frame.deltaMs) > 33.4).length);
+  if (droppedFrames > 0) {
+    findings.push({
+      type: "frame-jank",
+      severity: droppedFrames >= 5 ? "high" : "medium",
+      summary: "Frame samples include dropped or long frames.",
+      evidence: { droppedFrameCount: droppedFrames, worstFrameMs: runtime2?.frames?.worstFrameMs ?? null }
+    });
+  }
+  if (nativeSummary?.available) {
+    findings.push({
+      type: "native-sample",
+      severity: "info",
+      summary: "Native sample artifact was parsed.",
+      evidence: {
+        physicalFootprintMb: nativeSummary.physicalFootprintMb,
+        peakFootprintMb: nativeSummary.peakFootprintMb,
+        topBuckets: nativeSummary.buckets
+      }
+    });
+  }
+  const metrics = [
+    { name: "network.requests", value: requests.length, unit: "count", source: "network", confidence: requests.length ? "medium" : "low" },
+    { name: "renders.commits", value: renders.length, unit: "count", source: "react-profiler", confidence: renders.length ? "medium" : "low" },
+    { name: "frames.samples", value: frames.length, unit: "count", source: "frame-sampler", confidence: frames.length ? "medium" : "low" },
+    ...nativeSummary?.available ? [{ name: "native.sample.bytes", value: nativeSummary.bytes, unit: "bytes", source: "native-profiler", confidence: "medium" }] : []
+  ];
+  return {
+    available: Boolean(runtime2 || nativeSummary?.available),
+    sources: [
+      ...runtime2 ? ["runtime"] : [],
+      ...requests.length ? ["network"] : [],
+      ...renders.length ? ["react-profiler"] : [],
+      ...frames.length ? ["frame-sampler"] : [],
+      ...nativeSummary?.available ? ["native-profiler"] : []
+    ],
+    runtime: runtime2,
+    findings: findings.length ? findings : [{ type: "insufficient-evidence", severity: "info", summary: "No bottleneck can be ranked from the available evidence." }],
+    metrics,
+    confidence: perfOverallConfidence(metrics),
+    limitations: [
+      ...!renders.length ? ["Render cost is unavailable because no React Profiler commit records were returned."] : [],
+      ...!frames.length ? ["Frame jank is unavailable because no frame samples were returned."] : [],
+      ...!requests.length ? ["Network attribution is unavailable because no request rows were returned."] : []
+    ]
+  };
+}
 function perfEvidenceSource(value) {
   if (typeof value?.source === "string") return value.source;
   if (Array.isArray(value?.sources) && value.sources.length > 0) return value.sources[0];
@@ -13063,6 +13528,161 @@ function perfExpression({ action, label }) {
     }
     const bridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
       (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
+    const networkBridge = globalThis.__EXPO_IOS_NETWORK_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.network);
+    const rnBridge = globalThis.__EXPO_IOS_RN_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.rn);
+    const perfState = globalThis.__EXPO_IOS_PERF_STATE__ ||= { interactions: {}, frames: [], lastFrameTs: null };
+    const readRequests = () => {
+      try {
+        const raw = networkBridge && typeof networkBridge.requests === 'function' ? networkBridge.requests({ limit: 1000 }) : networkBridge?.requests || [];
+        return Array.isArray(raw) ? raw : [];
+      } catch { return []; }
+    };
+    const readRenders = () => {
+      try {
+        if (bridge?.renders?.read) return bridge.renders.read();
+        if (rnBridge?.renders?.read) return rnBridge.renders.read();
+        return { commits: bridge?.commits || [], recording: false };
+      } catch { return { commits: [], recording: false }; }
+    };
+    const startRenders = () => {
+      try {
+        if (bridge?.renders?.start) return bridge.renders.start();
+        if (rnBridge?.renders?.start) return rnBridge.renders.start();
+      } catch {}
+      return null;
+    };
+    const stopRenders = () => {
+      try {
+        if (bridge?.renders?.stop) return bridge.renders.stop();
+        if (rnBridge?.renders?.stop) return rnBridge.renders.stop();
+      } catch {}
+      return null;
+    };
+    const readFrames = () => {
+      try {
+        if (bridge?.frames) {
+          const value = typeof bridge.frames === 'function' ? bridge.frames() : bridge.frames;
+          if (value && typeof value === 'object' && Array.isArray(value.samples)) return value;
+        }
+      } catch {}
+      const samples = Array.isArray(perfState.frames) ? perfState.frames.slice(-300) : [];
+      const deltas = samples.map((sample) => Number(sample.deltaMs)).filter(Number.isFinite);
+      const droppedFrameCount = deltas.filter((delta) => delta > 33.4).length;
+      return {
+        available: samples.length > 0,
+        source: 'frame-sampler',
+        samples,
+        sampleCount: samples.length,
+        avgFps: deltas.length ? Math.round((1000 / (deltas.reduce((sum, value) => sum + value, 0) / deltas.length)) * 10) / 10 : null,
+        worstFrameMs: deltas.length ? Math.max(...deltas) : null,
+        droppedFrameCount,
+        longFrameCount: deltas.filter((delta) => delta > 16.7).length
+      };
+    };
+    if (typeof globalThis.requestAnimationFrame === 'function' && !perfState.rafPatched) {
+      perfState.rafPatched = true;
+      const originalRaf = globalThis.requestAnimationFrame.bind(globalThis);
+      globalThis.requestAnimationFrame = (callback) => originalRaf((ts) => {
+        if (perfState.lastFrameTs != null) {
+          perfState.frames.push({ t: ts, deltaMs: Math.round((ts - perfState.lastFrameTs) * 10) / 10, interactionId: perfState.activeInteractionId || null });
+          if (perfState.frames.length > 1000) perfState.frames.splice(0, perfState.frames.length - 1000);
+        }
+        perfState.lastFrameTs = ts;
+        callback(ts);
+      });
+    }
+    const interactionSummary = (name) => {
+      const requests = readRequests();
+      const renders = readRenders();
+      const frames = readFrames();
+      const commits = Array.isArray(renders?.commits) ? renders.commits : [];
+      const networkDurationMs = requests.reduce((sum, request) => sum + (Number(request.durationMs) || 0), 0);
+      const worstCommitMs = commits.reduce((max, commit) => Math.max(max, Number(commit.durationMs ?? commit.actualDuration) || 0), 0);
+      const lastRequestEnd = requests.reduce((max, request) => {
+        const start = Date.parse(request.startedAt || 0);
+        const duration = Number(request.durationMs) || 0;
+        return Number.isFinite(start) ? Math.max(max, start + duration) : max;
+      }, 0);
+      return { requests, renders, frames, networkDurationMs, worstCommitMs, lastRequestEnd, name };
+    };
+    if (action === 'interaction-start') {
+      const name = label || 'interaction';
+      const id = 'interaction-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      startRenders();
+      perfState.activeInteractionId = id;
+      perfState.interactions[name] = {
+        id,
+        name,
+        startedAt: new Date().toISOString(),
+        startedMs: Date.now(),
+        baseline: {
+          requestCount: readRequests().length,
+          commitCount: (readRenders()?.commits || []).length,
+          frameCount: readFrames().samples?.length || 0
+        }
+      };
+      return { available: true, source: 'app-instrumentation', sources: ['runtime', 'app-instrumentation'], interaction: perfState.interactions[name], metrics: [] };
+    }
+    if (action === 'interaction-stop' || action === 'interaction-read') {
+      const name = label || Object.keys(perfState.interactions).slice(-1)[0] || 'interaction';
+      const interaction = perfState.interactions[name] || null;
+      const summary = interactionSummary(name);
+      const elapsedMs = interaction ? Date.now() - interaction.startedMs : 0;
+      if (interaction && action === 'interaction-stop') {
+        interaction.stoppedAt = new Date().toISOString();
+        interaction.elapsedMs = elapsedMs;
+        perfState.activeInteractionId = null;
+        stopRenders();
+      }
+      const baseline = interaction?.baseline || { requestCount: 0, commitCount: 0, frameCount: 0 };
+      const interactionRequests = summary.requests.slice(baseline.requestCount || 0);
+      const interactionCommits = (summary.renders?.commits || []).slice(baseline.commitCount || 0);
+      const interactionFrames = (summary.frames?.samples || []).slice(baseline.frameCount || 0);
+      const networkDurationMs = interactionRequests.reduce((sum, request) => sum + (Number(request.durationMs) || 0), 0);
+      const worstCommitMs = interactionCommits.reduce((max, commit) => Math.max(max, Number(commit.durationMs ?? commit.actualDuration) || 0), 0);
+      const worstFrameMs = interactionFrames.reduce((max, frame) => Math.max(max, Number(frame.deltaMs) || 0), 0);
+      const lastRequestEnd = interactionRequests.reduce((max, request) => {
+        const start = Date.parse(request.startedAt || 0);
+        const duration = Number(request.durationMs) || 0;
+        return Number.isFinite(start) ? Math.max(max, start + duration) : max;
+      }, 0);
+      return {
+        available: Boolean(interaction),
+        source: 'app-instrumentation',
+        sources: ['runtime', 'app-instrumentation'],
+        interaction: { ...interaction, name, elapsedMs },
+        requests: interactionRequests,
+        renders: { commits: interactionCommits },
+        frames: { samples: interactionFrames, worstFrameMs, droppedFrameCount: interactionFrames.filter((frame) => Number(frame.deltaMs) > 33.4).length },
+        metrics: [
+          { name: 'interaction.elapsed', value: elapsedMs, unit: 'ms', source: 'app-performance-mark', confidence: interaction ? 'medium' : 'low' },
+          { name: 'interaction.networkDuration', value: networkDurationMs, unit: 'ms', source: 'network', confidence: interactionRequests.length ? 'medium' : 'low' },
+          { name: 'interaction.commitCount', value: interactionCommits.length, unit: 'count', source: 'react-profiler', confidence: interactionCommits.length ? 'medium' : 'low' },
+          { name: 'interaction.worstCommit', value: worstCommitMs, unit: 'ms', source: 'react-profiler', confidence: interactionCommits.length ? 'medium' : 'low' },
+          { name: 'interaction.worstFrame', value: worstFrameMs, unit: 'ms', source: 'frame-sampler', confidence: interactionFrames.length ? 'medium' : 'low' },
+          { name: 'interaction.settledAfterResponse', value: lastRequestEnd && interaction ? Math.max(0, Date.now() - lastRequestEnd) : 0, unit: 'ms', source: 'correlation', confidence: lastRequestEnd ? 'low' : 'low' }
+        ]
+      };
+    }
+    if (action === 'report') {
+      const requests = readRequests();
+      const renders = readRenders();
+      const frames = readFrames();
+      return {
+        available: true,
+        source: 'app-instrumentation',
+        sources: ['runtime', 'app-instrumentation'],
+        interaction: label || perfState.activeInteractionId || null,
+        network: { requests },
+        renders,
+        frames,
+        jsThread: bridge?.jsThread ? bridge.jsThread() : { available: false, reason: 'JS thread long-task evidence is not exposed.' },
+        interactions: perfState.interactions,
+        metrics: []
+      };
+    }
     if (!bridge) return { available: false, source: 'app-instrumentation', sources: ['runtime', 'app-instrumentation'], code: 'unavailable-bridge', reason: 'Performance bridge is not installed.', metrics: [] };
     if (action === 'mark-list') return bridge.marks ? bridge.marks() : { available: true, sources: ['runtime', 'app-instrumentation'], marks: performance.getEntriesByType ? performance.getEntriesByType('mark') : [], metrics: [] };
     if (action === 'mark-clear') return bridge.clearMarks ? bridge.clearMarks() : { available: true, sources: ['runtime', 'app-instrumentation'], cleared: true, metrics: [] };
@@ -13071,7 +13691,7 @@ function perfExpression({ action, label }) {
     if (action === 'js-thread') return bridge.jsThread ? bridge.jsThread() : { available: false, sources: ['runtime', 'app-instrumentation'], reason: 'JS thread evidence is not exposed by the performance bridge.', metrics: [] };
     if (action === 'frames') return bridge.frames ? bridge.frames() : { available: false, sources: ['runtime', 'app-instrumentation'], reason: 'Frame evidence is not exposed by the performance bridge.', metrics: [] };
     if (action === 'startup') return bridge.startup ? bridge.startup() : { available: true, sources: ['runtime', 'app-instrumentation'], metrics: bridge.startupMetrics || [] };
-    if (action === 'action') return bridge.action ? bridge.action(label) : { available: true, sources: ['runtime', 'app-instrumentation'], actionName: label, metrics: bridge.actionMetrics || [] };
+    if (action === 'action') return bridge.action ? bridge.action(label) : { available: false, sources: ['runtime', 'app-instrumentation'], actionName: label, code: 'missing-interaction-measurement', reason: 'Performance action requires interaction start/stop evidence.', metrics: bridge.actionMetrics || [] };
     return { available: false, sources: ['runtime', 'app-instrumentation'], reason: 'Unsupported performance action.', metrics: [] };
   })()`;
 }
@@ -13133,6 +13753,105 @@ function targetSummary9(target) {
       reactNative: Boolean(target.reactNative)
     }
   };
+}
+function perfValidation(payload, action) {
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  const hasNetwork = metrics.some((metric) => /network/i.test(String(metric.name)) && Number(metric.value) > 0) || Array.isArray(payload.requests) && payload.requests.length > 0 || Array.isArray(payload.runtime?.network?.requests) && payload.runtime.network.requests.length > 0;
+  const hasRender = metrics.some((metric) => /commit|render/i.test(String(metric.name)) && Number(metric.value) > 0) || Array.isArray(payload.renders?.commits) && payload.renders.commits.length > 0 || Array.isArray(payload.runtime?.renders?.commits) && payload.runtime.renders.commits.length > 0;
+  const hasFrames = metrics.some((metric) => /frame/i.test(String(metric.name)) && Number(metric.value) > 0 && !/available/.test(String(metric.name))) || Array.isArray(payload.frames?.samples) && payload.frames.samples.length > 0 || Array.isArray(payload.runtime?.frames?.samples) && payload.runtime.frames.samples.length > 0;
+  const hasNativeArtifact = Boolean(payload.nativeSummary?.available);
+  const hasNative = hasNativeArtifact && Boolean(payload.pid && payload.seconds);
+  const releaseLike = payload.context?.build?.releaseLike === true;
+  const placeholderMetric = metrics.some((metric) => /available$|bridge\.available|interaction\.duration/.test(String(metric.name)) && Number(metric.value) <= 1);
+  const missingEvidence = [
+    ...!hasNetwork && ["interaction", "report"].includes(action) ? [{
+      signal: "network-interaction-correlation",
+      reason: "No interaction-scoped network request evidence was returned.",
+      recommendedFix: "Run network requests after a real interaction or mount the metadata network bridge."
+    }] : [],
+    ...!hasRender && ["interaction", "report", "action"].includes(action) ? [{
+      signal: "react-profiler-commits",
+      reason: "No React Profiler commit duration records were returned.",
+      recommendedFix: "Mount the dev-only Profiler wrapper or run rn renders start/read/stop with bridge commit records."
+    }] : [],
+    ...!hasFrames && ["frames", "interaction", "report"].includes(action) ? [{
+      signal: "frame-samples",
+      reason: "No requestAnimationFrame delta samples were returned.",
+      recommendedFix: "Start frame sampling before exercising the interaction and rerun perf frames/report."
+    }] : [],
+    ...!hasNative && ["ettrace", "report"].includes(action) ? [{
+      signal: "native-sample-summary",
+      reason: hasNativeArtifact ? "Native sample artifact was parsed, but PID and sample duration were not attached to this evidence." : "No parseable native sample artifact was available.",
+      recommendedFix: "Run profiler start with --pid, --seconds, and --native-artifact, then pass that artifact to perf report."
+    }] : [],
+    ...!releaseLike ? [{
+      signal: "release-like-build",
+      reason: "This evidence was collected in development mode.",
+      recommendedFix: "Repeat the profile against a preview or production build before making release performance claims."
+    }] : []
+  ];
+  const validated = payload.available !== false && !placeholderMetric && (action === "summary" || action === "startup" || action === "memory" || action === "bundle" || action === "compare" || action === "budget" || action === "ettrace" && hasNative || action === "frames" && hasFrames || action === "report" && (hasNetwork || hasRender || hasFrames || hasNativeArtifact) || action === "interaction" && (hasNetwork || hasRender || hasFrames));
+  return realValidation({
+    state: payload.available === false ? "unvalidated" : validated ? "validated" : "partial",
+    claimsAllowed: {
+      networkLatency: hasNetwork,
+      networkWaterfall: hasNetwork,
+      renderCost: hasRender,
+      frameJank: hasFrames,
+      nativeCpu: hasNative,
+      releasePerformance: releaseLike && (hasNetwork || hasRender || hasFrames || hasNative)
+    },
+    evidence: [{
+      source: perfEvidenceSource(payload),
+      artifactPath: Array.isArray(payload.artifacts) ? payload.artifacts[0] : null,
+      command: `perf.${action}`,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      buildKind: payload.context?.build?.mode ?? payload.mode ?? "development",
+      confidence: payload.confidence ?? perfOverallConfidence(metrics)
+    }],
+    missingEvidence
+  });
+}
+async function parseNativeSampleArtifact(file, deps = {}) {
+  const text = await readFile19(file, "utf8").catch(() => null);
+  if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
+  const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);
+  const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/);
+  const mainThreadSamples = numberFromMatch(text, /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s);
+  const idleSamples = countSampleBucket(text, [/mach_msg/i, /CFRunLoopServiceMachPort/i]);
+  const buckets = {
+    hermes: countSampleBucket(text, [/hermes/i]),
+    yoga: countSampleBucket(text, [/yoga/i]),
+    mounting: countSampleBucket(text, [/RCTMountingManager/i, /RCTPerformMountInstructions/i]),
+    coreAnimation: countSampleBucket(text, [/QuartzCore/i, /CA::Layer/i, /CoreAnimation/i]),
+    uiKit: countSampleBucket(text, [/UIKitCore/i])
+  };
+  const topSymbols = [...text.matchAll(/^\s*([0-9]+)\s+(.+?)\s+\(in\s+(.+?)\)/gm)].slice(0, 30).map((match) => ({ samples: Number(match[1]), symbol: match[2].trim(), library: match[3].trim() }));
+  return {
+    available: Boolean(physicalFootprintMb || peakFootprintMb || topSymbols.length),
+    artifact: file,
+    bytes: Buffer.byteLength(text),
+    physicalFootprintMb,
+    peakFootprintMb,
+    mainThreadSamples,
+    estimatedMainThreadIdleSamples: idleSamples,
+    estimatedMainThreadBusySamples: mainThreadSamples == null ? null : Math.max(0, mainThreadSamples - idleSamples),
+    buckets,
+    topSymbols
+  };
+}
+function numberFromMatch(text, pattern) {
+  const match = pattern.exec(text);
+  return match ? Number(match[1]) : null;
+}
+function countSampleBucket(text, patterns) {
+  let count = 0;
+  for (const line of text.split(/\r?\n/)) {
+    if (!patterns.some((pattern) => pattern.test(line))) continue;
+    const match = /^\s*[+!:| ]*\s*(\d+)\s+/.exec(line);
+    count += match ? Number(match[1]) : 1;
+  }
+  return count;
 }
 function resolveExpoStateRoot10(args = {}) {
   if (args.stateDir) {
@@ -13205,6 +13924,7 @@ function redactValue8(value) {
   if (!value || typeof value !== "object") return value;
   const result = {};
   for (const [key, item] of Object.entries(value)) {
+    if (/body|postData/i.test(key)) continue;
     result[key] = /token|authorization|cookie|password|secret|apikey/i.test(key) ? "[redacted]" : redactValue8(item);
   }
   return result;
@@ -13608,7 +14328,7 @@ async function installCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown install action: ${action}`);
-  const prefix = resolve13(optionalString7(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
+  const prefix = resolve13(optionalString8(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
   const binPath = join17(prefix, "bin", CLI_NAME5);
   return toolJson32({
     available: true,
@@ -13625,7 +14345,7 @@ async function upgradeCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown upgrade action: ${action}`);
-  const prefix = resolve13(optionalString7(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
+  const prefix = resolve13(optionalString8(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
   return toolJson32({
     available: true,
     action,
@@ -13716,7 +14436,7 @@ function requireString25(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function optionalString7(value) {
+function optionalString8(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 function truncate17(value, max = 4e4) {
@@ -13889,6 +14609,30 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     reason: "Runtime.evaluate-backed commands share the Hermes CDP transport with loopback URL normalization and Metro Origin headers.",
     sourceFile: "src/modules/hermes-cdp-client/src/main/index.ts",
     recommendedFix: null
+  },
+  {
+    command: "network waterfall",
+    domain: "validation",
+    status: "runtime-dependent",
+    reason: "Waterfall output is wired, but phase-level timing is only validated when the app bridge emits startedAt/endedAt and metadata-only request rows.",
+    sourceFile: "src/modules/network-evidence/src/main/index.ts",
+    recommendedFix: "Mount the upgraded dev-only network bridge before making network waterfall claims."
+  },
+  {
+    command: "perf action|perf interaction|perf report",
+    domain: "performance-validation",
+    status: "runtime-dependent",
+    reason: "Performance outputs now include realValidation and mark placeholder action/frame metrics partial until interaction, render, frame, or native sample evidence is present.",
+    sourceFile: "src/modules/perf-evidence/src/main/index.ts",
+    recommendedFix: "Use perf interaction start/stop and perf report for bottleneck claims."
+  },
+  {
+    command: "rn renders|trace read",
+    domain: "render-validation",
+    status: "runtime-dependent",
+    reason: "Render cost claims require React Profiler commit durations; empty commit arrays are reported as partial evidence.",
+    sourceFile: "src/modules/rn-introspection/src/main/index.ts",
+    recommendedFix: "Mount the dev-only Profiler wrapper and rerun rn renders start/read/stop."
   }
 ];
 function toolJson33(value) {

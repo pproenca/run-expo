@@ -375,9 +375,13 @@ export async function perfNativeProfilerPayload(args: Record<string, any> = {}, 
   const nativeArtifact = resolve(args.nativeArtifact ?? join(resolveExpoStateRoot(args), "artifacts", "perf", defaultName));
   await (deps.mkdir ?? fsMkdir)(dirname(nativeArtifact), { recursive: true });
   let sampleResult: Record<string, any> | null = null;
+  let samplePid: number | null = null;
+  let sampleSeconds: number | null = null;
   if (profiler === "ettrace" && subaction === "start" && args.pid !== undefined) {
     const pid = requirePid(args.pid);
+    samplePid = pid;
     const seconds = String(clampNumber(args.seconds ?? 1, 1, 30));
+    sampleSeconds = Number(seconds);
     sampleResult = await execFile("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1000 });
   } else if (subaction !== "start" && !(await exists(nativeArtifact, deps))) {
     await (deps.writeFile ?? fsWriteFile)(nativeArtifact, `${profiler} placeholder\n`, "utf8");
@@ -392,6 +396,8 @@ export async function perfNativeProfilerPayload(args: Record<string, any> = {}, 
     mode: "development",
     sources: ["native-profiler"],
     nativeArtifact,
+    pid: samplePid,
+    seconds: sampleSeconds,
     sample: sampleResult,
     nativeSummary,
     metrics: [],
@@ -620,6 +626,20 @@ export function perfExpression({ action, label }: { action: string; label?: unkn
         return { commits: bridge?.commits || [], recording: false };
       } catch { return { commits: [], recording: false }; }
     };
+    const startRenders = () => {
+      try {
+        if (bridge?.renders?.start) return bridge.renders.start();
+        if (rnBridge?.renders?.start) return rnBridge.renders.start();
+      } catch {}
+      return null;
+    };
+    const stopRenders = () => {
+      try {
+        if (bridge?.renders?.stop) return bridge.renders.stop();
+        if (rnBridge?.renders?.stop) return rnBridge.renders.stop();
+      } catch {}
+      return null;
+    };
     const readFrames = () => {
       try {
         if (bridge?.frames) {
@@ -670,6 +690,7 @@ export function perfExpression({ action, label }: { action: string; label?: unkn
     if (action === 'interaction-start') {
       const name = label || 'interaction';
       const id = 'interaction-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      startRenders();
       perfState.activeInteractionId = id;
       perfState.interactions[name] = {
         id,
@@ -693,6 +714,7 @@ export function perfExpression({ action, label }: { action: string; label?: unkn
         interaction.stoppedAt = new Date().toISOString();
         interaction.elapsedMs = elapsedMs;
         perfState.activeInteractionId = null;
+        stopRenders();
       }
       const baseline = interaction?.baseline || { requestCount: 0, commitCount: 0, frameCount: 0 };
       const interactionRequests = summary.requests.slice(baseline.requestCount || 0);
@@ -833,7 +855,8 @@ export function perfValidation(payload: Record<string, any>, action: string) {
   const hasFrames = metrics.some((metric) => /frame/i.test(String(metric.name)) && Number(metric.value) > 0 && !/available/.test(String(metric.name))) ||
     Array.isArray(payload.frames?.samples) && payload.frames.samples.length > 0 ||
     Array.isArray(payload.runtime?.frames?.samples) && payload.runtime.frames.samples.length > 0;
-  const hasNative = Boolean(payload.nativeSummary?.available);
+  const hasNativeArtifact = Boolean(payload.nativeSummary?.available);
+  const hasNative = hasNativeArtifact && Boolean(payload.pid && payload.seconds);
   const releaseLike = payload.context?.build?.releaseLike === true;
   const placeholderMetric = metrics.some((metric) => /available$|bridge\.available|interaction\.duration/.test(String(metric.name)) && Number(metric.value) <= 1);
   const missingEvidence = [
@@ -854,7 +877,7 @@ export function perfValidation(payload: Record<string, any>, action: string) {
     }] : []),
     ...(!hasNative && ["ettrace", "report"].includes(action) ? [{
       signal: "native-sample-summary",
-      reason: "No parseable native sample artifact was available.",
+      reason: hasNativeArtifact ? "Native sample artifact was parsed, but PID and sample duration were not attached to this evidence." : "No parseable native sample artifact was available.",
       recommendedFix: "Run profiler start with --pid, --seconds, and --native-artifact, then pass that artifact to perf report.",
     }] : []),
     ...(!releaseLike ? [{
@@ -872,7 +895,7 @@ export function perfValidation(payload: Record<string, any>, action: string) {
     action === "budget" ||
     (action === "ettrace" && hasNative) ||
     (action === "frames" && hasFrames) ||
-    (action === "report" && (hasNetwork || hasRender || hasFrames || hasNative)) ||
+    (action === "report" && (hasNetwork || hasRender || hasFrames || hasNativeArtifact)) ||
     (action === "interaction" && (hasNetwork || hasRender || hasFrames))
   );
   return realValidation({

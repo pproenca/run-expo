@@ -170,6 +170,30 @@ const ADAPTER_SELF_CHECK_FINDINGS: AdapterFinding[] = [
     sourceFile: "src/modules/hermes-cdp-client/src/main/index.ts",
     recommendedFix: null,
   },
+  {
+    command: "network waterfall",
+    domain: "validation",
+    status: "runtime-dependent",
+    reason: "Waterfall output is wired, but phase-level timing is only validated when the app bridge emits startedAt/endedAt and metadata-only request rows.",
+    sourceFile: "src/modules/network-evidence/src/main/index.ts",
+    recommendedFix: "Mount the upgraded dev-only network bridge before making network waterfall claims.",
+  },
+  {
+    command: "perf action|perf interaction|perf report",
+    domain: "performance-validation",
+    status: "runtime-dependent",
+    reason: "Performance outputs now include realValidation and mark placeholder action/frame metrics partial until interaction, render, frame, or native sample evidence is present.",
+    sourceFile: "src/modules/perf-evidence/src/main/index.ts",
+    recommendedFix: "Use perf interaction start/stop and perf report for bottleneck claims.",
+  },
+  {
+    command: "rn renders|trace read",
+    domain: "render-validation",
+    status: "runtime-dependent",
+    reason: "Render cost claims require React Profiler commit durations; empty commit arrays are reported as partial evidence.",
+    sourceFile: "src/modules/rn-introspection/src/main/index.ts",
+    recommendedFix: "Mount the dev-only Profiler wrapper and rerun rn renders start/read/stop.",
+  },
 ];
 
 export function toolJson(value: unknown): ToolTextResult {

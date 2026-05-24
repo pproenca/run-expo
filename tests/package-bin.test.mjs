@@ -542,6 +542,128 @@ describe("expo98 package bin", () => {
     }
   });
 
+  it("returns metadata-only network waterfall evidence with real validation", async () => {
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "app-instrumentation",
+      requests: [{
+        id: "req-1",
+        method: "GET",
+        url: "http://localhost:3000/api/console/customers?token=secret",
+        startedAt: "2026-05-24T10:00:00.000Z",
+        durationMs: 640,
+        status: 200,
+        body: "must-not-leak",
+        postData: "must-not-leak",
+        headers: { authorization: "Bearer secret", accept: "application/json" },
+        response: { status: 200, content: { text: "must-not-leak" }, encodedBodySize: 512 },
+        initiator: { route: "/", screen: "Schedule", interactionId: "i1", queryKey: "customers" },
+      }],
+    });
+    try {
+      const payload = await runJson(["network", "waterfall", "--metro-port", String(metro.port)]);
+      const serialized = JSON.stringify(payload);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, true);
+      assert.equal(payload.data.waterfall.slowRequestCount, 1);
+      assert.equal(payload.data.requests[0].origin, "http://localhost:3000");
+      assert.equal(payload.data.requests[0].path, "/api/console/customers?token=[redacted]");
+      assert.equal(payload.data.realValidation.claimsAllowed.networkLatency, true);
+      assert.equal(payload.data.realValidation.claimsAllowed.networkWaterfall, true);
+      assert.doesNotMatch(serialized, /must-not-leak|Bearer secret/);
+      assert.doesNotMatch(serialized, /"body"|"postData"/);
+    } finally {
+      await metro.close();
+    }
+  });
+
+  it("marks placeholder perf action evidence as partial instead of validated", async () => {
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "app-instrumentation",
+      actionName: "open customer",
+      metrics: [{ name: "interaction.duration", value: 0, unit: "ms", source: "app-performance-mark", confidence: "low" }],
+    });
+    try {
+      const payload = await runJson(["perf", "action", "open customer", "--metro-port", String(metro.port)]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, true);
+      assert.equal(payload.data.realValidation.state, "partial");
+      assert.equal(payload.data.realValidation.claimsAllowed.renderCost, false);
+      assert.equal(payload.data.realValidation.claimsAllowed.frameJank, false);
+    } finally {
+      await metro.close();
+    }
+  });
+
+  it("builds a perf report from runtime network, render, and frame evidence", async () => {
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "app-instrumentation",
+      network: {
+        requests: [{
+          id: "req-2",
+          method: "GET",
+          url: "http://localhost:3000/api/console/customers",
+          startedAt: "2026-05-24T10:00:00.000Z",
+          durationMs: 1036,
+          status: 200,
+        }],
+      },
+      renders: {
+        commits: [{ id: "commit-1", durationMs: 42, phase: "update", route: "/customers" }],
+      },
+      frames: {
+        samples: [{ deltaMs: 18 }, { deltaMs: 44 }],
+        worstFrameMs: 44,
+        droppedFrameCount: 1,
+      },
+      metrics: [],
+    });
+    try {
+      const payload = await runJson(["perf", "report", "tab-customers", "--metro-port", String(metro.port)]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, true);
+      assert.equal(payload.data.realValidation.claimsAllowed.networkLatency, true);
+      assert.equal(payload.data.realValidation.claimsAllowed.renderCost, true);
+      assert.equal(payload.data.realValidation.claimsAllowed.frameJank, true);
+      assert.equal(payload.data.findings.some((finding) => finding.type === "network-latency"), true);
+      assert.equal(payload.data.findings.some((finding) => finding.type === "render-cost"), true);
+      assert.equal(payload.data.findings.some((finding) => finding.type === "frame-jank"), true);
+    } finally {
+      await metro.close();
+    }
+  });
+
+  it("parses native sample artifacts but does not allow native CPU claims without pid and duration", async () => {
+    const project = await makeFixtureProject("expo98-native-sample-");
+    const samplePath = resolve(project, "sample.txt");
+    try {
+      await writeFile(samplePath, [
+        "Analysis of sampling MaddieConsole (pid 123) every 1 millisecond",
+        "Physical footprint:         462.7M",
+        "Physical footprint (peak):  473.5M",
+        "Call graph:",
+        "    100 Thread_1: Main Thread",
+        "    + 76 facebook::yoga::calculateLayoutInternal  (in React) + 1512",
+        "    + 64 hermes::vm::Runtime::interpretFunctionImpl  (in hermesvm) + 132",
+      ].join("\n"), "utf8");
+
+      const payload = await runJson(["--root", project, "perf", "report", "--native-artifact", samplePath]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.nativeSummary.available, true);
+      assert.equal(payload.data.nativeSummary.physicalFootprintMb, 462.7);
+      assert.equal(payload.data.realValidation.claimsAllowed.nativeCpu, false);
+      assert.equal(payload.data.realValidation.state, "validated");
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
   it("persists semantic snapshot refs from Hermes bridge evidence", async () => {
     const project = await makeFixtureProject("expo98-semantic-snapshot-");
     const stateRoot = resolve(project, ".scratch", "expo-ios");
