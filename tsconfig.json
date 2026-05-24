@@ -21,10 +21,7 @@
     "types": ["node", "ws"],
     "useDefineForClassFields": false
   },
-  "include": [
-    "src/**/*.ts",
-    "scripts/**/*.mjs"
-  ],
+  "include": ["src/**/*.ts"],
   "exclude": [
     "node_modules",
     ".scratch",

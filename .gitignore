@@ -2,8 +2,11 @@ node_modules/
 .npm/
 .tmp/
 .cache/
+.artifacts/
+.pnpm-store/
 .scratch/
 .clawpatch/
+.desloppify/
 coverage/
 dist/
 *.tgz

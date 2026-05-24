@@ -239,6 +239,28 @@ describe("expo98 package bin", () => {
     assert.equal(payload.data.policy.action, "state.save");
   });
 
+  it("treats policy checks for wait.fn as runtime evaluation", async () => {
+    const denied = await runJson(["policy", "check", "action", "wait.fn"]);
+    const allowed = await runJson([
+      "--allow-runtime-eval",
+      "true",
+      "policy",
+      "check",
+      "action",
+      "wait.fn",
+    ]);
+
+    assert.equal(denied.ok, true);
+    assert.equal(denied.data.decision.action, "wait.fn");
+    assert.equal(denied.data.decision.sideEffect, "runtime-eval");
+    assert.equal(denied.data.decision.allowed, false);
+
+    assert.equal(allowed.ok, true);
+    assert.equal(allowed.data.decision.action, "wait.fn");
+    assert.equal(allowed.data.decision.sideEffect, "runtime-eval");
+    assert.equal(allowed.data.decision.allowed, true);
+  });
+
   it("denies open-dev-menu without an action policy before runtime mutation", async () => {
     const payload = await runJson(["open-dev-menu"]);
 

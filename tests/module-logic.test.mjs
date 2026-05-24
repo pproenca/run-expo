@@ -33,6 +33,72 @@ function parseToolJson(result) {
   return JSON.parse(result.content[0].text);
 }
 
+describe("CLI parser and facade", () => {
+  it("keeps known boolean command flags from consuming positional arguments", async () => {
+    const { parseCliArgs } = await importSourceModule(
+      "cli-argv-parser",
+      "src/core/cli-argv-parser/src/main/index.ts",
+      ["parseCliArgs"],
+    );
+
+    const positional = parseCliArgs(["annotate-screen", "--dry-run", "scaffold"]);
+    assert.equal(positional.args.dryRun, true);
+    assert.deepEqual(positional.args._, ["scaffold"]);
+
+    const explicitBoolean = parseCliArgs(["tap", "@e1", "--dry-run", "false"]);
+    assert.equal(explicitBoolean.args.dryRun, false);
+    assert.deepEqual(explicitBoolean.args._, ["@e1"]);
+
+    const valuedFlag = parseCliArgs(["annotate-screen", "--output-dir", "scaffold"]);
+    assert.equal(valuedFlag.args.outputDir, "scaffold");
+    assert.deepEqual(valuedFlag.args._, []);
+  });
+
+  it("does not reuse previous CLI globals when a later parse fails", async () => {
+    const { createCliFacade } = await importSourceModule(
+      "cli-facade",
+      "src/core/cli-facade-entrypoint/src/main/index.ts",
+      ["createCliFacade"],
+    );
+    const writtenErrors = [];
+    let parseCalls = 0;
+    const facade = createCliFacade({
+      parseCliArgs: () => {
+        parseCalls += 1;
+        if (parseCalls === 1) {
+          return {
+            command: "doctor",
+            args: { _: [] },
+            globals: {
+              json: false,
+              plain: false,
+              quiet: true,
+              debug: false,
+              maxOutput: null,
+              contentBoundaries: false,
+              allowRuntimeEval: null,
+              confirmActions: null,
+            },
+          };
+        }
+        throw new Error("bad args");
+      },
+      dispatchCommand: () => 0,
+      writeCliError: (_error, options) => {
+        writtenErrors.push(options);
+      },
+      exitCodeForError: () => 2,
+    });
+
+    assert.equal(await facade.run(["--quiet", "doctor"]), 0);
+    assert.equal(facade.getLastCliOptions().quiet, true);
+    assert.equal(await facade.run(["--bad"]), 2);
+    assert.equal(writtenErrors.length, 1);
+    assert.equal(writtenErrors[0].quiet, false);
+    assert.equal(facade.getLastCliOptions().quiet, false);
+  });
+});
+
 describe("network evidence pure logic", () => {
   it("redacts secret-bearing request data and annotates HAR metadata", async () => {
     const { annotateHar, harFromNetworkRequests, normalizeNetworkEvidence, redactNetworkEvidence } =

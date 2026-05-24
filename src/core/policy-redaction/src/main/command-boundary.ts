@@ -55,7 +55,7 @@ export async function policyCommand(args: CommandArgs = {}): Promise<ToolTextRes
           sideEffect,
           policy,
           source: resolvedPolicyPath,
-          allowRuntimeEval: args.allowRuntimeEval === true,
+          allowRuntimeEval: isTrueFlag(args.allowRuntimeEval),
         });
 
   return toolJson({
@@ -109,4 +109,8 @@ function requireString(value: unknown, field: string): string {
 
 function requireOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isTrueFlag(value: unknown): boolean {
+  return value === true || value === "true";
 }

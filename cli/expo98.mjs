@@ -125,12 +125,15 @@ function defaultPolicySummary() {
   };
 }
 function actionSideEffect(action) {
+  if (action === "wait.fn") {
+    return "runtime-eval";
+  }
   if (/^(doctor|project-info|routes|devices|target\.list|target\.current|snapshot|refs|get|find|wait|console|errors|logs|metro\.status|policy|redact|review)/.test(
     action
   )) {
     return "read";
   }
-  if (/^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.|wait\.fn)/.test(
+  if (/^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.)/.test(
     action
   )) {
     return "device";
@@ -1771,6 +1774,18 @@ function parseCliArgs(argv) {
         throw new CliUsageError(`Global flag or command expected before --${rawKey}.`);
       }
       const key = toCamel(rawKey);
+      if (commandFlagTakesBoolean(rawKey)) {
+        const explicitValue = eq === -1 ? argv[index + 1] : token.slice(eq + 1);
+        if (explicitValue === "true" || explicitValue === "false") {
+          if (eq === -1) index += 1;
+          args[key] = explicitValue === "true";
+        } else if (eq === -1) {
+          args[key] = true;
+        } else {
+          args[key] = coerceCliValue(explicitValue);
+        }
+        continue;
+      }
       const schemaValue = eq === -1 ? argv[index + 1] : token.slice(eq + 1);
       if (eq === -1 && (schemaValue === void 0 || schemaValue.startsWith("--"))) {
         args[key] = true;
@@ -1842,6 +1857,47 @@ function normalizeGlobalFlag(rawKey) {
 }
 function globalFlagTakesValue(rawKey) {
   return rawKey === "root" || rawKey === "state-dir" || rawKey === "action-policy" || rawKey === "max-output" || rawKey === "allow-runtime-eval" || rawKey === "confirm-actions";
+}
+var BOOLEAN_COMMAND_FLAGS = /* @__PURE__ */ new Set([
+  "added-visible-controls",
+  "annotate",
+  "app-ready",
+  "bail",
+  "bounds",
+  "capture-before-after",
+  "changed-chrome",
+  "changed-gesture",
+  "changed-navigation",
+  "clear",
+  "compact",
+  "dry-run",
+  "fix",
+  "force",
+  "full",
+  "has-acceptance-contract",
+  "has-interaction-proof",
+  "has-screenshot",
+  "has-static-verifier",
+  "include-components",
+  "include-events",
+  "include-hierarchy",
+  "include-image-analysis",
+  "include-logs",
+  "include-runtime",
+  "include-screenshot",
+  "include-trace",
+  "interactive",
+  "metro-ready",
+  "no-spinner",
+  "open-simulator",
+  "raw",
+  "restart-dev-client",
+  "screenshot",
+  "serve",
+  "source"
+]);
+function commandFlagTakesBoolean(rawKey) {
+  return BOOLEAN_COMMAND_FLAGS.has(rawKey);
 }
 function coerceCliValue(value) {
   if (value === "true") return true;
@@ -2398,6 +2454,7 @@ function projectPolicyArgs({ args, globals, cwd }) {
     subject: args.subject ?? args._[1],
     name: args.name ?? args._[2],
     actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    allowRuntimeEval: globals.allowRuntimeEval,
     cwd
   });
 }
@@ -16444,6 +16501,7 @@ function defaultLastCliOptions() {
 function createCliFacade(deps) {
   let lastCliOptions = defaultLastCliOptions();
   async function main(argv) {
+    lastCliOptions = defaultLastCliOptions();
     const parsed = deps.parseCliArgs(argv);
     lastCliOptions = parsed.globals;
     return deps.dispatchCommand(parsed);
@@ -16557,7 +16615,7 @@ async function policyCommand(args = {}) {
     sideEffect,
     policy,
     source: resolvedPolicyPath,
-    allowRuntimeEval: args.allowRuntimeEval === true
+    allowRuntimeEval: isTrueFlag(args.allowRuntimeEval)
   });
   return toolJson({
     available: true,
@@ -16604,6 +16662,9 @@ function requireString24(value, field) {
 }
 function requireOptionalString11(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+function isTrueFlag(value) {
+  return value === true || value === "true";
 }
 
 // src/core/tool-handler-registry/src/main/index.ts

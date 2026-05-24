@@ -121,7 +121,11 @@ export function defaultPolicySummary(): DefaultPolicySummary {
   };
 }
 
-export function actionSideEffect(action: string): "read" | "device" {
+export function actionSideEffect(action: string): "read" | "device" | "runtime-eval" {
+  if (action === "wait.fn") {
+    return "runtime-eval";
+  }
+
   if (
     /^(doctor|project-info|routes|devices|target\.list|target\.current|snapshot|refs|get|find|wait|console|errors|logs|metro\.status|policy|redact|review)/.test(
       action,
@@ -130,7 +134,7 @@ export function actionSideEffect(action: string): "read" | "device" {
     return "read";
   }
   if (
-    /^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.|wait\.fn)/.test(
+    /^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.)/.test(
       action,
     )
   ) {

@@ -83,6 +83,19 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
       }
 
       const key = toCamel(rawKey);
+      if (commandFlagTakesBoolean(rawKey)) {
+        const explicitValue = eq === -1 ? argv[index + 1] : token.slice(eq + 1);
+        if (explicitValue === "true" || explicitValue === "false") {
+          if (eq === -1) index += 1;
+          args[key] = explicitValue === "true";
+        } else if (eq === -1) {
+          args[key] = true;
+        } else {
+          args[key] = coerceCliValue(explicitValue);
+        }
+        continue;
+      }
+
       const schemaValue = eq === -1 ? argv[index + 1] : token.slice(eq + 1);
       if (eq === -1 && (schemaValue === undefined || schemaValue.startsWith("--"))) {
         args[key] = true;
@@ -167,6 +180,49 @@ export function globalFlagTakesValue(rawKey: string): boolean {
     rawKey === "allow-runtime-eval" ||
     rawKey === "confirm-actions"
   );
+}
+
+const BOOLEAN_COMMAND_FLAGS = new Set([
+  "added-visible-controls",
+  "annotate",
+  "app-ready",
+  "bail",
+  "bounds",
+  "capture-before-after",
+  "changed-chrome",
+  "changed-gesture",
+  "changed-navigation",
+  "clear",
+  "compact",
+  "dry-run",
+  "fix",
+  "force",
+  "full",
+  "has-acceptance-contract",
+  "has-interaction-proof",
+  "has-screenshot",
+  "has-static-verifier",
+  "include-components",
+  "include-events",
+  "include-hierarchy",
+  "include-image-analysis",
+  "include-logs",
+  "include-runtime",
+  "include-screenshot",
+  "include-trace",
+  "interactive",
+  "metro-ready",
+  "no-spinner",
+  "open-simulator",
+  "raw",
+  "restart-dev-client",
+  "screenshot",
+  "serve",
+  "source",
+]);
+
+export function commandFlagTakesBoolean(rawKey: string): boolean {
+  return BOOLEAN_COMMAND_FLAGS.has(rawKey);
 }
 
 export function coerceCliValue(value: string): unknown {

@@ -10,8 +10,9 @@ const baseArgs = [
   "--report-unused-disable-directives-severity",
   "error",
 ];
+const defaultPaths = ["src", "tests", "scripts"];
 
-const result = spawnSync(oxlintPath, [...baseArgs, ...passthroughArgs], {
+const result = spawnSync(oxlintPath, [...baseArgs, ...defaultPaths, ...passthroughArgs], {
   stdio: "inherit",
 });
 

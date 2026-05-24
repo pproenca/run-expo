@@ -63,6 +63,7 @@ function projectPolicyArgs({ args, globals, cwd }: CommandProjectionContext): Pr
     subject: args.subject ?? args._[1],
     name: args.name ?? args._[2],
     actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    allowRuntimeEval: globals.allowRuntimeEval,
     cwd,
   });
 }

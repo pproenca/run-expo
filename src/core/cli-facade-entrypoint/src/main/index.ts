@@ -48,6 +48,7 @@ export function createCliFacade(deps: CliFacadeDependencies): CliFacade {
   let lastCliOptions = defaultLastCliOptions();
 
   async function main(argv: string[]): Promise<number> {
+    lastCliOptions = defaultLastCliOptions();
     const parsed = deps.parseCliArgs(argv);
     lastCliOptions = parsed.globals;
     return deps.dispatchCommand(parsed);
