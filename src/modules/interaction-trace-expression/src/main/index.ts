@@ -1,3 +1,4 @@
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 
 export interface InteractionTraceExpressionArgs {
@@ -78,7 +79,7 @@ export async function traceInteraction(
 
 const defaultTraceInteractionDependencies: TraceInteractionDependencies = {
   fetchMetroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression,
+  evaluateHermesExpression: sharedEvaluateHermesExpression,
 };
 
 export function toolJson(value: unknown): ToolTextResult {

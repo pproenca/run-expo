@@ -13,6 +13,6 @@ await build({
   banner: {
     js: "#!/usr/bin/env node",
   },
-  external: [],
+  external: ["ws"],
   logLevel: "silent",
 });

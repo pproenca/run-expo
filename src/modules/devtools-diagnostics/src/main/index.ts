@@ -1,3 +1,5 @@
+import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -131,6 +133,9 @@ const DIAGNOSTICS_LIMITATIONS = [
 ];
 const MAX_OUTPUT = 40_000;
 const MAX_ARRAY_ITEMS = 500;
+const defaultDevtoolsDiagnosticsDependencies: DevtoolsDiagnosticsDependencies = {
+  evaluateHermesExpression: defaultEvaluateHermesExpression,
+};
 
 export function toolJson(value: unknown): ToolTextResult {
   return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
@@ -178,7 +183,7 @@ export function targetSummary(target: DevtoolsTarget | null | undefined): Target
 
 export async function devtoolsCommand(
   args: Record<string, unknown> = {},
-  deps: DevtoolsDiagnosticsDependencies = {},
+  deps: DevtoolsDiagnosticsDependencies = defaultDevtoolsDiagnosticsDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "capabilities", "action");
   if (action === "status" || action === "panels") return toolJson(await devtoolsStatusPayload(args, action, deps));
@@ -493,14 +498,14 @@ export async function devtoolsEventsPayload(
 
 export async function consoleCommand(
   args: Record<string, unknown> = {},
-  deps: DevtoolsDiagnosticsDependencies = {},
+  deps: DevtoolsDiagnosticsDependencies = defaultDevtoolsDiagnosticsDependencies,
 ): Promise<ToolTextResult> {
   return diagnosticMessagesCommand("console", args, deps);
 }
 
 export async function errorsCommand(
   args: Record<string, unknown> = {},
-  deps: DevtoolsDiagnosticsDependencies = {},
+  deps: DevtoolsDiagnosticsDependencies = defaultDevtoolsDiagnosticsDependencies,
 ): Promise<ToolTextResult> {
   return diagnosticMessagesCommand("errors", args, deps);
 }
@@ -508,7 +513,7 @@ export async function errorsCommand(
 export async function diagnosticMessagesCommand(
   kind: "console" | "errors" | string,
   args: Record<string, unknown> = {},
-  deps: DevtoolsDiagnosticsDependencies = {},
+  deps: DevtoolsDiagnosticsDependencies = defaultDevtoolsDiagnosticsDependencies,
 ): Promise<ToolTextResult> {
   const action = args.action ?? "read";
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
@@ -768,8 +773,8 @@ async function evaluateHermesExpression(
   expression: string,
   options: { timeoutMs: number },
 ): Promise<HermesEvaluationResult | null | undefined> {
-  if (!deps.evaluateHermesExpression) return { error: "Hermes evaluator dependency is not configured." };
-  return deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, options);
+  const evaluate = deps.evaluateHermesExpression ?? defaultEvaluateHermesExpression;
+  return evaluate(webSocketDebuggerUrl, expression, options);
 }
 
 function valueFromHermes(result: HermesEvaluationResult | null | undefined): unknown {

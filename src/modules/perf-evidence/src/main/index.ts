@@ -1,6 +1,9 @@
 import { mkdir as fsMkdir, readFile, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
+import { metroStatusPayload, metroTargets } from "../../../metro-probes/src/main/index.ts";
+
 const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 
 export interface ToolTextResult {
@@ -539,15 +542,15 @@ async function projectSummary(cwd: string, deps: PerfDependencies): Promise<Reco
 }
 
 async function metroStatus(args: { metroPort: number }, deps: PerfDependencies): Promise<Record<string, any>> {
-  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : { available: false, reason: "Metro status adapter is not configured.", metroPort: args.metroPort, targetCount: 0, targets: [] };
+  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : metroStatusPayload(args);
 }
 
 async function listMetroTargets(metroPort: number, deps: PerfDependencies): Promise<Array<Record<string, any>>> {
-  return deps.metroTargets ? deps.metroTargets(metroPort) : [];
+  return deps.metroTargets ? deps.metroTargets(metroPort) : metroTargets(metroPort);
 }
 
 async function evaluateHermes(url: string, expression: string, deps: PerfDependencies): Promise<Record<string, any>> {
-  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5000 }) : {};
+  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5000 }) : sharedEvaluateHermesExpression(url, expression, { timeoutMs: 5000 });
 }
 
 async function findUpFile(cwd: string, name: string, deps: PerfDependencies): Promise<string | null> {

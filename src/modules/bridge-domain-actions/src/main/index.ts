@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 
 export interface ToolTextResult {
@@ -168,14 +169,14 @@ export async function controlsCommand(
 
 const defaultBridgeDomainDependencies: BridgeDomainDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort) as Promise<BridgeTarget[]>,
-  evaluateHermesExpression,
+  evaluateHermesExpression: defaultEvaluateHermesExpression,
   readJsonFile: async (file) => JSON.parse(await readFile(file, "utf8")),
   resolvePath: (file) => path.resolve(file),
 };
 
-async function bridgeDomainCommand(
+export async function bridgeDomainCommand(
   input: BridgeDomainCommandInput,
-  deps: BridgeDomainDependencies = {},
+  deps: BridgeDomainDependencies = defaultBridgeDomainDependencies,
 ): Promise<Record<string, any> | DomainUnavailable> {
   const metroPort = clampNumber(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);

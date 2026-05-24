@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { domainUnavailable, targetSummary } from "../../../bridge-domain-actions/src/main/index.ts";
+import { bridgeDomainCommand } from "../../../bridge-domain-actions/src/main/index.ts";
 
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
@@ -80,42 +80,7 @@ const defaultRnDependencies: RnIntrospectionDependencies = {
 };
 
 async function defaultBridgeDomainCommand(request: RnBridgeRequest): Promise<Record<string, any>> {
-  const metroPort = clampNumber(request.args.metroPort ?? 8081, 1, 65535);
-  const targets = await defaultMetroTargets(metroPort);
-  const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
-  if (!target?.webSocketDebuggerUrl) {
-    return domainUnavailable({
-      domain: request.domain,
-      action: request.action,
-      metroPort,
-      code: "no-runtime-target",
-      reason: "No Metro inspector target.",
-      target: targetSummary(target),
-      policy: request.policy,
-    });
-  }
-  return domainUnavailable({
-    domain: request.domain,
-    action: request.action,
-    metroPort,
-    code: "transport-failure",
-    reason: "Hermes Runtime.evaluate adapter is not configured for rn introspection.",
-    target: targetSummary(target),
-    policy: request.policy,
-  });
-}
-
-async function defaultMetroTargets(metroPort: number): Promise<Array<Record<string, any>>> {
-  const response = await fetch(`http://localhost:${metroPort}/json/list`);
-  if (!response.ok) return [];
-  const parsed = await response.json() as unknown;
-  return Array.isArray(parsed) ? parsed.map((target) => asRecord(target) ?? {}) : [];
-}
-
-function clampNumber(value: unknown, min: number, max: number): number {
-  const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
-  return Math.min(Math.max(number, min), max);
+  return bridgeDomainCommand(request);
 }
 
 export async function rnInspectPayload(

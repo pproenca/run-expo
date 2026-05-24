@@ -36,6 +36,15 @@ export interface LiveBacklogRow {
   rationale: string;
 }
 
+export interface AdapterFinding {
+  command: string;
+  domain: string;
+  status: "wired" | "missing" | "stub" | "runtime-dependent";
+  reason: string;
+  sourceFile: string;
+  recommendedFix: string | null;
+}
+
 const EXIT_SUCCESS = 0;
 const EXIT_INVALID_USAGE = 2;
 
@@ -126,6 +135,41 @@ export const LIVE_BACKLOG_MANIPULATING_COMMANDS = [
   "install-app", "uninstall-app", "tap", "gesture", "long-press", "dbltap", "fill", "type",
   "press", "focus", "blur", "select", "check", "uncheck", "drag", "scroll", "scroll-into-view",
   "clipboard", "keyboard", "set", "navigation", "storage", "state", "controls", "dialog", "sheet",
+];
+
+const ADAPTER_SELF_CHECK_FINDINGS: AdapterFinding[] = [
+  {
+    command: "snapshot",
+    domain: "semantic",
+    status: "wired",
+    reason: "Semantic snapshot capture evaluates app instrumentation through the shared Hermes CDP transport and falls back to native accessibility only when bridge data is unavailable.",
+    sourceFile: "src/modules/snapshot-evidence/src/main/snapshot-command.ts",
+    recommendedFix: null,
+  },
+  {
+    command: "rn tree|rn fiber|rn renders",
+    domain: "react-native",
+    status: "wired",
+    reason: "React Native introspection delegates to bridge-domain Runtime.evaluate using __EXPO_IOS_RN_BRIDGE__ and instrumentation fallbacks.",
+    sourceFile: "src/modules/rn-introspection/src/main/index.ts",
+    recommendedFix: null,
+  },
+  {
+    command: "console|errors",
+    domain: "diagnostics",
+    status: "wired",
+    reason: "Runtime diagnostics use the shared Hermes CDP evaluator by default.",
+    sourceFile: "src/modules/devtools-diagnostics/src/main/index.ts",
+    recommendedFix: null,
+  },
+  {
+    command: "navigation|network|dialog|sheet|storage|state|controls|perf|trace|inspector|metro reload",
+    domain: "runtime",
+    status: "wired",
+    reason: "Runtime.evaluate-backed commands share the Hermes CDP transport with loopback URL normalization and Metro Origin headers.",
+    sourceFile: "src/modules/hermes-cdp-client/src/main/index.ts",
+    recommendedFix: null,
+  },
 ];
 
 export function toolJson(value: unknown): ToolTextResult {
@@ -354,8 +398,14 @@ export function parseHelpCommandNames(text: string): string[] {
 
 export function liveBacklogSelfCheck(matrix: Record<string, any>): Record<string, any> {
   const issues = [];
+  const adapterFindings = ADAPTER_SELF_CHECK_FINDINGS.map((finding) => ({ ...finding }));
   for (const command of matrix.source.unrepresentedDispatcherCommands) issues.push({ type: "missing-dispatcher-row", command });
   for (const command of matrix.source.unrepresentedHelpCommands) issues.push({ type: "missing-help-row", command });
+  for (const finding of adapterFindings) {
+    if (finding.status === "missing" || finding.status === "stub") {
+      issues.push({ type: "missing-adapter", command: finding.command, domain: finding.domain, sourceFile: finding.sourceFile });
+    }
+  }
   for (const command of LIVE_BACKLOG_MANIPULATING_COMMANDS) {
     if (COMMAND_ALIASES[command] && !matrix.source.dispatcherCommands.includes(command)) issues.push({ type: "missing-live-action-dispatcher", command });
   }
@@ -369,6 +419,9 @@ export function liveBacklogSelfCheck(matrix: Record<string, any>): Record<string
     ok: issues.length === 0,
     issueCount: issues.length,
     issues,
+    adapterFindings,
+    adapterFindingCount: adapterFindings.length,
+    missingAdapterCount: adapterFindings.filter((finding) => finding.status === "missing" || finding.status === "stub").length,
     hiddenPreflightPolicy: {
       allowed: false,
       statement: "Simulator, app lifecycle, Metro, Hermes, dev-client, gesture, screenshot, accessibility, log, and crash-report actions must be represented as live-backlog rows.",

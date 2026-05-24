@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -255,7 +257,7 @@ export async function networkCommand(
 
 const defaultNetworkDependencies: NetworkCommandDependencies = {
   metroTargets: defaultMetroTargets,
-  evaluateHermesExpression: defaultEvaluateHermesExpression,
+  evaluateHermesExpression: sharedEvaluateHermesExpression,
 };
 
 async function defaultMetroTargets(metroPort: number): Promise<NetworkTarget[]> {

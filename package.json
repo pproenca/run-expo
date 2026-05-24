@@ -24,7 +24,8 @@
     "README.md"
   ],
   "dependencies": {
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "ws": "^8.21.0"
   },
   "packageManager": "pnpm@10.33.4"
 }

@@ -1,3 +1,4 @@
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 
 export interface ToolTextResult {
@@ -110,7 +111,7 @@ export async function sheetCommand(
 
 const defaultModalBridgeDependencies: ModalBridgeDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort) as Promise<ModalBridgeTarget[]>,
-  evaluateHermesExpression,
+  evaluateHermesExpression: sharedEvaluateHermesExpression,
 };
 
 async function modalBridgeCommand(

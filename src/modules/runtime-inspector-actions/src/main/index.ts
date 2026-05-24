@@ -1,5 +1,6 @@
 import { execFile as nodeExecFile } from "node:child_process";
 
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
@@ -122,7 +123,7 @@ export async function runtimeInspector(
 
 const defaultRuntimeInspectorDependencies: RuntimeInspectorDependencies = {
   fetchMetroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression: evaluateHermesExpression,
+  evaluateHermesExpression: sharedEvaluateHermesExpression,
   openIosDevMenu: (args) => openIosDevMenu(args, defaultOpenDevMenuDependencies),
 };
 

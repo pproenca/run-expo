@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -441,7 +443,7 @@ async function metroReloadPayload(args: Record<string, unknown>, deps: MetroComm
   if (!webSocketDebuggerUrl) {
     return { available: false, action: "reload", reason: "No Metro inspector target.", metroPort };
   }
-  const evaluate = deps.evaluateHermesExpression ?? defaultEvaluateHermesExpression;
+  const evaluate = deps.evaluateHermesExpression ?? sharedEvaluateHermesExpression;
   const result = await evaluate(webSocketDebuggerUrl, `(() => {
     const devSettings = globalThis.NativeModules?.DevSettings || globalThis.__fbBatchedBridgeConfig?.remoteModuleConfig?.DevSettings;
     if (globalThis.location && typeof globalThis.location.reload === 'function') { globalThis.location.reload(); return { available: true, strategy: 'location.reload' }; }

@@ -1,3 +1,4 @@
+import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 
@@ -319,7 +320,7 @@ export async function navigationDeepLink(
 
 const defaultNavigationDependencies: NavigationCommandDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort) as Promise<NavigationTarget[]>,
-  evaluateHermesExpression,
+  evaluateHermesExpression: sharedEvaluateHermesExpression,
   openExpoRoute,
 };
 

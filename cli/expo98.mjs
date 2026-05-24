@@ -3168,6 +3168,508 @@ function requireString3(value, name) {
 import { execFile as nodeExecFile3 } from "node:child_process";
 import { mkdir as mkdir6, readdir as readdir4, readFile as readFile5, writeFile as writeFile3 } from "node:fs/promises";
 import { join as join7 } from "node:path";
+
+// src/modules/hermes-cdp-client/src/main/index.ts
+import WebSocket2 from "ws";
+async function evaluateHermesExpression(webSocketDebuggerUrl, expression, options) {
+  return cdpCall(webSocketDebuggerUrl, [
+    { method: "Runtime.enable", params: {} },
+    { method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }
+  ], options.timeoutMs);
+}
+async function cdpCall(webSocketDebuggerUrl, calls, timeoutMs) {
+  const candidates = loopbackWebSocketCandidates(webSocketDebuggerUrl);
+  const errors = [];
+  for (const candidate of candidates) {
+    const origin = metroOriginForWebSocket(candidate);
+    const ws = new WebSocket2(candidate, { headers: { Origin: origin } });
+    try {
+      await waitForOpen(ws, Math.min(timeoutMs, 2500));
+      let id = 0;
+      let last = null;
+      for (const call of calls) {
+        id += 1;
+        ws.send(JSON.stringify({ id, method: call.method, params: call.params }));
+        last = await waitForMessage(ws, id, timeoutMs);
+      }
+      const cdpError = last && typeof last.error === "string" ? last.error : null;
+      return {
+        ...last ?? {},
+        ...cdpError ? { error: cdpError } : {},
+        cdp: last,
+        diagnostics: {
+          webSocketDebuggerUrl,
+          connectedUrl: candidate,
+          origin,
+          attempts: candidates.length
+        }
+      };
+    } catch (error) {
+      errors.push(`${candidate}: ${formatError6(error)}`);
+      try {
+        ws.close();
+      } catch {
+      }
+    } finally {
+      try {
+        ws.close();
+      } catch {
+      }
+    }
+  }
+  return {
+    error: errors.length > 0 ? errors.join("; ") : "Hermes websocket connection failed.",
+    diagnostics: {
+      webSocketDebuggerUrl,
+      attemptedUrls: candidates
+    }
+  };
+}
+function loopbackWebSocketCandidates(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [url];
+  }
+  const candidates = [];
+  const add = (candidate) => {
+    if (!candidates.includes(candidate)) candidates.push(candidate);
+  };
+  add(parsed.toString());
+  const loopbackHosts = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
+  if (loopbackHosts.has(parsed.hostname)) {
+    for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
+      const candidate = new URL(parsed.toString());
+      candidate.hostname = host;
+      add(candidate.toString());
+    }
+  }
+  return candidates;
+}
+function metroOriginForWebSocket(url) {
+  try {
+    const parsed = new URL(url);
+    const port = parsed.port ? `:${parsed.port}` : "";
+    return `http://127.0.0.1${port}`;
+  } catch {
+    return "http://127.0.0.1";
+  }
+}
+function waitForOpen(ws, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.once("open", () => {
+      clearTimeout(timer);
+      resolve15();
+    });
+    ws.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error instanceof Error ? error : new Error("WebSocket connection failed."));
+    });
+  });
+}
+function waitForMessage(ws, id, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for CDP response."));
+    }, timeoutMs);
+    const onMessage = (data) => {
+      let parsed;
+      try {
+        parsed = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+      if (!isRecord4(parsed) || parsed.id !== id) return;
+      cleanup();
+      resolve15(parsed.error ? { error: parsed.error } : parsed);
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      ws.off("message", onMessage);
+      ws.off("error", onError);
+    };
+    ws.on("message", onMessage);
+    ws.once("error", onError);
+  });
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function formatError6(error) {
+  const record = isRecord4(error) ? error : null;
+  return typeof record?.message === "string" ? record.message : String(error);
+}
+
+// src/modules/metro-probes/src/main/index.ts
+import { promises as fs3 } from "node:fs";
+import path3 from "node:path";
+var LIMITATIONS = [
+  "This command probes existing Metro HTTP endpoints only and never starts Metro implicitly.",
+  "Connected targets can be stale when multiple apps or devices are attached."
+];
+var MAX_OUTPUT4 = 16384;
+function toolJson6(value) {
+  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+}
+function clampNumber5(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(`Expected a finite number, got ${String(value)}.`);
+  }
+  return Math.min(Math.max(number, min), max);
+}
+function formatError7(error) {
+  if (!error) return "Unknown error";
+  const record = asRecord2(error);
+  const message = record ? record.message : void 0;
+  const parts = [message == null ? String(error) : String(message)];
+  if (record?.stdout) parts.push(`stdout:
+${truncate5(record.stdout)}`);
+  if (record?.stderr) parts.push(`stderr:
+${truncate5(record.stderr)}`);
+  return parts.join("\n\n");
+}
+function targetSummary(target) {
+  if (!target) return null;
+  return {
+    id: target.id ?? null,
+    title: target.title ?? null,
+    description: target.description ?? null,
+    appId: target.appId ?? null,
+    deviceName: target.deviceName ?? null,
+    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
+    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
+    reactNative: target.reactNative ?? null,
+    capabilities: target.capabilities ?? {
+      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      reactNative: Boolean(target.reactNative)
+    }
+  };
+}
+async function metroCommand(args = {}, deps = {}) {
+  const action = requireString4(args.action ?? "status", "action");
+  if (action === "reload") return toolJson6(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
+  if (action === "symbolicate") {
+    return toolJson6(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
+  }
+  if (action !== "status") throw new Error(`Unknown metro action: ${action}`);
+  return toolJson6(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
+}
+async function metroStatusPayload(args = {}, deps = {}) {
+  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
+  return new MetroInspectorClient(metroPort, deps).statusPayload();
+}
+async function metroTargets(metroPort, deps = {}) {
+  const result = await new MetroInspectorClient(metroPort, deps).targets();
+  return result.targets;
+}
+var MetroInspectorClient = class {
+  constructor(metroPort, deps = {}) {
+    this.metroPort = metroPort;
+    this.baseUrl = `http://127.0.0.1:${metroPort}`;
+    this.fetchLocalText = deps.fetchLocalText ?? defaultFetchLocalText;
+    this.fetchLocalJson = deps.fetchLocalJson ?? defaultFetchLocalJson;
+    this.fetchLocalLoopback = deps.fetchLocalLoopback ?? defaultFetchLocalLoopback;
+  }
+  baseUrl;
+  fetchLocalText;
+  fetchLocalJson;
+  fetchLocalLoopback;
+  async status() {
+    try {
+      const text = await this.fetchLocalText(`${this.baseUrl}/status`, { timeoutMs: 1500 });
+      return { available: true, endpoint: "/status", text, error: null };
+    } catch (error) {
+      return { available: false, endpoint: "/status", text: null, error: formatError7(error) };
+    }
+  }
+  async version() {
+    try {
+      const value = await this.fetchLocalJson(`${this.baseUrl}/json/version`, { timeoutMs: 1500 });
+      return { available: true, endpoint: "/json/version", value, error: null };
+    } catch (error) {
+      return { available: false, endpoint: "/json/version", value: null, error: formatError7(error) };
+    }
+  }
+  async targets() {
+    let raw;
+    try {
+      raw = await this.fetchLocalJson(`${this.baseUrl}/json/list`, { timeoutMs: 2500 });
+    } catch (error) {
+      return {
+        available: false,
+        endpoint: "/json/list",
+        targets: [],
+        malformedTargets: [],
+        reason: formatError7(error)
+      };
+    }
+    if (!Array.isArray(raw)) {
+      return {
+        available: false,
+        endpoint: "/json/list",
+        targets: [],
+        malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) }],
+        reason: "Metro target list was malformed."
+      };
+    }
+    const targets = [];
+    const malformedTargets = [];
+    raw.forEach((target, index) => {
+      const normalized = this.normalizeTarget(target, index);
+      if (normalized.target) targets.push(normalized.target);
+      if (normalized.error) malformedTargets.push(normalized.error);
+    });
+    return {
+      available: true,
+      endpoint: "/json/list",
+      targets,
+      malformedTargets,
+      reason: malformedTargets.length > 0 ? "Some Metro targets were malformed and skipped." : null
+    };
+  }
+  normalizeTarget(target, index = 0) {
+    const record = asRecord2(target);
+    if (!record || Array.isArray(target)) {
+      return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape(target) } };
+    }
+    const normalized = {
+      id: optionalString2(record.id),
+      title: optionalString2(record.title),
+      description: optionalString2(record.description),
+      appId: optionalString2(record.appId),
+      deviceName: optionalString2(record.deviceName),
+      devtoolsFrontendUrl: optionalString2(record.devtoolsFrontendUrl),
+      webSocketDebuggerUrl: optionalString2(record.webSocketDebuggerUrl),
+      reactNative: record.reactNative && typeof record.reactNative === "object" ? record.reactNative : null,
+      capabilities: {
+        hermesRuntime: typeof record.webSocketDebuggerUrl === "string" && record.webSocketDebuggerUrl.startsWith("ws"),
+        devtoolsFrontend: typeof record.devtoolsFrontendUrl === "string" && record.devtoolsFrontendUrl.length > 0,
+        reactNative: Boolean(record.reactNative)
+      }
+    };
+    if (!normalized.id && !normalized.title && !normalized.webSocketDebuggerUrl && !normalized.devtoolsFrontendUrl) {
+      return {
+        target: null,
+        error: {
+          index,
+          reason: "Target did not include any stable identifying metadata.",
+          shape: responseShape(target)
+        }
+      };
+    }
+    return { target: normalized, error: null };
+  }
+  async symbolicate(stack) {
+    try {
+      const response = await this.fetchLocalLoopback(`${this.baseUrl}/symbolicate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stack }),
+        timeoutMs: 1500
+      });
+      const value = response.ok ? await response.json().catch(() => null) : null;
+      return {
+        available: response.ok,
+        endpoint: "/symbolicate",
+        status: response.status,
+        reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`,
+        value
+      };
+    } catch (error) {
+      return {
+        available: false,
+        endpoint: "/symbolicate",
+        status: null,
+        reason: formatError7(error),
+        value: null
+      };
+    }
+  }
+  async probeSymbolication() {
+    const result = await this.symbolicate([]);
+    return {
+      available: result.available,
+      endpoint: "/symbolicate",
+      status: result.status,
+      reason: result.reason
+    };
+  }
+  async statusPayload() {
+    const statusResult = await this.status();
+    const targetsResult = statusResult.available ? await this.targets() : {
+      available: false,
+      endpoint: "/json/list",
+      targets: [],
+      malformedTargets: [],
+      reason: "Metro is unavailable."
+    };
+    const versionResult = statusResult.available ? await this.version() : { available: false, endpoint: "/json/version", value: null, error: "Metro is unavailable." };
+    const symbolication = statusResult.available ? await this.probeSymbolication() : { available: false, reason: "Metro is unavailable.", endpoint: "/symbolicate" };
+    return {
+      available: statusResult.available,
+      reason: statusResult.available ? null : "Metro is not reachable on the requested port.",
+      metroPort: this.metroPort,
+      status: statusResult.available ? "available" : "unavailable",
+      statusText: statusResult.text,
+      error: statusResult.error ?? null,
+      version: versionResult.value,
+      versionError: versionResult.error ?? null,
+      targetCount: targetsResult.targets.length,
+      targets: targetsResult.targets.map(targetSummary),
+      targetDiscovery: {
+        endpoint: "/json/list",
+        available: targetsResult.available,
+        reason: targetsResult.reason,
+        malformedTargets: targetsResult.malformedTargets
+      },
+      symbolication,
+      limitations: LIMITATIONS
+    };
+  }
+};
+function optionalString2(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function requireString4(value, field) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${field} must be a non-empty string.`);
+  }
+  return value.trim();
+}
+function responseShape(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) return { type: "array", length: value.length };
+  if (typeof value !== "object") return { type: typeof value };
+  const record = value;
+  const shape = { type: "object", keys: Object.keys(record).slice(0, 20) };
+  if (typeof record.type === "string") shape.resultType = record.type;
+  if (record.result && typeof record.result === "object") shape.result = responseShape(record.result);
+  return shape;
+}
+function truncate5(value, limit = MAX_OUTPUT4) {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}
+[truncated ${text.length - limit} characters]`;
+}
+function asRecord2(value) {
+  return value && typeof value === "object" ? value : null;
+}
+async function metroReloadPayload(args, deps = {}) {
+  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
+  const targets = await metroTargets(metroPort, deps);
+  const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
+  if (!webSocketDebuggerUrl) {
+    return { available: false, action: "reload", reason: "No Metro inspector target.", metroPort };
+  }
+  const evaluate = deps.evaluateHermesExpression ?? evaluateHermesExpression;
+  const result = await evaluate(webSocketDebuggerUrl, `(() => {
+    const devSettings = globalThis.NativeModules?.DevSettings || globalThis.__fbBatchedBridgeConfig?.remoteModuleConfig?.DevSettings;
+    if (globalThis.location && typeof globalThis.location.reload === 'function') { globalThis.location.reload(); return { available: true, strategy: 'location.reload' }; }
+    if (devSettings && typeof devSettings.reload === 'function') { devSettings.reload(); return { available: true, strategy: 'DevSettings.reload' }; }
+    return { available: false, reason: 'No runtime reload hook was available.' };
+  })()`, { timeoutMs: 3e3 });
+  const value = result.result?.result?.value;
+  return {
+    ...isPlainObject(value) ? value : { available: false, reason: result.error ?? "Runtime reload did not return a value." },
+    action: "reload",
+    metroPort,
+    target: targetSummary(targets[0])
+  };
+}
+async function metroSymbolicatePayload(args, deps = {}) {
+  const stackFile = requireString4(args.stackFile ?? positionalArg(args._, 0) ?? args.file, "stackFile");
+  const resolvePath2 = deps.resolvePath ?? path3.resolve;
+  const readTextFile = deps.readTextFile ?? fs3.readFile;
+  const resolvedStackFile = resolvePath2(stackFile);
+  const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
+  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
+  const result = await postMetroSymbolicate(metroPort, stack, deps);
+  return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
+}
+function parseComponentStackFrames(stack) {
+  const frames = [];
+  for (const line of String(stack).split("\n")) {
+    const match = /^\s*at\s+(.*?)\s+\((http.*):(\d+):(\d+)\)$/.exec(line);
+    if (!match) continue;
+    frames.push({
+      methodName: match[1]?.trim() || "<anonymous>",
+      file: match[2] ?? "",
+      lineNumber: Number(match[3]),
+      column: Number(match[4])
+    });
+  }
+  return frames;
+}
+async function postMetroSymbolicate(metroPort, stack, deps = {}) {
+  const result = await new MetroInspectorClient(metroPort, deps).symbolicate(stack);
+  if (!result.available) throw new Error(result.reason ?? "Metro symbolication failed.");
+  return result.value;
+}
+function positionalArg(value, index) {
+  return Array.isArray(value) ? value[index] : void 0;
+}
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+async function defaultFetchLocalText(url, options) {
+  const response = await defaultFetchLocalLoopback(url, options);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
+async function defaultFetchLocalJson(url, options) {
+  return JSON.parse(await defaultFetchLocalText(url, options));
+}
+async function defaultFetchLocalLoopback(url, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 1500;
+  const { timeoutMs: _timeoutMs, ...request } = options;
+  const candidates = loopbackUrlCandidates(url);
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return await fetchWithTimeout(candidate, timeoutMs, request);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("Local fetch failed");
+}
+function loopbackUrlCandidates(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [url];
+  }
+  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) return [url];
+  const candidates = [];
+  for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
+    const candidate = new URL(url);
+    candidate.host = `${host}${parsed.port ? `:${parsed.port}` : ""}`;
+    if (!candidates.includes(candidate.toString())) candidates.push(candidate.toString());
+  }
+  return candidates;
+}
+async function fetchWithTimeout(url, timeoutMs, init) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// src/modules/snapshot-evidence/src/main/snapshot-command.ts
 async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
   const stateRoot = args.stateRoot ?? resolveExpoStateRoot2(args);
   const session = await deps.readLatestSession(stateRoot);
@@ -3197,7 +3699,7 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
     available: false,
     source: "plugin-bridge-semantic",
     code: "transport-failure",
-    reason: formatError6(error)
+    reason: formatError8(error)
   }));
   if (semanticBridge.available === true) {
     return persistSemanticSnapshot({ stateRoot, session, filters, semanticBridge }, deps);
@@ -3217,7 +3719,7 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
       available: false,
       reason: "Native accessibility snapshot failed.",
       targetId: session.activeTargetId,
-      stderr: truncate5(result.stderr),
+      stderr: truncate6(result.stderr),
       error: result.error,
       semanticBridge
     };
@@ -3255,16 +3757,174 @@ var defaultSnapshotDependencies = {
   readSelectedTarget: async (stateRoot, session) => {
     return readJson3(join7(sessionDirectory(stateRoot, session.sessionId), "target.json")).catch(() => null);
   },
-  captureSemanticBridge: async (args) => ({
-    available: false,
-    source: "plugin-bridge-semantic",
-    code: "no-runtime-target",
-    reason: "Semantic bridge adapter is not configured.",
-    metroPort: args.metroPort ?? 8081
-  }),
+  captureSemanticBridge,
   findAxeCli: () => commandPath2("axe"),
   describeNativeUi: (axePath, deviceId) => execFile3(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12e3 })
 };
+async function captureSemanticBridge(args, context) {
+  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
+  const targets = await metroTargets(metroPort);
+  const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
+  const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
+  if (!webSocketDebuggerUrl) {
+    return {
+      available: false,
+      source: "plugin-bridge-semantic",
+      code: "no-runtime-target",
+      reason: "No Metro inspector target.",
+      metroPort,
+      target
+    };
+  }
+  const result = await evaluateHermesExpression(webSocketDebuggerUrl, semanticBridgeExpression(context.filters), { timeoutMs: 5e3 });
+  const value = result.result?.result?.value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      available: false,
+      source: "plugin-bridge-semantic",
+      code: "transport-failure",
+      reason: result.error ?? "Hermes runtime did not return semantic bridge data.",
+      metroPort,
+      target,
+      transport: result.diagnostics ?? result.cdp ?? null
+    };
+  }
+  const normalized = normalizeSemanticBridgeSnapshot(value, context.filters);
+  if (!normalized.refs.length) {
+    return {
+      available: false,
+      source: normalized.source,
+      code: "app-bridge-unavailable",
+      reason: normalized.reason ?? "No semantic or React Native bridge data is installed in the app runtime.",
+      metroPort,
+      target,
+      transport: result.diagnostics ?? result.cdp ?? null,
+      raw: value
+    };
+  }
+  return {
+    available: true,
+    source: normalized.source,
+    bridgeVersion: normalized.bridgeVersion,
+    routeHint: normalized.routeHint,
+    refs: normalized.refs,
+    rawCount: normalized.rawCount,
+    metroPort,
+    transport: result.diagnostics ?? result.cdp ?? null,
+    limitations: normalized.limitations
+  };
+}
+function semanticBridgeExpression(filters) {
+  return `(async () => {
+    const filters = ${JSON.stringify(filters)};
+    const callBridge = async (candidate, source) => {
+      if (!candidate) return null;
+      let payload = candidate;
+      if (typeof candidate === 'function') payload = await candidate({ filters });
+      else if (candidate.snapshot && typeof candidate.snapshot === 'function') payload = await candidate.snapshot({ filters });
+      else if (candidate.tree && typeof candidate.tree === 'function') payload = await candidate.tree({ filters });
+      else if (candidate.refs && typeof candidate.refs === 'function') payload = await candidate.refs({ filters });
+      if (!payload) return null;
+      if (Array.isArray(payload)) return { available: true, source, refs: payload };
+      if (typeof payload === 'object') return { available: payload.available !== false, source: payload.source || source, ...payload };
+      return null;
+    };
+    const instrumentation = globalThis.__EXPO_IOS_INSTRUMENTATION__ || {};
+    const probes = [
+      ['plugin-bridge-semantic', globalThis.__EXPO_IOS_SEMANTIC_BRIDGE__],
+      ['app-instrumentation', instrumentation.semantic],
+      ['app-instrumentation', instrumentation.snapshot],
+      ['app-rn-bridge', globalThis.__EXPO_IOS_RN_BRIDGE__],
+    ];
+    const failures = [];
+    for (const [source, candidate] of probes) {
+      try {
+        const payload = await callBridge(candidate, source);
+        if (payload && payload.available !== false) return payload;
+        if (payload && payload.available === false) failures.push({ source, reason: payload.reason || 'Bridge probe returned unavailable.' });
+      } catch (error) {
+        failures.push({ source, reason: error && error.message ? error.message : String(error) });
+      }
+    }
+    return {
+      available: false,
+      source: failures[0] ? failures[0].source : 'app-instrumentation',
+      reason: failures[0] ? failures[0].reason : 'No semantic or React Native bridge global was found.',
+      failures,
+    };
+  })()`;
+}
+function normalizeSemanticBridgeSnapshot(value, filters) {
+  const source2 = typeof value.source === "string" ? value.source : "app-instrumentation";
+  const rawRefs = firstArray(value.refs, value.tree, value.nodes, value.elements, value.items);
+  const refs = rawRefs.map((node) => normalizeSemanticRef(node, filters)).filter((node) => Boolean(node));
+  return {
+    source: source2,
+    bridgeVersion: typeof value.bridgeVersion === "string" ? value.bridgeVersion : typeof value.version === "string" ? value.version : null,
+    routeHint: typeof value.routeHint === "string" ? value.routeHint : typeof value.route === "string" ? value.route : null,
+    refs,
+    rawCount: rawRefs.length,
+    reason: typeof value.reason === "string" ? value.reason : void 0,
+    limitations: Array.isArray(value.limitations) ? value.limitations.map(String) : [
+      "Semantic snapshot data comes from app-side dev instrumentation exposed through Hermes Runtime.evaluate."
+    ]
+  };
+}
+function normalizeSemanticRef(node, filters) {
+  const record = asRecord3(node);
+  if (!record) return null;
+  const role = stringOrNull3(record.role ?? record.accessibilityRole ?? record.type);
+  const actions = actionsFrom(record.actions ?? record.accessibilityActions ?? record.handlers);
+  if (filters.interactiveOnly && actions.length === 0 && !role) return null;
+  return {
+    role,
+    label: stringOrNull3(record.label ?? record.accessibilityLabel ?? record.title ?? record.name),
+    text: stringOrNull3(record.text ?? record.children ?? record.value),
+    placeholder: stringOrNull3(record.placeholder ?? record.placeholderText),
+    testID: stringOrNull3(record.testID ?? record.testId ?? record.testid),
+    nativeID: stringOrNull3(record.nativeID ?? record.nativeId),
+    component: stringOrNull3(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type),
+    source: record.source ?? record.sourceLocation ?? record._source ?? null,
+    box: normalizeBox(record.box ?? record.bounds ?? record.frame ?? record.layout),
+    actions,
+    disabled: typeof record.disabled === "boolean" ? record.disabled : void 0,
+    raw: node
+  };
+}
+function firstArray(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+function actionsFrom(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => typeof item === "string" ? item : stringOrNull3(asRecord3(item)?.name ?? asRecord3(item)?.action)).filter((item) => Boolean(item));
+}
+function normalizeBox(value) {
+  const record = asRecord3(value);
+  if (!record) return null;
+  const x = numberOrNull(record.x ?? record.left);
+  const y = numberOrNull(record.y ?? record.top);
+  const width = numberOrNull(record.width ?? record.w);
+  const height = numberOrNull(record.height ?? record.h);
+  return x == null || y == null || width == null || height == null ? null : { x, y, width, height };
+}
+function clampNumber6(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
+  return Math.min(Math.max(number, min), max);
+}
+function stringOrNull3(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function asRecord3(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
 function commandPath2(command) {
   return new Promise((resolve15) => {
     nodeExecFile3("which", [command], { timeout: 5e3 }, (error, stdout) => {
@@ -3290,26 +3950,26 @@ async function writeJson2(file, value) {
   await writeFile3(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-function formatError6(error) {
+function formatError8(error) {
   if (!error) {
     return "Unknown error";
   }
   const record = error;
   const parts = [record.message ?? String(error)];
   if (record.stdout) parts.push(`stdout:
-${truncate5(record.stdout)}`);
+${truncate6(record.stdout)}`);
   if (record.stderr) parts.push(`stderr:
-${truncate5(record.stderr)}`);
+${truncate6(record.stderr)}`);
   return parts.join("\n\n");
 }
-function truncate5(value, limit = 4e3) {
+function truncate6(value, limit = 4e3) {
   const text = String(value ?? "");
   return text.length <= limit ? text : `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
 
 // src/modules/ref-actions-wait/src/main/common.ts
-function toolJson6(value) {
+function toolJson7(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -3324,13 +3984,13 @@ function unwrapToolJson3(result) {
     return { text };
   }
 }
-function requireString4(value, field) {
+function requireString5(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber5(value, min, max) {
+function clampNumber7(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -3347,8 +4007,8 @@ import { join as join8 } from "node:path";
 
 // src/modules/ref-actions-wait/src/main/ref-actions.ts
 async function planRefAction(args, deps = defaultRefActionDependencies) {
-  const action = requireString4(args.action, "action");
-  const ref = requireString4(args.ref, "ref");
+  const action = requireString5(args.action, "action");
+  const ref = requireString5(args.ref, "ref");
   const cache = await deps.readLatestRefCache(args);
   if (!cache) {
     return { available: false, reason: "No snapshot exists for the current session." };
@@ -3423,11 +4083,11 @@ async function readJson4(path12) {
 
 // src/modules/ref-actions-wait/src/main/find.ts
 async function findCommand(args, deps = defaultRefActionDependencies) {
-  const kind = requireString4(args.kind, "kind").toLowerCase();
-  const value = requireString4(args.value, "value");
+  const kind = requireString5(args.kind, "kind").toLowerCase();
+  const value = requireString5(args.value, "value");
   const cache = await deps.readLatestRefCache(args);
   if (!cache) {
-    return toolJson6({ available: false, reason: "No snapshot exists for the current session." });
+    return toolJson7({ available: false, reason: "No snapshot exists for the current session." });
   }
   const matches = findMatches(cache.refs, kind, value, args.name);
   const payload = {
@@ -3440,10 +4100,10 @@ async function findCommand(args, deps = defaultRefActionDependencies) {
   if (args.action) {
     payload.actionResult = matches[0] ? await finderActionResult({ ...args, ref: matches[0].ref }, deps) : { available: false, reason: "No matching ref for action.", action: args.action };
   }
-  return toolJson6(payload);
+  return toolJson7(payload);
 }
 async function finderActionResult(args, deps) {
-  const action = requireString4(args.action, "action");
+  const action = requireString5(args.action, "action");
   const dryRun = args.dryRun !== false;
   if (!["tap", "inspect", "long-press", "fill", "scroll-into-view", "focus"].includes(action)) {
     return { available: false, reason: `Unsupported finder action: ${action}`, action };
@@ -3452,7 +4112,7 @@ async function finderActionResult(args, deps) {
     return deps.planFinderAction({ ...args, action, dryRun });
   }
   if (action === "tap" || ["long-press", "fill", "scroll-into-view", "focus"].includes(action)) {
-    return unwrapToolJson3(toolJson6(await planUnavailable(action)));
+    return unwrapToolJson3(toolJson7(await planUnavailable(action)));
   }
   if (action === "inspect") {
     return { available: false, reason: "Inspect action is not wired in this module.", ref: args.ref };
@@ -3467,8 +4127,8 @@ function findMatches(refs, kind, value, name) {
     return match ? [match] : [];
   }
   if (kind === "nth") {
-    const index = clampNumber5(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
-    const needle = requireString4(name, "name");
+    const index = clampNumber7(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
+    const needle = requireString5(name, "name");
     const matches = refs.filter(
       (record) => refMatches(record, "source", needle) || refMatches(record, "text", needle) || refMatches(record, "label", needle)
     );
@@ -3502,17 +4162,17 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
   const now4 = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
   const started = now4();
-  const timeoutMs = clampNumber5(args.timeoutMs ?? 5e3, 0, 6e4);
+  const timeoutMs = clampNumber7(args.timeoutMs ?? 5e3, 0, 6e4);
   const intervalMs = Math.min(Math.max(Math.floor(timeoutMs / 10), 25), 250);
   const predicate = waitPredicate(args);
   if (!predicate) {
-    const ms = clampNumber5(args.ms ?? 0, 0, 6e4);
+    const ms = clampNumber7(args.ms ?? 0, 0, 6e4);
     if (ms > 0) await sleep(ms);
-    return toolJson6({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now4() - started });
+    return toolJson7({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now4() - started });
   }
   if (predicate.kind === "metro-ready" || predicate.kind === "app-ready" || predicate.kind === "fn") {
     if (!deps.waitRuntimePredicate) {
-      return toolJson6({
+      return toolJson7({
         matched: false,
         available: false,
         reason: "Runtime wait predicates require a runtime adapter.",
@@ -3522,13 +4182,13 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
       });
     }
     const runtimeResult = await deps.waitRuntimePredicate(predicate, args, { started, timeoutMs, intervalMs });
-    return toolJson6(runtimeResult);
+    return toolJson7(runtimeResult);
   }
   let lastCache = null;
   do {
     lastCache = await deps.readLatestRefCache(args);
     if (!lastCache) {
-      return toolJson6({
+      return toolJson7({
         matched: false,
         reason: "No snapshot exists for the current session.",
         predicate,
@@ -3538,25 +4198,25 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
     const result = evaluateWaitPredicate(lastCache, predicate);
     if (result.final || result.matched) {
       const payload = result.payload?.matched ? { ...result.payload, elapsedMs: now4() - started } : result.payload;
-      return toolJson6(payload);
+      return toolJson7(payload);
     }
     if (now4() - started >= timeoutMs) break;
     await sleep(Math.min(intervalMs, timeoutMs - (now4() - started)));
   } while (now4() - started <= timeoutMs);
-  return toolJson6(timeoutWaitPayload(predicate, lastCache, timeoutMs, now4() - started));
+  return toolJson7(timeoutWaitPayload(predicate, lastCache, timeoutMs, now4() - started));
 }
 function waitPredicate(args = {}) {
   if (args.metroReady === true) return { kind: "metro-ready" };
   if (args.appReady === true) return { kind: "app-ready" };
-  if (args.fn !== void 0) return { kind: "fn", expression: requireString4(args.fn, "fn") };
-  if (args.route !== void 0) return { kind: "route", route: requireString4(args.route, "route") };
+  if (args.fn !== void 0) return { kind: "fn", expression: requireString5(args.fn, "fn") };
+  if (args.route !== void 0) return { kind: "route", route: requireString5(args.route, "route") };
   if (args.noSpinner === true) return { kind: "no-spinner" };
-  if (args.text !== void 0) return { kind: "text", text: requireString4(args.text, "text") };
+  if (args.text !== void 0) return { kind: "text", text: requireString5(args.text, "text") };
   if (args.ref !== void 0 || args.state !== void 0) {
     return {
       kind: "ref-state",
-      ref: requireString4(args.ref, "ref"),
-      state: requireString4(args.state ?? "visible", "state").toLowerCase()
+      ref: requireString5(args.ref, "ref"),
+      state: requireString5(args.state ?? "visible", "state").toLowerCase()
     };
   }
   return null;
@@ -3689,7 +4349,7 @@ var CliUsageError4 = class extends Error {
 };
 
 // src/modules/batch-orchestration/src/main/tool-json.ts
-function toolJson7(value) {
+function toolJson8(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
 }
@@ -3712,12 +4372,12 @@ var SECRET_KEY_PATTERN2 = /token|authorization|cookie|password|secret|apikey|api
 var URL_QUERY_SECRET_PATTERN2 = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
 var FREEFORM_SECRET_PATTERN = /\b(token|authorization|password|secret)=([^\s&]+)/gi;
 var BEARER_SECRET_PATTERN = /(authorization=\[redacted\]\s+)[^\s&]+/gi;
-var MAX_OUTPUT4 = 4e4;
+var MAX_OUTPUT5 = 4e4;
 function batchStepError(error) {
   const exitCode = exitCodeForError3(error);
   return {
     code: errorCodeForExitCode3(exitCode),
-    message: sanitizeErrorMessage3(formatError7(error)),
+    message: sanitizeErrorMessage3(formatError9(error)),
     exitCode
   };
 }
@@ -3737,17 +4397,17 @@ function errorCodeForExitCode3(exitCode) {
   if (exitCode === EXIT_RUNTIME_FAILURE3) return "runtime_failure";
   return "error";
 }
-function formatError7(error) {
+function formatError9(error) {
   if (!error) return "Unknown error";
   const record = error;
   const parts = [record.message ?? String(error)];
   if (record.stdout) parts.push(`stdout:
-${truncate6(record.stdout)}`);
+${truncate7(record.stdout)}`);
   if (record.stderr) parts.push(`stderr:
-${truncate6(record.stderr)}`);
+${truncate7(record.stderr)}`);
   return parts.join("\n\n");
 }
-function truncate6(value, limit = MAX_OUTPUT4) {
+function truncate7(value, limit = MAX_OUTPUT5) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -3844,7 +4504,7 @@ function parseJsonArgument(value, flag) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    throw new Error(`${flag} must be valid JSON: ${formatError7(error)}`);
+    throw new Error(`${flag} must be valid JSON: ${formatError9(error)}`);
   }
 }
 function pickDefined3(object) {
@@ -4066,7 +4726,7 @@ async function batchCommand(args, deps = defaultBatchDependencies) {
       if (bail) break;
     }
   }
-  return toolJson7({
+  return toolJson8({
     ok: failureIndex === null,
     bail,
     failureIndex,
@@ -4166,10 +4826,10 @@ function kebabCase(value) {
 
 // src/modules/app-lifecycle-actions/src/main/index.ts
 import { execFile as nodeExecFile5 } from "node:child_process";
-import * as fs3 from "node:fs/promises";
+import * as fs4 from "node:fs/promises";
 import { homedir } from "node:os";
 import { join as joinPath, resolve as resolvePath } from "node:path";
-var MAX_OUTPUT5 = 4e4;
+var MAX_OUTPUT6 = 4e4;
 var defaultAppLifecycleDependencies = {
   execFile: defaultExecFile,
   resolveIosDevice: defaultResolveIosDevice,
@@ -4182,7 +4842,7 @@ var defaultAppLifecycleDependencies = {
 async function bootSimulator(args, deps = defaultAppLifecycleDependencies) {
   const policy = await deps.policyDecision(args, "boot-simulator", "device");
   if (!policy.allowed) return policyDeniedPayload("boot-simulator", policy);
-  const requestedDevice = optionalString2(args.device) ?? void 0;
+  const requestedDevice = optionalString3(args.device) ?? void 0;
   const device = await deps.resolveIosDevice(requestedDevice, { preferBooted: true });
   const bootResult = await deps.execFile("xcrun", ["simctl", "boot", device.udid], {
     timeout: 6e4,
@@ -4205,8 +4865,8 @@ async function launchApp(args, deps = defaultAppLifecycleDependencies) {
   const policy = await deps.policyDecision(args, "launch-app", "device");
   if (!policy.allowed) return policyDeniedPayload("launch-app", policy);
   if (platform === "android") {
-    const packageName = requireString5(args.packageName ?? args.bundleId, "packageName");
-    const activity = optionalString2(args.activity);
+    const packageName = requireString6(args.packageName ?? args.bundleId, "packageName");
+    const activity = optionalString3(args.activity);
     const commandArgs3 = activity ? ["shell", "am", "start", "-n", `${packageName}/${activity}`] : ["shell", "monkey", "-p", packageName, "1"];
     const result2 = await deps.execFile("adb", androidDeviceArgs(args.device, commandArgs3), {
       timeout: 3e4,
@@ -4219,8 +4879,8 @@ async function launchApp(args, deps = defaultAppLifecycleDependencies) {
       stderr: truncateSubprocessOutput(result2.stderr)
     };
   }
-  const bundleId = requireString5(args.bundleId ?? args.packageName, "bundleId");
-  const device = await deps.resolveIosDevice(optionalString2(args.device) ?? void 0, { preferBooted: true });
+  const bundleId = requireString6(args.bundleId ?? args.packageName, "bundleId");
+  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
   const startedAt = deps.now();
   const result = await deps.execFile("xcrun", ["simctl", "launch", device.udid, bundleId], {
     timeout: 3e4,
@@ -4270,7 +4930,7 @@ async function terminateApp(args, deps = defaultAppLifecycleDependencies) {
       error: result2.error ?? null
     };
   }
-  const device = await deps.resolveIosDevice(optionalString2(args.device) ?? void 0, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
   const result = await deps.execFile("xcrun", ["simctl", "terminate", device.udid, bundleId], {
     timeout: 2e4,
     rejectOnError: false
@@ -4318,10 +4978,10 @@ async function attachIosCrashEvidence(payload, options, deps) {
 }
 async function iosCrashEvidence(args, deps = defaultAppLifecycleDependencies) {
   const sinceMs = finiteNumber(args.sinceMs ?? deps.now());
-  const delay = clampNumber6(args.waitMs ?? 0, 0, 3e4);
+  const delay = clampNumber8(args.waitMs ?? 0, 0, 3e4);
   if (delay > 0) await deps.wait(delay);
-  const bundleId = optionalString2(args.bundleId);
-  const processName = optionalString2(args.processName);
+  const bundleId = optionalString3(args.bundleId);
+  const processName = optionalString3(args.processName);
   const crashReports = await matchingIosCrashReports({ bundleId, processName, sinceMs }, deps);
   return {
     crashCheck: {
@@ -4336,8 +4996,8 @@ async function iosCrashEvidence(args, deps = defaultAppLifecycleDependencies) {
   };
 }
 async function matchingIosCrashReports(args, deps = defaultAppLifecycleDependencies) {
-  const bundleId = optionalString2(args.bundleId);
-  const processName = optionalString2(args.processName);
+  const bundleId = optionalString3(args.bundleId);
+  const processName = optionalString3(args.processName);
   if (!bundleId && !processName) return [];
   const reports = await deps.listDiagnosticReports();
   const sinceMs = finiteNumber(args.sinceMs ?? 0);
@@ -4366,7 +5026,7 @@ async function matchingIosCrashReports(args, deps = defaultAppLifecycleDependenc
 }
 async function installApp(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
-  const appPath = resolvePath(requireString5(args.appPath, "appPath"));
+  const appPath = resolvePath(requireString6(args.appPath, "appPath"));
   const policy = await deps.policyDecision(args, "install-app", "device");
   if (!policy.allowed) return policyDeniedPayload("install-app", policy);
   if (args.dryRun === true) {
@@ -4388,7 +5048,7 @@ async function installApp(args, deps = defaultAppLifecycleDependencies) {
       policy
     };
   }
-  const device = await deps.resolveIosDevice(optionalString2(args.device) ?? void 0, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
   const result = await deps.execFile("xcrun", ["simctl", "install", device.udid, appPath], {
     timeout: 12e4,
     rejectOnError: false
@@ -4429,7 +5089,7 @@ async function uninstallApp(args, deps = defaultAppLifecycleDependencies) {
       policy
     };
   }
-  const device = await deps.resolveIosDevice(optionalString2(args.device) ?? void 0, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
   const result = await deps.execFile("xcrun", ["simctl", "uninstall", device.udid, bundleId], {
     timeout: 6e4,
     rejectOnError: false
@@ -4447,19 +5107,19 @@ async function uninstallApp(args, deps = defaultAppLifecycleDependencies) {
   };
 }
 async function resolveBundleId(args, deps = defaultAppLifecycleDependencies) {
-  const explicit = optionalString2(args.bundleId ?? args.packageName);
+  const explicit = optionalString3(args.bundleId ?? args.packageName);
   if (explicit) return explicit;
-  const cwd = optionalString2(args.cwd) ?? ".";
+  const cwd = optionalString3(args.cwd) ?? ".";
   const summary = await deps.runtimeSummary(cwd).catch(() => null);
-  const inferred = optionalString2(summary?.appConfig?.iosBundleIdentifier ?? summary?.appConfig?.androidPackage);
+  const inferred = optionalString3(summary?.appConfig?.iosBundleIdentifier ?? summary?.appConfig?.androidPackage);
   if (!inferred) throw new Error("bundleId must be provided or inferable from Expo app config.");
   return inferred;
 }
 async function collectAppLogs(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   if (platform === "android") {
-    const device2 = optionalString2(args.device);
-    const lines = String(clampNumber6(args.lines ?? 500, 1, 5e3));
+    const device2 = optionalString3(args.device);
+    const lines = String(clampNumber8(args.lines ?? 500, 1, 5e3));
     const result2 = await deps.execFile("adb", androidDeviceArgs(device2, ["logcat", "-d", "-t", lines]), {
       timeout: 3e4,
       maxBuffer: 4 * 1024 * 1024,
@@ -4472,10 +5132,10 @@ async function collectAppLogs(args, deps = defaultAppLifecycleDependencies) {
       stderr: truncateSubprocessOutput(result2.stderr)
     };
   }
-  const device = await deps.resolveIosDevice(optionalString2(args.device) ?? void 0, { preferBooted: true });
-  const last = optionalString2(args.last) ?? "2m";
+  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
+  const last = optionalString3(args.last) ?? "2m";
   if (!/^\d+[smhd]$/.test(last)) throw new Error("last must look like 30s, 2m, 1h, or 1d.");
-  const predicate = optionalString2(args.predicate) ?? iosLogPredicate(args);
+  const predicate = optionalString3(args.predicate) ?? iosLogPredicate(args);
   const commandArgs3 = ["simctl", "spawn", device.udid, "log", "show", "--style", "compact", "--last", last];
   if (predicate) commandArgs3.push("--predicate", predicate);
   const result = await deps.execFile("xcrun", commandArgs3, {
@@ -4493,9 +5153,9 @@ async function collectAppLogs(args, deps = defaultAppLifecycleDependencies) {
   };
 }
 function iosLogPredicate(args) {
-  const processName = optionalString2(args.processName);
+  const processName = optionalString3(args.processName);
   if (processName) return `process == "${escapePredicateValue(processName)}"`;
-  const bundleId = optionalString2(args.bundleId);
+  const bundleId = optionalString3(args.bundleId);
   const inferredProcess = bundleId?.split(".").filter(Boolean).at(-1);
   return inferredProcess ? `process CONTAINS "${escapePredicateValue(inferredProcess)}"` : null;
 }
@@ -4503,7 +5163,7 @@ function defaultExecFile(file, args, options = {}) {
   return new Promise((resolve15, reject) => {
     nodeExecFile5(file, args, {
       timeout: options.timeout,
-      maxBuffer: options.maxBuffer ?? MAX_OUTPUT5
+      maxBuffer: options.maxBuffer ?? MAX_OUTPUT6
     }, (error, stdout, stderr) => {
       if (error && options.rejectOnError !== false) {
         Object.assign(error, { stdout, stderr });
@@ -4529,7 +5189,7 @@ async function defaultResolveIosDevice(requested) {
   const parsed = JSON.parse(String(stdout ?? "{}"));
   const devices = Object.entries(parsed.devices ?? {}).flatMap(
     ([runtime2, runtimeDevices]) => (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
-      const record = isRecord4(device) ? device : {};
+      const record = isRecord5(device) ? device : {};
       return {
         udid: String(record.udid ?? ""),
         name: String(record.name ?? ""),
@@ -4554,7 +5214,7 @@ async function defaultResolveIosDevice(requested) {
   throw new Error("No available iOS simulators found.");
 }
 async function defaultPolicyDecision(args, action, sideEffect) {
-  const policyPath = optionalString2(args.actionPolicy);
+  const policyPath = optionalString3(args.actionPolicy);
   if (!policyPath) {
     return {
       checked: true,
@@ -4565,7 +5225,7 @@ async function defaultPolicyDecision(args, action, sideEffect) {
       reason: "No action policy allowed this state-changing operation."
     };
   }
-  const policy = JSON.parse(await fs3.readFile(resolvePath(policyPath), "utf8"));
+  const policy = JSON.parse(await fs4.readFile(resolvePath(policyPath), "utf8"));
   const allowed = Array.isArray(policy.allow) && policy.allow.includes(action) || policy.actions?.[action] === true || policy.actions?.[action] === "allow";
   return {
     checked: true,
@@ -4578,12 +5238,12 @@ async function defaultPolicyDecision(args, action, sideEffect) {
 }
 async function defaultRuntimeSummary(cwd) {
   const appJsonPath = resolvePath(cwd, "app.json");
-  const text = await fs3.readFile(appJsonPath, "utf8").catch(() => null);
+  const text = await fs4.readFile(appJsonPath, "utf8").catch(() => null);
   if (!text) return null;
   const parsed = JSON.parse(text);
-  const expo = isRecord4(parsed.expo) ? parsed.expo : parsed;
-  const ios = isRecord4(expo.ios) ? expo.ios : {};
-  const android = isRecord4(expo.android) ? expo.android : {};
+  const expo = isRecord5(parsed.expo) ? parsed.expo : parsed;
+  const ios = isRecord5(expo.ios) ? expo.ios : {};
+  const android = isRecord5(expo.android) ? expo.android : {};
   return {
     appConfig: {
       iosBundleIdentifier: stringFrom(ios.bundleIdentifier) ?? stringFrom(expo.bundleIdentifier),
@@ -4593,39 +5253,39 @@ async function defaultRuntimeSummary(cwd) {
 }
 async function defaultListDiagnosticReports() {
   const directory = joinPath(homedir(), "Library", "Logs", "DiagnosticReports");
-  const entries = await fs3.readdir(directory, { withFileTypes: true }).catch(() => []);
+  const entries = await fs4.readdir(directory, { withFileTypes: true }).catch(() => []);
   const reports = await Promise.all(entries.filter((entry) => entry.isFile() && /\.(ips|crash)$/.test(entry.name)).map(async (entry) => {
     const file = joinPath(directory, entry.name);
-    const stat8 = await fs3.stat(file);
+    const stat8 = await fs4.stat(file);
     return {
       name: entry.name,
       path: file,
       isFile: true,
       mtimeMs: stat8.mtimeMs,
       mtimeIso: stat8.mtime.toISOString(),
-      content: await fs3.readFile(file, "utf8").catch(() => "")
+      content: await fs4.readFile(file, "utf8").catch(() => "")
     };
   }));
   return reports;
 }
-function truncateSubprocessOutput(value, limit = MAX_OUTPUT5) {
+function truncateSubprocessOutput(value, limit = MAX_OUTPUT6) {
   const text = value == null ? "" : String(value);
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
 function androidDeviceArgs(device, args) {
-  const requested = optionalString2(device);
+  const requested = optionalString3(device);
   return requested ? ["-s", requested, ...args] : args;
 }
-function clampNumber6(value, min, max) {
+function clampNumber8(value, min, max) {
   const number = finiteNumber(value);
   return Math.min(max, Math.max(min, number));
 }
 function escapePredicateValue(value) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber(value) {
@@ -4633,7 +5293,7 @@ function finiteNumber(value) {
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return number;
 }
-function optionalString2(value) {
+function optionalString3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 function platformArg(value) {
@@ -4657,13 +5317,13 @@ function parseCrashReportMetadata(content) {
   if (!firstLine?.startsWith("{")) return null;
   try {
     const parsed = JSON.parse(firstLine);
-    return isRecord4(parsed) ? parsed : null;
+    return isRecord5(parsed) ? parsed : null;
   } catch {
     return null;
   }
 }
-function requireString5(value, field) {
-  const text = optionalString2(value);
+function requireString6(value, field) {
+  const text = optionalString3(value);
   if (!text) throw new Error(`${field} must be a non-empty string.`);
   return text;
 }
@@ -4673,10 +5333,10 @@ function stringFrom(value) {
 
 // src/modules/route-url-actions/src/main/index.ts
 import { execFile as nodeExecFile6 } from "node:child_process";
-import * as fs4 from "node:fs/promises";
-import path3 from "node:path";
-var MAX_OUTPUT6 = 4e4;
-function requireString6(value, field) {
+import * as fs5 from "node:fs/promises";
+import path4 from "node:path";
+var MAX_OUTPUT7 = 4e4;
+function requireString7(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -4697,16 +5357,16 @@ async function buildExpoRouteUrl(cwd, args = {}) {
   return `${scheme}:///${route}${query ? `?${query}` : ""}`;
 }
 async function inferExpoScheme(cwd) {
-  const appJsonPath = path3.join(cwd, "app.json");
+  const appJsonPath = path4.join(cwd, "app.json");
   if (await pathExists2(appJsonPath)) {
     const appJson = await readJsonFile3(appJsonPath);
-    const expo = isRecord5(appJson.expo) ? appJson.expo : {};
+    const expo = isRecord6(appJson.expo) ? appJson.expo : {};
     const scheme = expo.scheme ?? appJson.scheme;
     if (typeof scheme === "string" && scheme.trim()) return scheme.trim();
   }
   const configPath = await firstExisting2(cwd, ["app.config.ts", "app.config.js", "app.config.mjs", "app.config.cjs"]);
   if (!configPath) return null;
-  const text = await fs4.readFile(configPath, "utf8");
+  const text = await fs5.readFile(configPath, "utf8");
   const match = /\bscheme\s*:\s*["'`]([^"'`]+)["'`]/.exec(text);
   return match?.[1] ?? null;
 }
@@ -4755,37 +5415,37 @@ async function resolveIosDevice(requested, options = {}, deps = {}) {
 }
 async function openUrl(args, deps = {}) {
   const platform = args.platform ?? "ios";
-  const url = requireString6(args.url, "url");
+  const url = requireString7(args.url, "url");
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
   const execFile11 = deps.execFile ?? defaultExecFile2;
   if (platform === "android") {
     const adbArgs = androidDeviceArgs2(args.device, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
     const result2 = await execFile11("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
-    return toolJson8(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate7(result2.stdout), stderr: truncate7(result2.stderr) }));
+    return toolJson9(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate8(result2.stdout), stderr: truncate8(result2.stderr) }));
   }
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const result = await execFile11("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
-  return toolJson8(redactToolPayload({ platform, device, stdout: truncate7(result.stdout), stderr: truncate7(result.stderr) }));
+  return toolJson9(redactToolPayload({ platform, device, stdout: truncate8(result.stdout), stderr: truncate8(result.stderr) }));
 }
 async function openExpoRoute(args, deps = {}) {
   const cwd = await normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
-  const url = args.url ? requireString6(args.url, "url") : await buildExpoRouteUrl(cwd, args);
+  const url = args.url ? requireString7(args.url, "url") : await buildExpoRouteUrl(cwd, args);
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
   const execFile11 = deps.execFile ?? defaultExecFile2;
   const result = await execFile11("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
-  return toolJson8(redactToolPayload({
+  return toolJson9(redactToolPayload({
     platform: "ios",
     device,
     url: redactUrlAuthCookie(url),
-    stdout: truncate7(result.stdout),
-    stderr: truncate7(result.stderr),
+    stdout: truncate8(result.stdout),
+    stderr: truncate8(result.stderr),
     error: normalizeExecError(result.error)
   }));
 }
@@ -4794,42 +5454,42 @@ async function normalizeProjectCwd(cwd, options = {}) {
   if (options.allowMissingPackageJson) return resolved;
   const packageJson = await findUp2(resolved, "package.json");
   if (!packageJson) throw new Error(`No package.json found from ${resolved}. Pass cwd for an Expo project.`);
-  return path3.dirname(packageJson);
+  return path4.dirname(packageJson);
 }
 async function normalizeCwd3(cwd) {
-  const resolved = path3.resolve(cwd ?? ".");
-  const stat8 = await fs4.stat(resolved).catch(() => null);
+  const resolved = path4.resolve(cwd ?? ".");
+  const stat8 = await fs5.stat(resolved).catch(() => null);
   if (!stat8?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp2(startDir, filename) {
-  let current = path3.resolve(startDir);
+  let current = path4.resolve(startDir);
   while (true) {
-    const candidate = path3.join(current, filename);
+    const candidate = path4.join(current, filename);
     if (await pathExists2(candidate)) return candidate;
-    const parent = path3.dirname(current);
+    const parent = path4.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
 async function firstExisting2(root, names) {
   for (const name of names) {
-    const candidate = path3.join(root, name);
+    const candidate = path4.join(root, name);
     if (await pathExists2(candidate)) return candidate;
   }
   return null;
 }
 async function pathExists2(file) {
-  return fs4.access(file).then(() => true, () => false);
+  return fs5.access(file).then(() => true, () => false);
 }
 async function readJsonFile3(file) {
-  return JSON.parse(await fs4.readFile(file, "utf8"));
+  return JSON.parse(await fs5.readFile(file, "utf8"));
 }
-function toolJson8(value) {
+function toolJson9(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-function truncate7(value, limit = MAX_OUTPUT6) {
+function truncate8(value, limit = MAX_OUTPUT7) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -4841,7 +5501,7 @@ function redactToolPayload(value) {
 function redactUnknown(value) {
   if (typeof value === "string") return redactSensitiveUrlQuery(value);
   if (Array.isArray(value)) return value.map((item) => redactUnknown(item));
-  if (isRecord5(value)) {
+  if (isRecord6(value)) {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactUnknown(item)]));
   }
   return value;
@@ -4863,11 +5523,11 @@ function redactSensitiveUrlQuery(value) {
 function isSensitiveQueryKey(key) {
   return /cookie|token|authorization|password|secret/i.test(key);
 }
-function isRecord5(value) {
+function isRecord6(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve15, reject) => {
-  const { timeout = 6e4, maxBuffer = MAX_OUTPUT6, rejectOnError = true } = options;
+  const { timeout = 6e4, maxBuffer = MAX_OUTPUT7, rejectOnError = true } = options;
   nodeExecFile6(file, [...args], { timeout: Number(timeout), maxBuffer: Number(maxBuffer) }, (error, stdout, stderr) => {
     if (error && rejectOnError) {
       Object.assign(error, { stdout, stderr });
@@ -4888,463 +5548,16 @@ import * as fs7 from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { basename as basename4, join as joinPath2 } from "node:path";
 
-// src/modules/metro-probes/src/main/index.ts
-import { promises as fs5 } from "node:fs";
-import path4 from "node:path";
-var LIMITATIONS = [
-  "This command probes existing Metro HTTP endpoints only and never starts Metro implicitly.",
-  "Connected targets can be stale when multiple apps or devices are attached."
-];
-var MAX_OUTPUT7 = 16384;
-function toolJson9(value) {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
-}
-function clampNumber7(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    throw new Error(`Expected a finite number, got ${String(value)}.`);
-  }
-  return Math.min(Math.max(number, min), max);
-}
-function formatError8(error) {
-  if (!error) return "Unknown error";
-  const record = asRecord2(error);
-  const message = record ? record.message : void 0;
-  const parts = [message == null ? String(error) : String(message)];
-  if (record?.stdout) parts.push(`stdout:
-${truncate8(record.stdout)}`);
-  if (record?.stderr) parts.push(`stderr:
-${truncate8(record.stderr)}`);
-  return parts.join("\n\n");
-}
-function targetSummary(target) {
-  if (!target) return null;
-  return {
-    id: target.id ?? null,
-    title: target.title ?? null,
-    description: target.description ?? null,
-    appId: target.appId ?? null,
-    deviceName: target.deviceName ?? null,
-    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
-    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
-    reactNative: target.reactNative ?? null,
-    capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
-      reactNative: Boolean(target.reactNative)
-    }
-  };
-}
-async function metroCommand(args = {}, deps = {}) {
-  const action = requireString7(args.action ?? "status", "action");
-  if (action === "reload") return toolJson9(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
-  if (action === "symbolicate") {
-    return toolJson9(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
-  }
-  if (action !== "status") throw new Error(`Unknown metro action: ${action}`);
-  return toolJson9(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
-}
-async function metroStatusPayload(args = {}, deps = {}) {
-  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
-  return new MetroInspectorClient(metroPort, deps).statusPayload();
-}
-async function metroTargets(metroPort, deps = {}) {
-  const result = await new MetroInspectorClient(metroPort, deps).targets();
-  return result.targets;
-}
-var MetroInspectorClient = class {
-  constructor(metroPort, deps = {}) {
-    this.metroPort = metroPort;
-    this.baseUrl = `http://127.0.0.1:${metroPort}`;
-    this.fetchLocalText = deps.fetchLocalText ?? defaultFetchLocalText;
-    this.fetchLocalJson = deps.fetchLocalJson ?? defaultFetchLocalJson;
-    this.fetchLocalLoopback = deps.fetchLocalLoopback ?? defaultFetchLocalLoopback;
-  }
-  baseUrl;
-  fetchLocalText;
-  fetchLocalJson;
-  fetchLocalLoopback;
-  async status() {
-    try {
-      const text = await this.fetchLocalText(`${this.baseUrl}/status`, { timeoutMs: 1500 });
-      return { available: true, endpoint: "/status", text, error: null };
-    } catch (error) {
-      return { available: false, endpoint: "/status", text: null, error: formatError8(error) };
-    }
-  }
-  async version() {
-    try {
-      const value = await this.fetchLocalJson(`${this.baseUrl}/json/version`, { timeoutMs: 1500 });
-      return { available: true, endpoint: "/json/version", value, error: null };
-    } catch (error) {
-      return { available: false, endpoint: "/json/version", value: null, error: formatError8(error) };
-    }
-  }
-  async targets() {
-    let raw;
-    try {
-      raw = await this.fetchLocalJson(`${this.baseUrl}/json/list`, { timeoutMs: 2500 });
-    } catch (error) {
-      return {
-        available: false,
-        endpoint: "/json/list",
-        targets: [],
-        malformedTargets: [],
-        reason: formatError8(error)
-      };
-    }
-    if (!Array.isArray(raw)) {
-      return {
-        available: false,
-        endpoint: "/json/list",
-        targets: [],
-        malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) }],
-        reason: "Metro target list was malformed."
-      };
-    }
-    const targets = [];
-    const malformedTargets = [];
-    raw.forEach((target, index) => {
-      const normalized = this.normalizeTarget(target, index);
-      if (normalized.target) targets.push(normalized.target);
-      if (normalized.error) malformedTargets.push(normalized.error);
-    });
-    return {
-      available: true,
-      endpoint: "/json/list",
-      targets,
-      malformedTargets,
-      reason: malformedTargets.length > 0 ? "Some Metro targets were malformed and skipped." : null
-    };
-  }
-  normalizeTarget(target, index = 0) {
-    const record = asRecord2(target);
-    if (!record || Array.isArray(target)) {
-      return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape(target) } };
-    }
-    const normalized = {
-      id: optionalString3(record.id),
-      title: optionalString3(record.title),
-      description: optionalString3(record.description),
-      appId: optionalString3(record.appId),
-      deviceName: optionalString3(record.deviceName),
-      devtoolsFrontendUrl: optionalString3(record.devtoolsFrontendUrl),
-      webSocketDebuggerUrl: optionalString3(record.webSocketDebuggerUrl),
-      reactNative: record.reactNative && typeof record.reactNative === "object" ? record.reactNative : null,
-      capabilities: {
-        hermesRuntime: typeof record.webSocketDebuggerUrl === "string" && record.webSocketDebuggerUrl.startsWith("ws"),
-        devtoolsFrontend: typeof record.devtoolsFrontendUrl === "string" && record.devtoolsFrontendUrl.length > 0,
-        reactNative: Boolean(record.reactNative)
-      }
-    };
-    if (!normalized.id && !normalized.title && !normalized.webSocketDebuggerUrl && !normalized.devtoolsFrontendUrl) {
-      return {
-        target: null,
-        error: {
-          index,
-          reason: "Target did not include any stable identifying metadata.",
-          shape: responseShape(target)
-        }
-      };
-    }
-    return { target: normalized, error: null };
-  }
-  async symbolicate(stack) {
-    try {
-      const response = await this.fetchLocalLoopback(`${this.baseUrl}/symbolicate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stack }),
-        timeoutMs: 1500
-      });
-      const value = response.ok ? await response.json().catch(() => null) : null;
-      return {
-        available: response.ok,
-        endpoint: "/symbolicate",
-        status: response.status,
-        reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`,
-        value
-      };
-    } catch (error) {
-      return {
-        available: false,
-        endpoint: "/symbolicate",
-        status: null,
-        reason: formatError8(error),
-        value: null
-      };
-    }
-  }
-  async probeSymbolication() {
-    const result = await this.symbolicate([]);
-    return {
-      available: result.available,
-      endpoint: "/symbolicate",
-      status: result.status,
-      reason: result.reason
-    };
-  }
-  async statusPayload() {
-    const statusResult = await this.status();
-    const targetsResult = statusResult.available ? await this.targets() : {
-      available: false,
-      endpoint: "/json/list",
-      targets: [],
-      malformedTargets: [],
-      reason: "Metro is unavailable."
-    };
-    const versionResult = statusResult.available ? await this.version() : { available: false, endpoint: "/json/version", value: null, error: "Metro is unavailable." };
-    const symbolication = statusResult.available ? await this.probeSymbolication() : { available: false, reason: "Metro is unavailable.", endpoint: "/symbolicate" };
-    return {
-      available: statusResult.available,
-      reason: statusResult.available ? null : "Metro is not reachable on the requested port.",
-      metroPort: this.metroPort,
-      status: statusResult.available ? "available" : "unavailable",
-      statusText: statusResult.text,
-      error: statusResult.error ?? null,
-      version: versionResult.value,
-      versionError: versionResult.error ?? null,
-      targetCount: targetsResult.targets.length,
-      targets: targetsResult.targets.map(targetSummary),
-      targetDiscovery: {
-        endpoint: "/json/list",
-        available: targetsResult.available,
-        reason: targetsResult.reason,
-        malformedTargets: targetsResult.malformedTargets
-      },
-      symbolication,
-      limitations: LIMITATIONS
-    };
-  }
-};
-function optionalString3(value) {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-function requireString7(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string.`);
-  }
-  return value.trim();
-}
-function responseShape(value) {
-  if (value == null) return null;
-  if (Array.isArray(value)) return { type: "array", length: value.length };
-  if (typeof value !== "object") return { type: typeof value };
-  const record = value;
-  const shape = { type: "object", keys: Object.keys(record).slice(0, 20) };
-  if (typeof record.type === "string") shape.resultType = record.type;
-  if (record.result && typeof record.result === "object") shape.result = responseShape(record.result);
-  return shape;
-}
-function truncate8(value, limit = MAX_OUTPUT7) {
-  const text = String(value ?? "");
-  if (text.length <= limit) return text;
-  return `${text.slice(0, limit)}
-[truncated ${text.length - limit} characters]`;
-}
-function asRecord2(value) {
-  return value && typeof value === "object" ? value : null;
-}
-async function metroReloadPayload(args, deps = {}) {
-  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
-  const targets = await metroTargets(metroPort, deps);
-  const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
-  if (!webSocketDebuggerUrl) {
-    return { available: false, action: "reload", reason: "No Metro inspector target.", metroPort };
-  }
-  const evaluate = deps.evaluateHermesExpression ?? defaultEvaluateHermesExpression;
-  const result = await evaluate(webSocketDebuggerUrl, `(() => {
-    const devSettings = globalThis.NativeModules?.DevSettings || globalThis.__fbBatchedBridgeConfig?.remoteModuleConfig?.DevSettings;
-    if (globalThis.location && typeof globalThis.location.reload === 'function') { globalThis.location.reload(); return { available: true, strategy: 'location.reload' }; }
-    if (devSettings && typeof devSettings.reload === 'function') { devSettings.reload(); return { available: true, strategy: 'DevSettings.reload' }; }
-    return { available: false, reason: 'No runtime reload hook was available.' };
-  })()`, { timeoutMs: 3e3 });
-  const value = result.result?.result?.value;
-  return {
-    ...isPlainObject(value) ? value : { available: false, reason: result.error ?? "Runtime reload did not return a value." },
-    action: "reload",
-    metroPort,
-    target: targetSummary(targets[0])
-  };
-}
-async function metroSymbolicatePayload(args, deps = {}) {
-  const stackFile = requireString7(args.stackFile ?? positionalArg(args._, 0) ?? args.file, "stackFile");
-  const resolvePath2 = deps.resolvePath ?? path4.resolve;
-  const readTextFile = deps.readTextFile ?? fs5.readFile;
-  const resolvedStackFile = resolvePath2(stackFile);
-  const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
-  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
-  const result = await postMetroSymbolicate(metroPort, stack, deps);
-  return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
-}
-function parseComponentStackFrames(stack) {
-  const frames = [];
-  for (const line of String(stack).split("\n")) {
-    const match = /^\s*at\s+(.*?)\s+\((http.*):(\d+):(\d+)\)$/.exec(line);
-    if (!match) continue;
-    frames.push({
-      methodName: match[1]?.trim() || "<anonymous>",
-      file: match[2] ?? "",
-      lineNumber: Number(match[3]),
-      column: Number(match[4])
-    });
-  }
-  return frames;
-}
-async function postMetroSymbolicate(metroPort, stack, deps = {}) {
-  const result = await new MetroInspectorClient(metroPort, deps).symbolicate(stack);
-  if (!result.available) throw new Error(result.reason ?? "Metro symbolication failed.");
-  return result.value;
-}
-function positionalArg(value, index) {
-  return Array.isArray(value) ? value[index] : void 0;
-}
-function isPlainObject(value) {
-  return value != null && typeof value === "object" && !Array.isArray(value);
-}
-async function defaultEvaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs = 3e3 } = {}) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  const client = new HermesCdpClient(webSocketDebuggerUrl);
-  try {
-    await client.connect({ timeoutMs: 2500 });
-    const enable = await client.call("Runtime.enable", {}, { timeoutMs: 1500 });
-    if (enable.error) return { error: enable.error };
-    return await client.call("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true
-    }, { timeoutMs });
-  } catch (error) {
-    return { error: formatError8(error) };
-  } finally {
-    client.close();
-  }
-}
-var HermesCdpClient = class {
-  constructor(webSocketDebuggerUrl) {
-    this.webSocketDebuggerUrl = webSocketDebuggerUrl;
-  }
-  ws = null;
-  nextId = 1;
-  pending = /* @__PURE__ */ new Map();
-  connect({ timeoutMs }) {
-    return new Promise((resolve15, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Timed out waiting for Hermes websocket connection.")), timeoutMs);
-      const ws = new WebSocket(this.webSocketDebuggerUrl);
-      this.ws = ws;
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        resolve15();
-      };
-      ws.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error("Hermes websocket error."));
-      };
-      ws.onmessage = (event) => this.handleMessage(event);
-    });
-  }
-  call(method, params, { timeoutMs }) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.resolve({ error: "Hermes websocket is not connected." });
-    }
-    const id = this.nextId;
-    this.nextId += 1;
-    return new Promise((resolve15) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        resolve15({ error: `Timed out waiting for ${method}.` });
-      }, timeoutMs);
-      this.pending.set(id, { resolve: resolve15, timeout });
-      this.ws?.send(JSON.stringify({ id, method, params }));
-    });
-  }
-  close() {
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timeout);
-      pending.resolve({ error: "Hermes websocket closed." });
-    }
-    this.pending.clear();
-    try {
-      this.ws?.close();
-    } catch {
-    }
-  }
-  handleMessage(event) {
-    let payload;
-    try {
-      payload = JSON.parse(String(event.data));
-    } catch {
-      return;
-    }
-    const record = asRecord2(payload);
-    if (!record || typeof record.id !== "number") return;
-    const pending = this.pending.get(record.id);
-    if (!pending) return;
-    clearTimeout(pending.timeout);
-    this.pending.delete(record.id);
-    pending.resolve(record.error ? { error: formatError8(record.error) } : record);
-  }
-};
-async function defaultFetchLocalText(url, options) {
-  const response = await defaultFetchLocalLoopback(url, options);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.text();
-}
-async function defaultFetchLocalJson(url, options) {
-  return JSON.parse(await defaultFetchLocalText(url, options));
-}
-async function defaultFetchLocalLoopback(url, options = {}) {
-  const timeoutMs = options.timeoutMs ?? 1500;
-  const { timeoutMs: _timeoutMs, ...request } = options;
-  const candidates = loopbackUrlCandidates(url);
-  let lastError = null;
-  for (const candidate of candidates) {
-    try {
-      return await fetchWithTimeout(candidate, timeoutMs, request);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError ?? new Error("Local fetch failed");
-}
-function loopbackUrlCandidates(url) {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return [url];
-  }
-  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) return [url];
-  const candidates = [];
-  for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
-    const candidate = new URL(url);
-    candidate.host = `${host}${parsed.port ? `:${parsed.port}` : ""}`;
-    if (!candidates.includes(candidate.toString())) candidates.push(candidate.toString());
-  }
-  return candidates;
-}
-async function fetchWithTimeout(url, timeoutMs, init) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 // src/modules/interaction-trace-expression/src/main/index.ts
 async function traceInteraction(args = {}, deps = defaultTraceInteractionDependencies) {
-  const metroPort = clampNumber8(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber9(args.metroPort ?? 8081, 1, 65535);
   const action = args.action;
-  const maxEvents = clampNumber8(args.maxEvents ?? 300, 1, 2e3);
+  const maxEvents = clampNumber9(args.maxEvents ?? 300, 1, 2e3);
   const includeEvents = args.includeEvents === true;
   const componentFilter = requireOptionalString3(args.componentFilter);
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
-  const webSocketDebuggerUrl = asString(asRecord3(targetList[0])?.webSocketDebuggerUrl);
+  const webSocketDebuggerUrl = asString(asRecord4(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
     return toolJson10({
       available: false,
@@ -5364,8 +5577,8 @@ async function traceInteraction(args = {}, deps = defaultTraceInteractionDepende
     metroPort,
     target: targetSummary2(targetList[0]),
     trace: getPath(result, ["result", "result", "value"]) ?? null,
-    protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord3(result)?.error ?? null,
-    cdp: asRecord3(result)?.diagnostics ?? asRecord3(result)?.cdp ?? null
+    protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord4(result)?.error ?? null,
+    cdp: asRecord4(result)?.diagnostics ?? asRecord4(result)?.cdp ?? null
   });
 }
 var defaultTraceInteractionDependencies = {
@@ -5813,7 +6026,7 @@ function interactionTraceExpression({ action, maxEvents, componentFilter, includ
   })()`;
 }
 function targetSummary2(target) {
-  const record = asRecord3(target);
+  const record = asRecord4(target);
   if (!record) return null;
   return {
     title: record.title,
@@ -5825,7 +6038,7 @@ function targetSummary2(target) {
 function requireOptionalString3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber8(value, min, max) {
+function clampNumber9(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -5835,58 +6048,15 @@ function clampNumber8(value, min, max) {
 function getPath(value, path12) {
   let current = value;
   for (const key of path12) {
-    current = asRecord3(current)?.[key];
+    current = asRecord4(current)?.[key];
   }
   return current;
 }
 function asString(value) {
   return typeof value === "string" && value.trim() ? value : null;
 }
-function asRecord3(value) {
+function asRecord4(value) {
   return value && typeof value === "object" ? value : null;
-}
-async function evaluateHermesExpression(webSocketDebuggerUrl, expression, options) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  await waitForOpen(ws, Math.min(options.timeoutMs, 2500));
-  try {
-    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
-    await waitForMessage(ws, 1, options.timeoutMs).catch(() => null);
-    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
-    return await waitForMessage(ws, 2, options.timeoutMs);
-  } finally {
-    ws.close();
-  }
-}
-function waitForOpen(ws, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
-    ws.addEventListener("open", () => {
-      clearTimeout(timer);
-      resolve15();
-    }, { once: true });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
-}
-function waitForMessage(ws, id, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      const parsed = JSON.parse(String(event.data));
-      if (parsed?.id !== id) return;
-      clearTimeout(timer);
-      resolve15(parsed);
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
 }
 
 // src/modules/screenshot-capture/src/main/index.ts
@@ -5936,7 +6106,7 @@ async function captureFullScreenshot(args, deps = {}) {
   const outputPath = path5.resolve(
     args.outputPath ?? path5.join(os.tmpdir(), "expo-ios-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`)
   );
-  const segmentCount = clampNumber9(args.fullSegments ?? args.segments ?? 3, 1, 12);
+  const segmentCount = clampNumber10(args.fullSegments ?? args.segments ?? 3, 1, 12);
   const segmentDir = path5.join(path5.dirname(outputPath), `${path5.basename(outputPath, path5.extname(outputPath))}-segments`);
   await mkdir8(segmentDir, deps);
   const segments = [];
@@ -6096,11 +6266,11 @@ async function annotatedScreenshot(args, deps = {}) {
   }
   const labelMap = buildScreenshotLabelMap(cache);
   if (labelMap.available === false) return labelMap;
-  const screenshot = asRecord4(await captureScreenshot({ ...args, annotate: false }, deps));
+  const screenshot = asRecord5(await captureScreenshot({ ...args, annotate: false }, deps));
   if (screenshot.available === false) return screenshot;
   const outputPath = String(screenshot.outputPath);
   const artifacts = annotatedScreenshotArtifactPaths(outputPath);
-  const labels = asRecord4(labelMap).labels ?? [];
+  const labels = asRecord5(labelMap).labels ?? [];
   await writeJsonFile2(artifacts.labelMap, {
     schemaVersion: 1,
     createdAt: deps.nowIso?.() ?? (/* @__PURE__ */ new Date()).toISOString(),
@@ -6209,7 +6379,7 @@ function screenshotOverlaySize(labels) {
 function escapeHtml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber9(value, min, max) {
+function clampNumber10(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -6335,7 +6505,7 @@ async function readLatestRefCache3(args, deps) {
   const stateRoot = resolveExpoStateRoot3(args);
   const session = await readLatestSession3(stateRoot, deps);
   if (!session?.lastSnapshotId || typeof session.sessionId !== "string") return null;
-  return readJsonFile4(path5.join(stateRoot, "sessions", session.sessionId, "refs.json"), deps).then((value) => asRecord4(value)).catch(() => null);
+  return readJsonFile4(path5.join(stateRoot, "sessions", session.sessionId, "refs.json"), deps).then((value) => asRecord5(value)).catch(() => null);
 }
 async function writeJsonFile2(file, value, deps) {
   if (deps.writeJsonFile) return deps.writeJsonFile(file, value);
@@ -6356,7 +6526,7 @@ function safeTimestamp(deps) {
 function isUnavailable(value) {
   return Boolean(value && typeof value === "object" && value.available === false);
 }
-function asRecord4(value) {
+function asRecord5(value) {
   return value && typeof value === "object" ? value : {};
 }
 function resolveExpoStateRoot3(args = {}) {
@@ -6374,7 +6544,7 @@ async function readLatestSession3(stateRoot, deps) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const record = await readJsonFile4(path5.join(sessionsRoot, entry.name, "session.json"), deps).catch(() => null);
-    if (record) sessions.push(asRecord4(record));
+    if (record) sessions.push(asRecord5(record));
   }
   sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
   return sessions[0] ?? null;
@@ -6416,15 +6586,15 @@ async function automationTapInternal(args, deps, policyChecked) {
   if (args.ref) {
     const planned = await deps.planRefAction({ ...args, action: "tap" });
     if (args.dryRun === true || planned.available === false) return planned;
-    const point = asRecord5(asRecord5(planned.plan).point);
+    const point = asRecord6(asRecord6(planned.plan).point);
     if (!isFinitePoint(point)) {
       return { available: false, reason: "Ref does not include tappable bounds.", ref: args.ref };
     }
     return automationTapInternal({ ...args, ref: void 0, x: point.x, y: point.y }, deps, true);
   }
   const platform = platformArg2(args.platform);
-  const x = String(clampNumber10(args.x, 0, Number.MAX_SAFE_INTEGER));
-  const y = String(clampNumber10(args.y, 0, Number.MAX_SAFE_INTEGER));
+  const x = String(clampNumber11(args.x, 0, Number.MAX_SAFE_INTEGER));
+  const y = String(clampNumber11(args.y, 0, Number.MAX_SAFE_INTEGER));
   if (args.dryRun === true) {
     const iosTool = platform === "ios" ? await resolveIosInteractionTool(deps) : null;
     const iosCommand = iosTool?.tool === "axe" ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString4(args.device) ?? "<booted-device>"] : ["idb", "ui", "tap", x, y, "--udid", optionalString4(args.device) ?? "<booted-device>"];
@@ -6491,7 +6661,7 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
     if (policyDenied) return policyDenied;
     const point = await deps.refPoint(args.ref, args);
     if (point.available === false) return point;
-    const coordinates = asRecord5(point.point);
+    const coordinates = asRecord6(point.point);
     return automationGestureInternal({
       ...args,
       gesture: command === "long-press" ? "long-press" : "tap",
@@ -6511,10 +6681,10 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
     return automationGestureInternal({
       ...args,
       gesture: "drag",
-      startX: asRecord5(start.point).x,
-      startY: asRecord5(start.point).y,
-      endX: asRecord5(end.point).x,
-      endY: asRecord5(end.point).y,
+      startX: asRecord6(start.point).x,
+      startY: asRecord6(start.point).y,
+      endX: asRecord6(end.point).x,
+      endY: asRecord6(end.point).y,
       durationMs: args.durationMs ?? 600
     }, deps, true);
   }
@@ -6523,7 +6693,7 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
     if (policyDenied) return policyDenied;
     const plan = await deps.scrollPlan(args);
     if (plan.available === false || args.dryRun === true) return plan;
-    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord5(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
+    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord6(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
   }
   throw new Error(`Unknown ref action command: ${command}`);
 }
@@ -6589,7 +6759,7 @@ function keyCodeFor(key) {
     esc: 41
   };
   if (known[normalized]) return known[normalized];
-  if (/^\d+$/.test(normalized)) return clampNumber10(Number(normalized), 0, 255);
+  if (/^\d+$/.test(normalized)) return clampNumber11(Number(normalized), 0, 255);
   if (/^[a-z]$/.test(normalized)) return normalized.charCodeAt(0) - 93;
   throw new Error(`Unknown key: ${key}`);
 }
@@ -6661,12 +6831,12 @@ async function automationGestureInternal(args, deps, policyChecked) {
   const gesture = normalizeGesture(args.gesture);
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber10(args.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber10(args.intervalMs ?? 250, 0, 1e4);
-  const durationMs = clampNumber10(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
-  const holdMs = args.holdMs === void 0 ? null : clampNumber10(args.holdMs, 0, 3e4);
-  const metroPort = clampNumber10(args.metroPort ?? 8081, 1, 65535);
-  const maxEvents = clampNumber10(args.maxEvents ?? 200, 1, 2e3);
+  const repeat = clampNumber11(args.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber11(args.intervalMs ?? 250, 0, 1e4);
+  const durationMs = clampNumber11(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
+  const holdMs = args.holdMs === void 0 ? null : clampNumber11(args.holdMs, 0, 3e4);
+  const metroPort = clampNumber11(args.metroPort ?? 8081, 1, 65535);
+  const maxEvents = clampNumber11(args.maxEvents ?? 200, 1, 2e3);
   const componentFilter = optionalString4(args.componentFilter);
   const cwd = optionalString4(args.cwd) ?? ".";
   const coordinates = normalizeGestureCoordinates(gesture, args);
@@ -6691,7 +6861,7 @@ async function automationGestureInternal(args, deps, policyChecked) {
   }
   const evidence = { traceStart: null, traceRead: null, traceStop: null, screenshots: {} };
   if (args.captureBeforeAfter === true) {
-    asRecord5(evidence.screenshots).before = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "before" }, deps);
+    asRecord6(evidence.screenshots).before = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "before" }, deps);
   }
   if (args.includeTrace === true) {
     evidence.traceStart = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "start", componentFilter, maxEvents, includeEvents: false }));
@@ -6702,7 +6872,7 @@ async function automationGestureInternal(args, deps, policyChecked) {
     evidence.traceStop = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "stop", componentFilter, maxEvents, includeEvents: false }));
   }
   if (args.captureBeforeAfter === true) {
-    asRecord5(evidence.screenshots).after = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "after" }, deps);
+    asRecord6(evidence.screenshots).after = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "after" }, deps);
   }
   return {
     available: execution.available,
@@ -6742,21 +6912,21 @@ function defaultGestureDurationMs(gesture) {
 function normalizeGestureCoordinates(gesture, args) {
   if (gesture === "tap" || gesture === "long-press") {
     return {
-      x: clampNumber10(args.x, 0, Number.MAX_SAFE_INTEGER),
-      y: clampNumber10(args.y, 0, Number.MAX_SAFE_INTEGER)
+      x: clampNumber11(args.x, 0, Number.MAX_SAFE_INTEGER),
+      y: clampNumber11(args.y, 0, Number.MAX_SAFE_INTEGER)
     };
   }
   return {
-    startX: clampNumber10(args.startX, 0, Number.MAX_SAFE_INTEGER),
-    startY: clampNumber10(args.startY, 0, Number.MAX_SAFE_INTEGER),
-    endX: clampNumber10(args.endX, 0, Number.MAX_SAFE_INTEGER),
-    endY: clampNumber10(args.endY, 0, Number.MAX_SAFE_INTEGER)
+    startX: clampNumber11(args.startX, 0, Number.MAX_SAFE_INTEGER),
+    startY: clampNumber11(args.startY, 0, Number.MAX_SAFE_INTEGER),
+    endX: clampNumber11(args.endX, 0, Number.MAX_SAFE_INTEGER),
+    endY: clampNumber11(args.endY, 0, Number.MAX_SAFE_INTEGER)
   };
 }
 function gestureCommandPlan(args) {
   const platform = platformArg2(args.platform);
   const gesture = requireString8(args.gesture, "gesture");
-  const coordinates = asRecord5(args.coordinates);
+  const coordinates = asRecord6(args.coordinates);
   const durationMs = Number(args.durationMs);
   const holdMs = args.holdMs === null ? null : Number(args.holdMs);
   const repeat = Number(args.repeat);
@@ -6790,8 +6960,8 @@ async function executeGesturePlanInternal(args, deps, policyChecked) {
   const gesture = optionalString4(args.gesture) ?? "unknown";
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber10(args.repeat ?? plan.repeat, 1, 20);
-  const intervalMs = clampNumber10(args.intervalMs ?? plan.intervalMs, 0, 1e4);
+  const repeat = clampNumber11(args.repeat ?? plan.repeat, 1, 20);
+  const intervalMs = clampNumber11(args.intervalMs ?? plan.intervalMs, 0, 1e4);
   if (platform === "android") {
     const adb = await deps.commandPath("adb");
     if (!adb) return { available: false, reason: "Android gestures require adb, which is not installed or not on PATH.", plan };
@@ -6844,8 +7014,8 @@ function axeGestureCommandFromPlan(args) {
   return axeCommand;
 }
 async function executeRepeatedCommandInternal(command, args, options, deps) {
-  const repeat = clampNumber10(options.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber10(options.intervalMs ?? 0, 0, 1e4);
+  const repeat = clampNumber11(options.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber11(options.intervalMs ?? 0, 0, 1e4);
   const runs = [];
   for (let index = 0; index < repeat; index += 1) {
     const result = await deps.execFile(command, args, { timeout: 35e3, rejectOnError: false });
@@ -6954,7 +7124,7 @@ async function defaultResolveIosDevice2(requested) {
   const parsed = JSON.parse(String(stdout ?? "{}"));
   const devices = Object.entries(parsed.devices ?? {}).flatMap(
     ([runtime2, runtimeDevices]) => (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
-      const record = asRecord5(device);
+      const record = asRecord6(device);
       return {
         udid: String(record.udid ?? ""),
         name: String(record.name ?? ""),
@@ -7005,7 +7175,7 @@ function requireString8(value, field) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber10(value, min, max) {
+function clampNumber11(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${value}.`);
   return Math.min(Math.max(number, min), max);
@@ -7049,14 +7219,14 @@ function platformArg2(value) {
 function optionalString4(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function asRecord5(value) {
+function asRecord6(value) {
   return value && typeof value === "object" ? value : {};
 }
 function isFinitePoint(value) {
   return Number.isFinite(value.x) && Number.isFinite(value.y);
 }
 function asGesturePlan(value) {
-  const record = asRecord5(value);
+  const record = asRecord6(value);
   return {
     tool: String(record.tool ?? ""),
     command: Array.isArray(record.command) ? record.command.map(String) : [],
@@ -7070,7 +7240,7 @@ function unwrapToolPayload(value) {
     const text = value.content[0]?.text ?? "{}";
     return JSON.parse(text);
   }
-  return asRecord5(value);
+  return asRecord6(value);
 }
 function formatSeconds(ms) {
   return (ms / 1e3).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
@@ -7106,7 +7276,7 @@ async function captureUxContext(args = {}, deps = defaultUxContextDependencies) 
   const startedAt = nowMs(deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
-  const metroPort = clampNumber11(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber12(args.metroPort ?? 8081, 1, 65535);
   const context = {
     capturedAt: now(deps).toISOString(),
     cwd,
@@ -7245,7 +7415,7 @@ async function safeToolSection3(fn) {
   try {
     return { ok: true, value: await fn() };
   } catch (error) {
-    return { ok: false, error: formatError9(error) };
+    return { ok: false, error: formatError10(error) };
   }
 }
 function requireOptionalString4(value) {
@@ -7256,7 +7426,7 @@ function processNameFromBundleId2(bundleId) {
   const last = String(bundleId).split(".").filter(Boolean).at(-1);
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") : null;
 }
-function clampNumber11(value, min, max) {
+function clampNumber12(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7264,16 +7434,16 @@ function clampNumber11(value, min, max) {
   return Math.min(Math.max(numberValue, min), max);
 }
 function firstMetroAppId(metro) {
-  const targets = asRecord6(metro)?.targets;
+  const targets = asRecord7(metro)?.targets;
   if (!Array.isArray(targets)) return null;
-  const target = targets.find((candidate) => asRecord6(candidate)?.appId);
+  const target = targets.find((candidate) => asRecord7(candidate)?.appId);
   return typeof target?.appId === "string" ? target.appId : null;
 }
 function appConfigBundleId(project) {
-  const bundleId = asRecord6(asRecord6(project)?.appConfig)?.iosBundleIdentifier;
+  const bundleId = asRecord7(asRecord7(project)?.appConfig)?.iosBundleIdentifier;
   return typeof bundleId === "string" && bundleId.length > 0 ? bundleId : null;
 }
-function asRecord6(value) {
+function asRecord7(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function now(deps) {
@@ -7314,7 +7484,7 @@ function truncate11(value, limit = 4e4) {
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
-function formatError9(error) {
+function formatError10(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -7354,7 +7524,7 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
   const data = await deps.createEventsFile({ outputDir, title, reset: false });
   let server = null;
   if (args.serve === true) {
-    const port = args.port ? clampNumber12(args.port, 1, 65535) : await deps.findAvailablePort(17655);
+    const port = args.port ? clampNumber13(args.port, 1, 65535) : await deps.findAvailablePort(17655);
     const endpointPath = normalizeEndpointPath(args.endpointPath);
     const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
     const logFd = await deps.openLogFile(logPath, "a");
@@ -7458,7 +7628,7 @@ function normalizeEndpointPath(value) {
 function requireOptionalString5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber12(value, min, max) {
+function clampNumber13(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7578,7 +7748,7 @@ async function readEvents(eventsPath, options = {}) {
 }
 async function reviewOverlayServer(args) {
   const dir = path7.resolve(args.dir);
-  const port = args.port ? clampNumber12(args.port, 1, 65535) : await findAvailablePort(17655);
+  const port = args.port ? clampNumber13(args.port, 1, 65535) : await findAvailablePort(17655);
   const endpointPath = normalizeEndpointPath(args.endpointPath);
   await mkdir10(dir, { recursive: true });
   await createEventsFile({ outputDir: dir, reset: false });
@@ -7672,7 +7842,7 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
   });
   const payload = unwrapToolJson6(result);
   return toolJson14({
-    ...isRecord6(payload) ? payload : { value: payload },
+    ...isRecord7(payload) ? payload : { value: payload },
     command: "annotate-screen",
     annotationSurface: "in-app-overlay",
     compatibility: {
@@ -7700,7 +7870,7 @@ function hasExplicitConfirmation(value, required) {
 function requireOptionalString6(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -7715,9 +7885,9 @@ function toolJson15(value) {
   };
 }
 function unwrapToolJson7(value) {
-  const content = asRecord7(value)?.content;
+  const content = asRecord8(value)?.content;
   if (!Array.isArray(content)) return value;
-  const first = asRecord7(content[0]);
+  const first = asRecord8(content[0]);
   if (first?.type !== "text" || typeof first.text !== "string") return value;
   try {
     return JSON.parse(first.text);
@@ -7726,16 +7896,16 @@ function unwrapToolJson7(value) {
   }
 }
 async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
-  const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
   const commentTitle = requireOptionalString7(args.commentTitle) ?? "Codex: Add UI comment";
-  const maxComments = clampNumber13(args.maxComments ?? 50, 1, 500);
+  const maxComments = clampNumber14(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
     return toolJson15(await deps.openIosDevMenu({ ...args, metroPort }));
   }
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
-  const webSocketDebuggerUrl = asString2(asRecord7(targetList[0])?.webSocketDebuggerUrl);
+  const webSocketDebuggerUrl = asString2(asRecord8(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
     return toolJson15({ available: false, action, reason: "No Metro inspector target.", metroPort });
   }
@@ -7746,13 +7916,13 @@ async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies
     metroPort,
     target: targetSummary3(targetList[0]),
     inspector: getPath2(result, ["result", "result", "value"]) ?? null,
-    protocolError: getPath2(result, ["result", "exceptionDetails"]) ?? asRecord7(result)?.error ?? null,
-    cdp: asRecord7(result)?.diagnostics ?? asRecord7(result)?.cdp ?? null
+    protocolError: getPath2(result, ["result", "exceptionDetails"]) ?? asRecord8(result)?.error ?? null,
+    cdp: asRecord8(result)?.diagnostics ?? asRecord8(result)?.cdp ?? null
   });
 }
 var defaultRuntimeInspectorDependencies = {
   fetchMetroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression: evaluateHermesExpression2,
+  evaluateHermesExpression,
   openIosDevMenu: (args) => openIosDevMenu(args, defaultOpenDevMenuDependencies)
 };
 var defaultOpenDevMenuDependencies = {
@@ -7774,7 +7944,7 @@ function normalizeRuntimeInspectorAction(value) {
   return action;
 }
 async function openIosDevMenu(args, deps) {
-  const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
   let messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
   if (messageSocket.available) {
     return {
@@ -7942,7 +8112,7 @@ function runtimeInspectorExpression(args) {
   })()`;
 }
 function targetSummary3(target) {
-  const record = asRecord7(target);
+  const record = asRecord8(target);
   if (!record) return null;
   return {
     title: record.title,
@@ -7951,7 +8121,7 @@ function targetSummary3(target) {
     description: record.description
   };
 }
-function clampNumber13(value, min, max) {
+function clampNumber14(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7977,7 +8147,7 @@ function truncate12(value, limit = 4e4) {
 function getPath2(value, path12) {
   let current = value;
   for (const part of path12) {
-    current = asRecord7(current)?.[part];
+    current = asRecord8(current)?.[part];
     if (current === void 0) return void 0;
   }
   return current;
@@ -7985,17 +8155,8 @@ function getPath2(value, path12) {
 function asString2(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
-function asRecord7(value) {
+function asRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
-}
-async function evaluateHermesExpression2(webSocketDebuggerUrl, expression, options) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  return cdpCall(webSocketDebuggerUrl, [
-    { method: "Runtime.enable", params: {} },
-    { method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }
-  ], options.timeoutMs);
 }
 async function broadcastMetroMessage(metroPort, method, params) {
   if (!method) return { available: false, reason: "No Metro message method was requested.", metroPort };
@@ -8005,23 +8166,7 @@ async function broadcastMetroMessage(metroPort, method, params) {
     await cdpMessage(url, { method, params: params ?? {} }, 2500);
     return { available: true, metroPort, method, url };
   } catch (error) {
-    return { available: false, metroPort, method, url, reason: formatError10(error) };
-  }
-}
-async function cdpCall(url, calls, timeoutMs) {
-  const results = [];
-  let id = 0;
-  const ws = new WebSocket(url);
-  await waitForOpen2(ws, Math.min(timeoutMs, 2500));
-  try {
-    for (const call of calls) {
-      id += 1;
-      ws.send(JSON.stringify({ id, method: call.method, params: call.params }));
-      results.push(await waitForMessage2(ws, id, timeoutMs));
-    }
-    return results.at(-1) ?? null;
-  } finally {
-    ws.close();
+    return { available: false, metroPort, method, url, reason: formatError11(error) };
   }
 }
 async function cdpMessage(url, payload, timeoutMs) {
@@ -8046,21 +8191,6 @@ function waitForOpen2(ws, timeoutMs) {
     }, { once: true });
   });
 }
-function waitForMessage2(ws, id, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      const parsed = JSON.parse(String(event.data));
-      if (parsed?.id !== id) return;
-      clearTimeout(timer);
-      resolve15(parsed);
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
-}
 function execFile7(command, args, options) {
   return new Promise((resolve15) => {
     nodeExecFile9(command, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
@@ -8072,7 +8202,7 @@ function execFile7(command, args, options) {
     });
   });
 }
-function formatError10(error) {
+function formatError11(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -8088,7 +8218,7 @@ async function reviewNextStep(args = {}) {
   const stage = args.stage ?? "intake";
   const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
   const cwd = requireOptionalString8(args.cwd) ?? ".";
-  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const componentFilter = requireOptionalString8(args.componentFilter);
   const verifierRule = requireOptionalString8(args.verifierRule);
   const flags = reviewFlags(args);
@@ -8335,7 +8465,7 @@ function requireOptionalString8(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : void 0;
 }
-function clampNumber14(value, min, max) {
+function clampNumber15(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return min;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
@@ -8377,6 +8507,9 @@ var DIAGNOSTICS_LIMITATIONS = [
 ];
 var MAX_OUTPUT10 = 4e4;
 var MAX_ARRAY_ITEMS = 500;
+var defaultDevtoolsDiagnosticsDependencies = {
+  evaluateHermesExpression
+};
 function toolJson17(value) {
   return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
 }
@@ -8386,7 +8519,7 @@ function requireString10(value, name) {
   }
   return value.trim();
 }
-function clampNumber15(value, min, max) {
+function clampNumber16(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
@@ -8417,7 +8550,7 @@ function targetSummary4(target) {
     }
   };
 }
-async function devtoolsCommand(args = {}, deps = {}) {
+async function devtoolsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   const action = requireString10(args.action ?? "capabilities", "action");
   if (action === "status" || action === "panels") return toolJson17(await devtoolsStatusPayload(args, action, deps));
   if (action === "open") return toolJson17(await devtoolsOpenPayload(args, deps));
@@ -8672,7 +8805,7 @@ async function devtoolsEventsPayload(args = {}, deps = {}) {
   await mkdir11(deps, eventsDir, { recursive: true });
   const file = joinPath3(eventsDir, "events.json");
   const existing = await readJsonFile5(deps, file).catch(() => ({ events: [] }));
-  const previousEvents = Array.isArray(asRecord8(existing)?.events) ? asRecord8(existing)?.events : [];
+  const previousEvents = Array.isArray(asRecord9(existing)?.events) ? asRecord9(existing)?.events : [];
   const event = {
     type: `devtools.${subaction}`,
     timestamp: now2(deps),
@@ -8690,16 +8823,16 @@ async function devtoolsEventsPayload(args = {}, deps = {}) {
   await writeJsonFile3(deps, file, sanitized);
   return sanitized;
 }
-async function consoleCommand(args = {}, deps = {}) {
+async function consoleCommand(args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   return diagnosticMessagesCommand("console", args, deps);
 }
-async function errorsCommand(args = {}, deps = {}) {
+async function errorsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   return diagnosticMessagesCommand("errors", args, deps);
 }
-async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
+async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   const action = args.action ?? "read";
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber15(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber16(args.limit ?? 100, 1, 1e3);
   const targetDiscovery = await metroTargetDiscovery(metroPort, deps);
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
@@ -8716,7 +8849,7 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
     });
   }
   if (action === "clear") {
-    const result2 = await evaluateHermesExpression3(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
+    const result2 = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
     return toolJson17({
       ...valueFromHermes(result2) ?? { available: false, reason: result2?.error ?? "Runtime diagnostics did not return a value." },
       kind,
@@ -8726,7 +8859,7 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
       cdp: result2?.diagnostics ?? result2?.cdp ?? null
     });
   }
-  const result = await evaluateHermesExpression3(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5e3 });
+  const result = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5e3 });
   const value = valueFromHermes(result);
   if (!value) {
     return toolJson17({
@@ -8739,7 +8872,7 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
       cdp: result?.diagnostics ?? result?.cdp ?? null
     });
   }
-  const record = asRecord8(value) ?? {};
+  const record = asRecord9(value) ?? {};
   const messages = Array.isArray(record.messages) ? record.messages.slice(-limit) : [];
   return toolJson17({
     ...record,
@@ -8832,7 +8965,7 @@ function frontendUrlForTarget(target, metroPort) {
 }
 async function metroStatusPayload2(args, deps) {
   if (deps.metroStatusPayload) return deps.metroStatusPayload(args);
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
   const baseUrl = `http://127.0.0.1:${metroPort}`;
   const status = await fetchText(deps, `${baseUrl}/status`, 1500);
   if (!status.available) {
@@ -8850,7 +8983,7 @@ async function metroStatusPayload2(args, deps) {
   }
   const targetDiscovery = await fetchMetroTargets(deps, metroPort);
   const version = await fetchJson(deps, `${baseUrl}/json/version`, 1500).catch((error) => ({
-    __error: formatError11(error)
+    __error: formatError12(error)
   }));
   const symbolication = await probeMetroSymbolication(deps, metroPort);
   return {
@@ -8859,8 +8992,8 @@ async function metroStatusPayload2(args, deps) {
     metroPort,
     status: "available",
     statusText: status.text,
-    version: asRecord8(version)?.__error ? null : version,
-    versionError: asRecord8(version)?.__error ?? null,
+    version: asRecord9(version)?.__error ? null : version,
+    versionError: asRecord9(version)?.__error ?? null,
     symbolication,
     targetCount: targetDiscovery.targets.length,
     targets: targetDiscovery.targets,
@@ -8869,9 +9002,9 @@ async function metroStatusPayload2(args, deps) {
 }
 async function fetchMetroTargets(deps, metroPort) {
   const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch((error2) => ({
-    __error: formatError11(error2)
+    __error: formatError12(error2)
   }));
-  const error = asRecord8(raw)?.__error;
+  const error = asRecord9(raw)?.__error;
   if (typeof error === "string") {
     return { available: false, endpoint: "/json/list", targets: [], malformedTargets: [], reason: error };
   }
@@ -8912,9 +9045,9 @@ function clearDiagnosticsExpression(kind) {
       return { available: true, cleared: true };
     })()`;
 }
-async function evaluateHermesExpression3(deps, webSocketDebuggerUrl, expression, options) {
-  if (!deps.evaluateHermesExpression) return { error: "Hermes evaluator dependency is not configured." };
-  return deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, options);
+async function evaluateHermesExpression2(deps, webSocketDebuggerUrl, expression, options) {
+  const evaluate = deps.evaluateHermesExpression ?? evaluateHermesExpression;
+  return evaluate(webSocketDebuggerUrl, expression, options);
 }
 function valueFromHermes(result) {
   return result?.result?.result?.value;
@@ -8927,7 +9060,7 @@ async function execFile8(deps, file, args, options) {
       resolve15({
         stdout,
         stderr,
-        error: error ? formatError11(error) : null
+        error: error ? formatError12(error) : null
       });
     });
   });
@@ -8968,7 +9101,7 @@ function joinPath3(...parts) {
   const joined = parts.flatMap((part) => part.split("/")).filter((part, index) => part.length > 0 || absolute && index === 0).join("/");
   return absolute ? `/${joined}`.replace(/\/+/g, "/") : joined.replace(/\/+/g, "/");
 }
-function asRecord8(value) {
+function asRecord9(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 async function probeMetroSymbolication(deps, metroPort) {
@@ -8986,7 +9119,7 @@ async function probeMetroSymbolication(deps, metroPort) {
       reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`
     };
   } catch (error) {
-    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError11(error) };
+    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError12(error) };
   }
 }
 async function fetchText(deps, url, timeoutMs) {
@@ -8994,7 +9127,7 @@ async function fetchText(deps, url, timeoutMs) {
     const response = asFetchResponse(await fetchWithTimeout2(deps, url, { timeoutMs }));
     return { available: response.ok, text: await response.text(), error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {
-    return { available: false, text: null, error: formatError11(error) };
+    return { available: false, text: null, error: formatError12(error) };
   }
 }
 async function fetchJson(deps, url, timeoutMs) {
@@ -9025,7 +9158,7 @@ function asFetchResponse(value) {
   };
 }
 function normalizeMetroTarget(value, index) {
-  const record = asRecord8(value);
+  const record = asRecord9(value);
   if (!record) {
     return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape2(value) } };
   }
@@ -9037,7 +9170,7 @@ function normalizeMetroTarget(value, index) {
     deviceName: optionalString5(record.deviceName),
     devtoolsFrontendUrl: optionalString5(record.devtoolsFrontendUrl),
     webSocketDebuggerUrl: optionalString5(record.webSocketDebuggerUrl),
-    reactNative: asRecord8(record.reactNative),
+    reactNative: asRecord9(record.reactNative),
     attached: record.attached
   };
   if (!target.id && !target.title && !target.webSocketDebuggerUrl && !target.devtoolsFrontendUrl) {
@@ -9062,14 +9195,14 @@ function sanitizePayload(value) {
 function boundValue(value) {
   if (typeof value === "string") return truncate13(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
-  const record = asRecord8(value);
+  const record = asRecord9(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
 }
 function redactValue5(value) {
   if (typeof value === "string") return redactString(value);
   if (Array.isArray(value)) return value.map(redactValue5);
-  const record = asRecord8(value);
+  const record = asRecord9(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
@@ -9094,8 +9227,8 @@ function redactString(value) {
 function isSensitiveKey(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function formatError11(error) {
-  const record = asRecord8(error);
+function formatError12(error) {
+  const record = asRecord9(error);
   const message = record?.message;
   return message == null ? String(error) : String(message);
 }
@@ -9106,7 +9239,7 @@ var NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
   "Use open-route or navigation deep-link when only URL navigation is available."
 ];
-function clampNumber16(value, min, max) {
+function clampNumber17(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9190,7 +9323,7 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
     throw new Error(`Unknown navigation action: ${action}`);
   }
   if (action === "deep-link") return toolJson18(await navigationDeepLink(args, deps));
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
   const policy = await navigationPolicyDecision(args, action, deps);
   if (!policy.allowed) {
     return toolJson18({
@@ -9285,7 +9418,7 @@ async function navigationDeepLink(args = {}, deps = defaultNavigationDependencie
 }
 var defaultNavigationDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression: evaluateHermesExpression4,
+  evaluateHermesExpression,
   openExpoRoute
 };
 function navigationExpression(args) {
@@ -9442,49 +9575,6 @@ function redactSensitiveUrlQuery2(value) {
     "$1[redacted]"
   );
 }
-async function evaluateHermesExpression4(webSocketDebuggerUrl, expression, options) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  await waitForOpen3(ws, Math.min(options.timeoutMs, 2500));
-  try {
-    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
-    await waitForMessage3(ws, 1, options.timeoutMs).catch(() => null);
-    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
-    return await waitForMessage3(ws, 2, options.timeoutMs);
-  } finally {
-    ws.close();
-  }
-}
-function waitForOpen3(ws, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
-    ws.addEventListener("open", () => {
-      clearTimeout(timer);
-      resolve15();
-    }, { once: true });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
-}
-function waitForMessage3(ws, id, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      const parsed = JSON.parse(String(event.data));
-      if (parsed?.id !== id) return;
-      clearTimeout(timer);
-      resolve15(parsed);
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
-}
 
 // src/modules/network-evidence/src/main/index.ts
 import { promises as fs8 } from "node:fs";
@@ -9497,7 +9587,7 @@ var UNAVAILABLE_LIMITATIONS = [
   "Network evidence requires dev-only app instrumentation that patches fetch/XHR or an equivalent app network adapter.",
   "Native networking stacks are unavailable unless the app exposes them through the bridge."
 ];
-function clampNumber17(value, min, max) {
+function clampNumber18(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9512,8 +9602,8 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   if (harAction && !["start", "stop"].includes(harAction)) {
     throw new Error(`Unknown network HAR action: ${harAction}`);
   }
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber18(args.limit ?? 100, 1, 1e3);
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -9594,7 +9684,7 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
 }
 var defaultNetworkDependencies = {
   metroTargets: defaultMetroTargets,
-  evaluateHermesExpression: defaultEvaluateHermesExpression2
+  evaluateHermesExpression
 };
 async function defaultMetroTargets(metroPort) {
   try {
@@ -9605,44 +9695,6 @@ async function defaultMetroTargets(metroPort) {
   } catch {
     return [];
   }
-}
-async function defaultEvaluateHermesExpression2(webSocketDebuggerUrl, expression, options) {
-  if (typeof WebSocket !== "function") {
-    return { error: "WebSocket is not available in this Node runtime." };
-  }
-  return new Promise((resolve15) => {
-    const ws = new WebSocket(webSocketDebuggerUrl);
-    const timer = setTimeout(() => {
-      try {
-        ws.close();
-      } catch {
-      }
-      resolve15({ error: `Hermes evaluation timed out after ${options.timeoutMs}ms.` });
-    }, options.timeoutMs);
-    ws.addEventListener("open", () => {
-      ws.send(JSON.stringify({
-        id: 1,
-        method: "Runtime.evaluate",
-        params: { expression, returnByValue: true, awaitPromise: true }
-      }));
-    });
-    ws.addEventListener("message", (event) => {
-      clearTimeout(timer);
-      try {
-        ws.close();
-      } catch {
-      }
-      try {
-        resolve15({ result: JSON.parse(String(event.data)) });
-      } catch (error) {
-        resolve15({ error: formatError(error) });
-      }
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      resolve15({ error: "Hermes websocket connection failed." });
-    });
-  });
 }
 function networkUnavailable(input) {
   const code = input.code ?? "unavailable";
@@ -9785,7 +9837,7 @@ function networkExpression(input) {
   })()`;
 }
 function redactNetworkEvidence(value) {
-  if (!isRecord7(value)) return value;
+  if (!isRecord8(value)) return value;
   const clone = { ...value };
   if (Array.isArray(clone.requests)) clone.requests = clone.requests.map(redactNetworkRequest);
   if (clone.request) clone.request = redactNetworkRequest(clone.request);
@@ -9793,7 +9845,7 @@ function redactNetworkEvidence(value) {
   return clone;
 }
 function normalizeNetworkEvidence(value, action) {
-  if (!isRecord7(value) || Array.isArray(value)) {
+  if (!isRecord8(value) || Array.isArray(value)) {
     return {
       available: false,
       action,
@@ -9836,7 +9888,7 @@ function networkTransport(metroPort, target, cdp = null) {
   };
 }
 function networkLimitations(value) {
-  const record = isRecord7(value) ? value : {};
+  const record = isRecord8(value) ? value : {};
   const limitations = [
     "Network evidence is limited to traffic observed by the selected React Native DevTools or app bridge network domain.",
     "Headers, cookies, credentials, request bodies, and response bodies are redacted before stdout and artifact writes."
@@ -9850,9 +9902,9 @@ function networkLimitations(value) {
   return limitations;
 }
 function networkCaptureTiming(value, clock = systemClock2) {
-  const record = isRecord7(value) ? value : {};
+  const record = isRecord8(value) ? value : {};
   const requests = Array.isArray(record.requests) ? record.requests : record.request ? [record.request] : [];
-  const times = requests.map((request) => isRecord7(request) ? request.startedAt : void 0).filter((item) => typeof item === "string" && item.length > 0).sort();
+  const times = requests.map((request) => isRecord8(request) ? request.startedAt : void 0).filter((item) => typeof item === "string" && item.length > 0).sort();
   return {
     startedAt: typeof record.startedAt === "string" ? record.startedAt : times[0] ?? null,
     stoppedAt: typeof record.stoppedAt === "string" ? record.stoppedAt : clock.now().toISOString(),
@@ -9886,8 +9938,8 @@ function harFromNetworkRequests(requests, clock = systemClock2) {
   };
 }
 function annotateHar(har, metadata) {
-  const copy = cloneJson(isRecord7(har) ? har : harFromNetworkRequests([]));
-  const log = isRecord7(copy.log) ? copy.log : { version: "1.2", creator: { name: CLI_NAME4, version: CLI_VERSION5 }, entries: [] };
+  const copy = cloneJson(isRecord8(har) ? har : harFromNetworkRequests([]));
+  const log = isRecord8(copy.log) ? copy.log : { version: "1.2", creator: { name: CLI_NAME4, version: CLI_VERSION5 }, entries: [] };
   copy.log = log;
   log._expoIos = {
     source: metadata.source,
@@ -9930,8 +9982,8 @@ function requireString12(value, field) {
   return value.trim();
 }
 function redactNetworkRequest(request) {
-  if (!isRecord7(request)) return request;
-  const content = isRecord7(request.content) ? { ...request.content, text: request.content.text ? REDACTED4 : request.content.text } : void 0;
+  if (!isRecord8(request)) return request;
+  const content = isRecord8(request.content) ? { ...request.content, text: request.content.text ? REDACTED4 : request.content.text } : void 0;
   return {
     ...request,
     url: redactNetworkUrl(request.url),
@@ -9945,8 +9997,8 @@ function redactNetworkRequest(request) {
   };
 }
 function redactNetworkMessage(message) {
-  if (!isRecord7(message)) return message;
-  const content = isRecord7(message.content) ? { ...message.content, text: message.content.text ? REDACTED4 : message.content.text } : void 0;
+  if (!isRecord8(message)) return message;
+  const content = isRecord8(message.content) ? { ...message.content, text: message.content.text ? REDACTED4 : message.content.text } : void 0;
   return {
     ...message,
     url: redactNetworkUrl(message.url),
@@ -9960,7 +10012,7 @@ function redactNetworkMessage(message) {
 function redactHeaders(headers) {
   if (Array.isArray(headers)) {
     return headers.map((header) => {
-      if (!isRecord7(header)) return header;
+      if (!isRecord8(header)) return header;
       const name = String(header.name ?? "");
       return {
         ...header,
@@ -9968,7 +10020,7 @@ function redactHeaders(headers) {
       };
     });
   }
-  if (!isRecord7(headers)) return headers;
+  if (!isRecord8(headers)) return headers;
   return Object.fromEntries(Object.entries(headers).map(([key, value]) => [
     key,
     /authorization|cookie|token|secret|api[-_]?key|password|set-cookie/i.test(key) ? REDACTED4 : value
@@ -9989,12 +10041,12 @@ function redactNetworkUrl(url) {
   }
 }
 function redactHar(har) {
-  if (!isRecord7(har)) return har;
+  if (!isRecord8(har)) return har;
   const copy = cloneJson(har);
-  const entries = isRecord7(copy.log) ? copy.log.entries : void 0;
+  const entries = isRecord8(copy.log) ? copy.log.entries : void 0;
   if (Array.isArray(entries)) {
     for (const entry of entries) {
-      if (!isRecord7(entry)) continue;
+      if (!isRecord8(entry)) continue;
       if (entry.request) entry.request = redactNetworkMessage(entry.request);
       if (entry.response) entry.response = redactNetworkMessage(entry.response);
     }
@@ -10004,7 +10056,7 @@ function redactHar(har) {
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
-function isRecord7(value) {
+function isRecord8(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 var systemClock2 = {
@@ -10053,7 +10105,7 @@ async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies)
       action,
       key,
       value,
-      limit: clampNumber18(args.limit ?? 100, 1, 1e3)
+      limit: clampNumber19(args.limit ?? 100, 1, 1e3)
     }),
     policy
   }, deps));
@@ -10090,12 +10142,12 @@ async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies
 }
 var defaultBridgeDomainDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression: evaluateHermesExpression5,
+  evaluateHermesExpression,
   readJsonFile: async (file) => JSON.parse(await readFile12(file, "utf8")),
   resolvePath: (file) => path9.resolve(file)
 };
-async function bridgeDomainCommand(input, deps = {}) {
-  const metroPort = clampNumber18(input.args.metroPort ?? 8081, 1, 65535);
+async function bridgeDomainCommand(input, deps = defaultBridgeDomainDependencies) {
+  const metroPort = clampNumber19(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
   if (sideEffect !== "read" && input.policy?.allowed !== true) {
     return policyDeniedPayload3({ domain: input.domain, action: input.action, policy: input.policy ?? {
@@ -10217,9 +10269,9 @@ async function policyDecision(args, action, sideEffect, deps = {}) {
   };
 }
 function policyAllowsAction(policy, action) {
-  const record = asRecord9(policy);
+  const record = asRecord10(policy);
   if (Array.isArray(record?.allow) && record.allow.includes(action)) return true;
-  const actions = asRecord9(record?.actions);
+  const actions = asRecord10(record?.actions);
   return actions?.[action] === "allow" || actions?.[action] === true;
 }
 function parseStorageValue(value) {
@@ -10228,7 +10280,7 @@ function parseStorageValue(value) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    throw new Error(`Invalid JSON for --value: ${formatError12(error)}`);
+    throw new Error(`Invalid JSON for --value: ${formatError13(error)}`);
   }
 }
 function storageExpression(args) {
@@ -10378,7 +10430,7 @@ function targetSummary7(target) {
     }
   });
 }
-function clampNumber18(value, min, max) {
+function clampNumber19(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -10397,7 +10449,7 @@ function stringifyBoundedJson(value) {
   const sanitized = sanitizePayload2(value);
   const text = JSON.stringify(sanitized, null, 2);
   if (text.length <= MAX_OUTPUT11) return text;
-  const record = asRecord9(sanitized);
+  const record = asRecord10(sanitized);
   const envelope = {
     available: false,
     source: "output-boundary",
@@ -10428,14 +10480,14 @@ function bridgeActionSideEffect(domain, action) {
 function boundValue2(value) {
   if (typeof value === "string") return truncate14(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS2).map(boundValue2);
-  const record = asRecord9(value);
+  const record = asRecord10(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue2(nested)]));
 }
 function redactValue6(value) {
   if (typeof value === "string") return redactString2(value);
   if (Array.isArray(value)) return value.map(redactValue6);
-  const record = asRecord9(value);
+  const record = asRecord10(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
@@ -10466,55 +10518,12 @@ function truncate14(value, max = MAX_OUTPUT11) {
   return `${text.slice(0, max)}
 ...[truncated ${text.length - max} chars]`;
 }
-function asRecord9(value) {
+function asRecord10(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-function formatError12(error) {
-  const record = asRecord9(error);
+function formatError13(error) {
+  const record = asRecord10(error);
   return record?.message == null ? String(error) : String(record.message);
-}
-async function evaluateHermesExpression5(webSocketDebuggerUrl, expression, options) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  await waitForOpen4(ws, Math.min(options.timeoutMs, 2500));
-  try {
-    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
-    await waitForMessage4(ws, 1, options.timeoutMs).catch(() => null);
-    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
-    return await waitForMessage4(ws, 2, options.timeoutMs);
-  } finally {
-    ws.close();
-  }
-}
-function waitForOpen4(ws, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
-    ws.addEventListener("open", () => {
-      clearTimeout(timer);
-      resolve15();
-    }, { once: true });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
-}
-function waitForMessage4(ws, id, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      const parsed = JSON.parse(String(event.data));
-      if (parsed?.id !== id) return;
-      clearTimeout(timer);
-      resolve15(parsed);
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
 }
 
 // src/modules/bridge-command-adapter/src/main/index.ts
@@ -10760,16 +10769,16 @@ async function readJsonOrNull(read, file) {
   }
 }
 function dependencyMap(packageJson) {
-  const record = asRecord10(packageJson);
+  const record = asRecord11(packageJson);
   return {
-    ...asRecord10(record?.dependencies),
-    ...asRecord10(record?.devDependencies)
+    ...asRecord11(record?.dependencies),
+    ...asRecord11(record?.devDependencies)
   };
 }
 function metadataProperty(metadata, key) {
-  return asRecord10(metadata)?.[key];
+  return asRecord11(metadata)?.[key];
 }
-function asRecord10(value) {
+function asRecord11(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 
@@ -10875,7 +10884,7 @@ function auditAccessibilityRefs(cache) {
 async function readLatestRefCache4(args = {}, deps = {}) {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot5(args);
-  const session = asRecord11(await readLatestSession4(stateRoot));
+  const session = asRecord12(await readLatestSession4(stateRoot));
   if (!session?.lastSnapshotId) return null;
   return readJsonFile7(join10(sessionDirectory2(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
 }
@@ -10888,7 +10897,7 @@ async function semanticBridgeTree(args, deps = {}) {
       filters: { interactiveOnly: false, compact: false, depth: null, includeSource: true, includeBounds: true }
     });
   } catch (error) {
-    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError13(error) };
+    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError14(error) };
   }
 }
 async function readLatestSession4(stateRoot) {
@@ -10900,7 +10909,7 @@ async function readLatestSession4(stateRoot) {
     const record = await readJsonFile7(join10(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord11(b)?.updatedAt ?? asRecord11(b)?.createdAt).localeCompare(String(asRecord11(a)?.updatedAt ?? asRecord11(a)?.createdAt)));
+  sessions.sort((a, b) => String(asRecord12(b)?.updatedAt ?? asRecord12(b)?.createdAt).localeCompare(String(asRecord12(a)?.updatedAt ?? asRecord12(a)?.createdAt)));
   return sessions[0] ?? null;
 }
 function resolveExpoStateRoot5(args = {}) {
@@ -10929,11 +10938,11 @@ function truncate15(value, max = 4e4) {
 function unwrapToolJson9(result) {
   return JSON.parse(result.content[0]?.text ?? "null");
 }
-function formatError13(error) {
+function formatError14(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
-function asRecord11(value) {
+function asRecord12(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
@@ -10951,7 +10960,7 @@ async function sheetCommand(args = {}, deps = defaultModalBridgeDependencies) {
 }
 var defaultModalBridgeDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression: evaluateHermesExpression6
+  evaluateHermesExpression
 };
 async function modalBridgeCommand(input, deps) {
   const positionals = Array.isArray(input.args._) ? input.args._ : [];
@@ -10978,7 +10987,7 @@ async function modalBridgeCommand(input, deps) {
   }, deps));
 }
 async function bridgeDomainCommand2(input, deps) {
-  const metroPort = clampNumber19(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
   const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -11086,7 +11095,7 @@ function targetSummary8(target) {
     }
   });
 }
-function clampNumber19(value, min, max) {
+function clampNumber20(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -11102,7 +11111,7 @@ function stringifyBoundedJson2(value) {
   const sanitized = sanitizePayload3(value);
   const text = JSON.stringify(sanitized, null, 2);
   if (text.length <= MAX_OUTPUT12) return text;
-  const record = asRecord12(sanitized);
+  const record = asRecord13(sanitized);
   const envelope = {
     available: false,
     source: "output-boundary",
@@ -11127,14 +11136,14 @@ function stringifyBoundedJson2(value) {
 function boundValue3(value) {
   if (typeof value === "string") return truncate16(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS3).map(boundValue3);
-  const record = asRecord12(value);
+  const record = asRecord13(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue3(nested)]));
 }
 function redactValue7(value) {
   if (typeof value === "string") return redactString3(value);
   if (Array.isArray(value)) return value.map(redactValue7);
-  const record = asRecord12(value);
+  const record = asRecord13(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
@@ -11165,51 +11174,8 @@ function truncate16(value, max = MAX_OUTPUT12) {
   return `${text.slice(0, max)}
 ...[truncated ${text.length - max} chars]`;
 }
-function asRecord12(value) {
+function asRecord13(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-async function evaluateHermesExpression6(webSocketDebuggerUrl, expression, options) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  await waitForOpen5(ws, Math.min(options.timeoutMs, 2500));
-  try {
-    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
-    await waitForMessage5(ws, 1, options.timeoutMs).catch(() => null);
-    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
-    return await waitForMessage5(ws, 2, options.timeoutMs);
-  } finally {
-    ws.close();
-  }
-}
-function waitForOpen5(ws, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
-    ws.addEventListener("open", () => {
-      clearTimeout(timer);
-      resolve15();
-    }, { once: true });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
-}
-function waitForMessage5(ws, id, timeoutMs) {
-  return new Promise((resolve15, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      const parsed = JSON.parse(String(event.data));
-      if (parsed?.id !== id) return;
-      clearTimeout(timer);
-      resolve15(parsed);
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("WebSocket connection failed."));
-    }, { once: true });
-  });
 }
 
 // src/modules/record-artifacts/src/main/index.ts
@@ -11225,7 +11191,7 @@ async function recordCommand(args = {}, deps = {}) {
   const action = requireString17(args.action ?? positionals[0] ?? "start", "action");
   if (!["start", "stop"].includes(action)) throw new Error(`Unknown record action: ${action}`);
   const stateRoot = resolveExpoStateRoot6(args);
-  const session = asRecord13(await readLatestSession5(stateRoot));
+  const session = asRecord14(await readLatestSession5(stateRoot));
   const recordDir = join11(stateRoot, "artifacts", "recordings");
   await mkdir12(recordDir, { recursive: true });
   const metadataPath = runRecordMetadataPath(stateRoot);
@@ -11270,7 +11236,7 @@ async function readLatestSession5(stateRoot) {
     const record = await readJsonFile8(join11(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord13(b)?.updatedAt ?? asRecord13(b)?.createdAt).localeCompare(String(asRecord13(a)?.updatedAt ?? asRecord13(a)?.createdAt)));
+  sessions.sort((a, b) => String(asRecord14(b)?.updatedAt ?? asRecord14(b)?.createdAt).localeCompare(String(asRecord14(a)?.updatedAt ?? asRecord14(a)?.createdAt)));
   return sessions[0] ?? null;
 }
 function resolveExpoStateRoot6(args = {}) {
@@ -11306,7 +11272,7 @@ function isoStamp(deps) {
 function now3(deps) {
   return deps.now ? deps.now() : /* @__PURE__ */ new Date();
 }
-function asRecord13(value) {
+function asRecord14(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
@@ -11353,8 +11319,8 @@ async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const payload = {
     ...diff,
     kind,
-    sessionId: asRecord14(session)?.sessionId ?? null,
-    targetId: asRecord14(session)?.activeTargetId ?? null,
+    sessionId: asRecord15(session)?.sessionId ?? null,
+    targetId: asRecord15(session)?.activeTargetId ?? null,
     outputPath
   };
   await writeJsonFile6(outputPath, payload);
@@ -11367,7 +11333,7 @@ var defaultReviewDiffDependencies = {
   nowMs: () => Date.now()
 };
 function reviewReportPayload(args) {
-  const session = asRecord14(args.session);
+  const session = asRecord15(args.session);
   const artifacts = collectExpoIosArtifacts(args.stateRoot);
   return {
     available: true,
@@ -11385,7 +11351,7 @@ function reviewReportPayload(args) {
   };
 }
 function reviewMatrixPayload(args) {
-  const session = asRecord14(args.session);
+  const session = asRecord15(args.session);
   const commands = new Set(args.runs.map((run) => run.command).filter(Boolean));
   const checks = [
     { name: "session", passed: Boolean(session), evidence: session ? sessionDirectory3(args.stateRoot, String(session.sessionId)) : null },
@@ -11434,8 +11400,8 @@ async function snapshotDiffPayload(args = {}) {
   const afterRefs = new Set(refsFromSnapshot(current));
   return {
     available: true,
-    baselineSnapshotId: asRecord14(baseline)?.snapshotId ?? null,
-    currentSnapshotId: asRecord14(current)?.snapshotId ?? null,
+    baselineSnapshotId: asRecord15(baseline)?.snapshotId ?? null,
+    currentSnapshotId: asRecord15(current)?.snapshotId ?? null,
     addedRefs: [...afterRefs].filter((ref) => !beforeRefs.has(ref)),
     removedRefs: [...beforeRefs].filter((ref) => !afterRefs.has(ref)),
     beforeCount: beforeRefs.size,
@@ -11459,7 +11425,7 @@ async function latestSnapshotJson(args = {}) {
   if (!cache?.snapshotId) return null;
   const stateRoot = resolveExpoStateRoot7(args);
   const session = await readLatestSession6(stateRoot);
-  const sessionId = asRecord14(session)?.sessionId;
+  const sessionId = asRecord15(session)?.sessionId;
   if (!sessionId) return cache;
   return readJsonFile9(join12(sessionDirectory3(stateRoot, String(sessionId)), "snapshots", `${cache.snapshotId}.json`)).catch(() => cache);
 }
@@ -11472,12 +11438,12 @@ async function readLatestSession6(stateRoot) {
     const record = await readJsonFile9(join12(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord14(b)?.updatedAt ?? asRecord14(b)?.createdAt).localeCompare(String(asRecord14(a)?.updatedAt ?? asRecord14(a)?.createdAt)));
+  sessions.sort((a, b) => String(asRecord15(b)?.updatedAt ?? asRecord15(b)?.createdAt).localeCompare(String(asRecord15(a)?.updatedAt ?? asRecord15(a)?.createdAt)));
   return sessions[0] ?? null;
 }
 async function readLatestRefCache5(args = {}) {
   const stateRoot = resolveExpoStateRoot7(args);
-  const session = asRecord14(await readLatestSession6(stateRoot));
+  const session = asRecord15(await readLatestSession6(stateRoot));
   if (!session?.lastSnapshotId) return null;
   return readJsonFile9(join12(sessionDirectory3(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
 }
@@ -11488,7 +11454,7 @@ async function listRunRecords(stateRoot) {
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
     const file = join12(runsRoot, entry.name);
-    const record = asRecord14(await readJsonFile9(file).catch(() => null));
+    const record = asRecord15(await readJsonFile9(file).catch(() => null));
     if (record) records.push({ ...record, path: file });
   }
   records.sort((a, b) => String(a.startedAt ?? a.createdAt ?? "").localeCompare(String(b.startedAt ?? b.createdAt ?? "")));
@@ -11535,9 +11501,9 @@ function requireString18(value, name) {
   return value.trim();
 }
 function refsFromSnapshot(snapshot) {
-  const refs = asRecord14(snapshot)?.refs;
+  const refs = asRecord15(snapshot)?.refs;
   if (!Array.isArray(refs)) return [];
-  return refs.map((record) => asRecord14(record)?.ref).filter((ref) => typeof ref === "string");
+  return refs.map((record) => asRecord15(record)?.ref).filter((ref) => typeof ref === "string");
 }
 async function captureRouteScreenshot(args, deps, filename) {
   if (!deps.captureScreenshot) return null;
@@ -11554,7 +11520,7 @@ function isoStamp2(deps) {
 function nowMs2(deps) {
   return deps.nowMs ? deps.nowMs() : Date.now();
 }
-function asRecord14(value) {
+function asRecord15(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
@@ -11580,7 +11546,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
       sessionId: session?.sessionId ?? null
     };
   }
-  const metroPort = clampNumber20(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber21(args.metroPort ?? 8081, 1, 65535);
   const metro = await metroStatus({ metroPort }, deps);
   const target = session ? await selectedTarget(stateRoot, session, deps) : null;
   const record = found.record;
@@ -11690,11 +11656,11 @@ async function readLatestSession7(stateRoot) {
     const record = await readJsonFile10(join13(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord15(b)?.updatedAt ?? asRecord15(b)?.createdAt).localeCompare(String(asRecord15(a)?.updatedAt ?? asRecord15(a)?.createdAt)));
-  return asRecord15(sessions[0]);
+  sessions.sort((a, b) => String(asRecord16(b)?.updatedAt ?? asRecord16(b)?.createdAt).localeCompare(String(asRecord16(a)?.updatedAt ?? asRecord16(a)?.createdAt)));
+  return asRecord16(sessions[0]);
 }
 async function readSelectedTarget(stateRoot, session) {
-  return readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "target.json")).then(asRecord15).catch(() => null);
+  return readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "target.json")).then(asRecord16).catch(() => null);
 }
 function resolveExpoStateRoot8(args = {}) {
   if (args.stateDir) {
@@ -11714,7 +11680,7 @@ function requireString19(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber20(value, min, max) {
+function clampNumber21(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -11732,7 +11698,7 @@ async function metroStatus(args, deps) {
   return deps.metroStatusPayload ? deps.metroStatusPayload(args) : { available: false, targetCount: 0, targets: [] };
 }
 function asBox(value) {
-  const record = asRecord15(value);
+  const record = asRecord16(value);
   const x = Number(record?.x);
   const y = Number(record?.y);
   const width = Number(record?.width);
@@ -11743,7 +11709,7 @@ function asBox(value) {
 function firstPositional(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
 }
-function asRecord15(value) {
+function asRecord16(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
@@ -11759,9 +11725,9 @@ function toolJson27(value) {
   };
 }
 function unwrapToolJson11(value) {
-  const text = asRecord16(value)?.content;
+  const text = asRecord17(value)?.content;
   if (!Array.isArray(text)) return value;
-  const first = asRecord16(text[0]);
+  const first = asRecord17(text[0]);
   if (first?.type !== "text" || typeof first.text !== "string") return value;
   try {
     return JSON.parse(first.text);
@@ -11784,7 +11750,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
     });
   }
   if (action === "upstream-policy") {
-    const info = asRecord16(unwrapToolJson11(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
+    const info = asRecord17(unwrapToolJson11(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
     return toolJson27({
       available: Boolean(info.isExpoProject),
       action,
@@ -11839,12 +11805,12 @@ var defaultExpoCommandDependencies = {
   resolvePath: (input) => path11.resolve(input),
   currentWorkingDirectory: () => process.cwd(),
   runtimeSummary: async (cwd) => {
-    const info = asRecord16(unwrapToolJson11(await projectInfo({ cwd }))) ?? {};
+    const info = asRecord17(unwrapToolJson11(await projectInfo({ cwd }))) ?? {};
     return {
       projectRoot: String(info.projectRoot ?? cwd),
       expoDependency: info.expoDependency ?? null,
       reactNativeDependency: info.reactNativeDependency ?? null,
-      appConfig: asRecord16(info.appConfig)
+      appConfig: asRecord17(info.appConfig)
     };
   },
   doctor,
@@ -11865,10 +11831,10 @@ var defaultExpoCommandDependencies = {
 };
 async function expoModuleRecords(projectRoot, deps) {
   const packageJsonPath = await deps.findUp(projectRoot, "package.json");
-  const packageJson = packageJsonPath ? asRecord16(await deps.readJsonFile(packageJsonPath)) ?? {} : {};
+  const packageJson = packageJsonPath ? asRecord17(await deps.readJsonFile(packageJsonPath)) ?? {} : {};
   const allDeps = {
-    ...asRecord16(packageJson.dependencies),
-    ...asRecord16(packageJson.devDependencies)
+    ...asRecord17(packageJson.dependencies),
+    ...asRecord17(packageJson.devDependencies)
   };
   return Object.entries(allDeps).filter(([name]) => isExpoRelatedPackage(name)).sort(([left], [right]) => left.localeCompare(right)).map(([name, version]) => ({
     name,
@@ -11917,8 +11883,8 @@ async function expoPrebuildRisks(projectRoot, modules, deps) {
 async function readExpoAppConfigPlugins(projectRoot, deps) {
   const appJsonPath = deps.joinPath(projectRoot, "app.json");
   if (await deps.pathExists(appJsonPath)) {
-    const appJson = asRecord16(await deps.readJsonFile(appJsonPath));
-    const expoConfig = asRecord16(appJson?.expo);
+    const appJson = asRecord17(await deps.readJsonFile(appJsonPath));
+    const expoConfig = asRecord17(appJson?.expo);
     const plugins = expoConfig?.plugins ?? appJson?.plugins ?? [];
     return Array.isArray(plugins) ? plugins.map(formatExpoPluginEntry) : [];
   }
@@ -11950,7 +11916,7 @@ function requireString20(value, field) {
 function isExpoAction(action) {
   return EXPO_ACTIONS.includes(action);
 }
-function asRecord16(value) {
+function asRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 async function defaultNormalizeProjectCwd3(cwd) {
@@ -12009,40 +11975,7 @@ var defaultRnDependencies = {
   bridgeDomainCommand: defaultBridgeDomainCommand
 };
 async function defaultBridgeDomainCommand(request) {
-  const metroPort = clampNumber21(request.args.metroPort ?? 8081, 1, 65535);
-  const targets = await defaultMetroTargets2(metroPort);
-  const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
-  if (!target?.webSocketDebuggerUrl) {
-    return domainUnavailable({
-      domain: request.domain,
-      action: request.action,
-      metroPort,
-      code: "no-runtime-target",
-      reason: "No Metro inspector target.",
-      target: targetSummary7(target),
-      policy: request.policy
-    });
-  }
-  return domainUnavailable({
-    domain: request.domain,
-    action: request.action,
-    metroPort,
-    code: "transport-failure",
-    reason: "Hermes Runtime.evaluate adapter is not configured for rn introspection.",
-    target: targetSummary7(target),
-    policy: request.policy
-  });
-}
-async function defaultMetroTargets2(metroPort) {
-  const response = await fetch(`http://localhost:${metroPort}/json/list`);
-  if (!response.ok) return [];
-  const parsed = await response.json();
-  return Array.isArray(parsed) ? parsed.map((target) => asRecord17(target) ?? {}) : [];
-}
-function clampNumber21(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
-  return Math.min(Math.max(number, min), max);
+  return bridgeDomainCommand(request);
 }
 async function rnInspectPayload(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
@@ -12121,8 +12054,8 @@ async function readLatestSession8(stateRoot) {
     const record = await readJsonFile11(join14(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
-  sessions.sort((a, b) => String(asRecord17(b)?.updatedAt ?? asRecord17(b)?.createdAt).localeCompare(String(asRecord17(a)?.updatedAt ?? asRecord17(a)?.createdAt)));
-  return asRecord17(sessions[0]);
+  sessions.sort((a, b) => String(asRecord18(b)?.updatedAt ?? asRecord18(b)?.createdAt).localeCompare(String(asRecord18(a)?.updatedAt ?? asRecord18(a)?.createdAt)));
+  return asRecord18(sessions[0]);
 }
 function resolveExpoStateRoot9(args = {}) {
   if (args.stateDir) {
@@ -12142,7 +12075,7 @@ function requireString21(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function asRecord17(value) {
+function asRecord18(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
@@ -12616,13 +12549,13 @@ async function projectSummary(cwd, deps) {
   return deps.expoProjectRuntimeSummary ? deps.expoProjectRuntimeSummary(cwd) : { projectRoot: cwd };
 }
 async function metroStatus2(args, deps) {
-  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : { available: false, reason: "Metro status adapter is not configured.", metroPort: args.metroPort, targetCount: 0, targets: [] };
+  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : metroStatusPayload(args);
 }
 async function listMetroTargets(metroPort, deps) {
-  return deps.metroTargets ? deps.metroTargets(metroPort) : [];
+  return deps.metroTargets ? deps.metroTargets(metroPort) : metroTargets(metroPort);
 }
 async function evaluateHermes(url, expression, deps) {
-  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5e3 }) : {};
+  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5e3 }) : evaluateHermesExpression(url, expression, { timeoutMs: 5e3 });
 }
 async function findUpFile(cwd, name, deps) {
   return deps.findUp ? deps.findUp(cwd, name) : null;
@@ -12670,8 +12603,8 @@ async function dashboardCommand(args = {}) {
   const dashboardDir = join16(stateRoot, "dashboard");
   const statePath = join16(dashboardDir, "dashboard-state.json");
   await mkdir14(dashboardDir, { recursive: true });
-  const previous = asRecord18(await readJsonFile12(statePath).catch(() => null));
-  const previousArtifacts = asRecord18(previous?.artifacts);
+  const previous = asRecord19(await readJsonFile12(statePath).catch(() => null));
+  const previousArtifacts = asRecord19(previous?.artifacts);
   const status = action === "start" ? "running" : action === "stop" ? "stopped" : previous?.status ?? "stopped";
   const payload = {
     available: true,
@@ -12697,7 +12630,7 @@ async function dashboardSessions(stateRoot) {
   const sessions = [];
   for (const name of names.sort()) {
     const sessionPath = join16(sessionsDir, name, "session.json");
-    const session = asRecord18(await readJsonFile12(sessionPath).catch(() => null));
+    const session = asRecord19(await readJsonFile12(sessionPath).catch(() => null));
     if (session) {
       sessions.push({
         sessionId: session.sessionId ?? name,
@@ -12753,7 +12686,7 @@ function requireString23(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function asRecord18(value) {
+function asRecord19(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
@@ -13122,7 +13055,7 @@ async function releaseCheck(name, argv, cwd, predicate, deps = defaultPluginSelf
       stderr: truncate17(result.stderr, 1e3)
     };
   } catch (error) {
-    return { name, ok: false, exitCode: 1, error: formatError14(error) };
+    return { name, ok: false, exitCode: 1, error: formatError15(error) };
   }
 }
 function cliWrapperPath(deps = {}) {
@@ -13165,7 +13098,7 @@ function truncate17(value, max = 4e4) {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...[truncated ${text.length - max} chars]`;
 }
-function formatError14(error) {
+function formatError15(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
@@ -13297,6 +13230,40 @@ var LIVE_BACKLOG_MANIPULATING_COMMANDS = [
   "controls",
   "dialog",
   "sheet"
+];
+var ADAPTER_SELF_CHECK_FINDINGS = [
+  {
+    command: "snapshot",
+    domain: "semantic",
+    status: "wired",
+    reason: "Semantic snapshot capture evaluates app instrumentation through the shared Hermes CDP transport and falls back to native accessibility only when bridge data is unavailable.",
+    sourceFile: "src/modules/snapshot-evidence/src/main/snapshot-command.ts",
+    recommendedFix: null
+  },
+  {
+    command: "rn tree|rn fiber|rn renders",
+    domain: "react-native",
+    status: "wired",
+    reason: "React Native introspection delegates to bridge-domain Runtime.evaluate using __EXPO_IOS_RN_BRIDGE__ and instrumentation fallbacks.",
+    sourceFile: "src/modules/rn-introspection/src/main/index.ts",
+    recommendedFix: null
+  },
+  {
+    command: "console|errors",
+    domain: "diagnostics",
+    status: "wired",
+    reason: "Runtime diagnostics use the shared Hermes CDP evaluator by default.",
+    sourceFile: "src/modules/devtools-diagnostics/src/main/index.ts",
+    recommendedFix: null
+  },
+  {
+    command: "navigation|network|dialog|sheet|storage|state|controls|perf|trace|inspector|metro reload",
+    domain: "runtime",
+    status: "wired",
+    reason: "Runtime.evaluate-backed commands share the Hermes CDP transport with loopback URL normalization and Metro Origin headers.",
+    sourceFile: "src/modules/hermes-cdp-client/src/main/index.ts",
+    recommendedFix: null
+  }
 ];
 function toolJson33(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -13592,8 +13559,14 @@ function parseHelpCommandNames(text) {
 }
 function liveBacklogSelfCheck(matrix) {
   const issues = [];
+  const adapterFindings = ADAPTER_SELF_CHECK_FINDINGS.map((finding) => ({ ...finding }));
   for (const command of matrix.source.unrepresentedDispatcherCommands) issues.push({ type: "missing-dispatcher-row", command });
   for (const command of matrix.source.unrepresentedHelpCommands) issues.push({ type: "missing-help-row", command });
+  for (const finding of adapterFindings) {
+    if (finding.status === "missing" || finding.status === "stub") {
+      issues.push({ type: "missing-adapter", command: finding.command, domain: finding.domain, sourceFile: finding.sourceFile });
+    }
+  }
   for (const command of LIVE_BACKLOG_MANIPULATING_COMMANDS) {
     if (COMMAND_ALIASES[command] && !matrix.source.dispatcherCommands.includes(command)) issues.push({ type: "missing-live-action-dispatcher", command });
   }
@@ -13607,6 +13580,9 @@ function liveBacklogSelfCheck(matrix) {
     ok: issues.length === 0,
     issueCount: issues.length,
     issues,
+    adapterFindings,
+    adapterFindingCount: adapterFindings.length,
+    missingAdapterCount: adapterFindings.filter((finding) => finding.status === "missing" || finding.status === "stub").length,
     hiddenPreflightPolicy: {
       allowed: false,
       statement: "Simulator, app lifecycle, Metro, Hermes, dev-client, gesture, screenshot, accessibility, log, and crash-report actions must be represented as live-backlog rows."

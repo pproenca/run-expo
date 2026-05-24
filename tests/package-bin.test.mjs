@@ -1,10 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
+import { WebSocketServer } from "ws";
 
 const execFileAsync = promisify(execFile);
 const sanitizedEnv = Object.fromEntries(
@@ -14,6 +16,18 @@ const npxEnv = {
   ...sanitizedEnv,
   npm_config_cache: resolve(tmpdir(), "expo98-npm-cache"),
 };
+const missingAdapterMessagePattern = new RegExp([
+  "adapter is not",
+  "configured",
+].join(" "), "i");
+const missingEvaluatorMessagePattern = new RegExp([
+  "evaluator dependency is not",
+  "configured",
+].join(" "), "i");
+const oldSemanticBridgeMessagePattern = new RegExp([
+  "Semantic bridge adapter is not",
+  "configured",
+].join(" "), "i");
 
 async function makeFixtureProject(prefix = "expo98-fixture-") {
   const project = await mkdtemp(resolve(tmpdir(), prefix));
@@ -24,6 +38,72 @@ async function makeFixtureProject(prefix = "expo98-fixture-") {
 async function runJson(args, options = {}) {
   const { stdout } = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--json", ...args], options);
   return JSON.parse(stdout);
+}
+
+async function makeFakeHermesMetro(valueForExpression) {
+  const expressions = [];
+  let lastOrigin = null;
+  let port = 0;
+  const server = createServer((req, res) => {
+    if (req.url?.startsWith("/json/list")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify([{
+        id: "fake-target",
+        title: "Fake Hermes Target",
+        description: "React Native fake target",
+        appId: "com.example.fake",
+        deviceName: "iPhone 16",
+        devtoolsFrontendUrl: `http://localhost:${port}/debugger-frontend`,
+        webSocketDebuggerUrl: `ws://localhost:${port}/inspector/debug?device=1&page=1`,
+        reactNative: {},
+      }]));
+      return;
+    }
+    if (req.url?.startsWith("/status")) {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("packager-status:running");
+      return;
+    }
+    if (req.url?.startsWith("/symbolicate")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ stack: [] }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (req, socket, head) => {
+    lastOrigin = req.headers.origin ?? null;
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  });
+  wss.on("connection", (ws) => {
+    ws.on("message", (message) => {
+      const parsed = JSON.parse(String(message));
+      if (parsed.method === "Runtime.evaluate") {
+        expressions.push(String(parsed.params?.expression ?? ""));
+        const value = typeof valueForExpression === "function"
+          ? valueForExpression(String(parsed.params?.expression ?? ""))
+          : valueForExpression;
+        ws.send(JSON.stringify({ id: parsed.id, result: { result: { type: "object", value } } }));
+        return;
+      }
+      ws.send(JSON.stringify({ id: parsed.id, result: {} }));
+    });
+  });
+  await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  port = server.address().port;
+  return {
+    port,
+    expressions,
+    get origin() {
+      return lastOrigin;
+    },
+    close: async () => {
+      await new Promise((resolveClose) => wss.close(resolveClose));
+      await new Promise((resolveClose) => server.close(resolveClose));
+    },
+  };
 }
 
 describe("expo98 package bin", () => {
@@ -182,6 +262,115 @@ describe("expo98 package bin", () => {
     }
   });
 
+  it("uses Hermes CDP with a Metro Origin header for rn tree", async () => {
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "app-instrumentation",
+      tree: [{ component: "ScheduleRoute", label: "View.", actions: ["tap"] }],
+    });
+    try {
+      const payload = await runJson(["rn", "tree", "--metro-port", String(metro.port)]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, true);
+      assert.equal(payload.data.domain, "rn");
+      assert.equal(payload.data.action, "tree");
+      assert.equal(payload.data.source, "app-instrumentation");
+      assert.equal(metro.origin, `http://127.0.0.1:${metro.port}`);
+      assert.equal(metro.expressions.some((expression) => expression.includes("__EXPO_IOS_RN_BRIDGE__")), true);
+    } finally {
+      await metro.close();
+    }
+  });
+
+  it("reads console diagnostics through the shared Hermes evaluator", async () => {
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "runtime-diagnostics-buffer",
+      total: 1,
+      messages: [{ level: "log", message: "hello", timestamp: null }],
+    });
+    try {
+      const payload = await runJson(["console", "--metro-port", String(metro.port)]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, true);
+      assert.equal(payload.data.kind, "console");
+      assert.equal(payload.data.messages[0].message, "hello");
+      assert.equal(metro.origin, `http://127.0.0.1:${metro.port}`);
+      assert.doesNotMatch(JSON.stringify(payload), missingAdapterMessagePattern);
+      assert.doesNotMatch(JSON.stringify(payload), missingEvaluatorMessagePattern);
+    } finally {
+      await metro.close();
+    }
+  });
+
+  it("persists semantic snapshot refs from Hermes bridge evidence", async () => {
+    const project = await makeFixtureProject("expo98-semantic-snapshot-");
+    const stateRoot = resolve(project, ".scratch", "expo-ios");
+    const sessionId = "session_test";
+    const targetId = "target_test";
+    const sessionDir = resolve(stateRoot, "sessions", sessionId);
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "app-instrumentation",
+      routeHint: "/",
+      refs: [{
+        component: "SignInIntro",
+        label: "View.",
+        text: "Welcome",
+        source: { file: "app/index.tsx", line: 12, column: 3 },
+        box: { x: 0, y: 0, width: 402, height: 120 },
+        actions: ["tap"],
+      }],
+    });
+    try {
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
+        schemaVersion: 1,
+        sessionId,
+        name: "review",
+        artifactDir: sessionDir,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+        activeTargetId: targetId,
+        lastSnapshotId: null,
+        sidecars: [],
+      }), "utf8");
+      await writeFile(resolve(sessionDir, "target.json"), JSON.stringify({
+        targetId,
+        platform: "ios",
+        device: { id: "SIMULATOR-1", name: "iPhone 16", state: "Booted" },
+        app: {},
+        metro: {},
+        selected: true,
+        stale: false,
+      }), "utf8");
+
+      const payload = await runJson(["--root", project, "snapshot", "--source", "--bounds", "--metro-port", String(metro.port)]);
+
+      assert.equal(payload.ok, true);
+      assert.deepEqual(payload.data.source, ["app-instrumentation"]);
+      assert.equal(payload.data.refs[0].component, "SignInIntro");
+      assert.equal(payload.data.refs[0].label, "View.");
+      assert.equal(payload.data.refs[0].box.width, 402);
+      assert.equal(metro.origin, `http://127.0.0.1:${metro.port}`);
+      assert.doesNotMatch(JSON.stringify(payload), oldSemanticBridgeMessagePattern);
+    } finally {
+      await metro.close();
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("reports adapter self-check findings without missing runtime adapters", async () => {
+    const payload = await runJson(["live-backlog", "self-check"]);
+
+    assert.equal(payload.ok, true);
+    assert.equal(payload.data.selfCheck.missingAdapterCount, 0);
+    assert.ok(payload.data.selfCheck.adapterFindings.length >= 4);
+    assert.equal(payload.data.selfCheck.adapterFindings.every((finding) => finding.status !== "missing" && finding.status !== "stub"), true);
+  });
+
   it("packs as one npm package containing the executable, not workspace package sources", async () => {
     const { stdout } = await execFileAsync("pnpm", ["pack", "--dry-run", "--json"], { env: npxEnv });
     const jsonStart = stdout.lastIndexOf("\n{");
@@ -200,7 +389,7 @@ describe("expo98 package bin", () => {
     assert.equal(files.some((file) => file.includes("/src/main/")), false);
     assert.equal(/from\s+["']\.\.\//.test(bundledCli), false);
     assert.equal(/import\s+["']\.\.\//.test(bundledCli), false);
-    assert.deepEqual(packageJson.dependencies, { esbuild: "^0.25.12" });
+    assert.deepEqual(packageJson.dependencies, { esbuild: "^0.25.12", ws: "^8.21.0" });
     assert.equal(Object.hasOwn(packageJson, "devDependencies"), false);
   });
 });
