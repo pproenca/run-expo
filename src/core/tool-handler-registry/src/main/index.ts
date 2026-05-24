@@ -1,6 +1,7 @@
 import { TOOL_HANDLER_BINDINGS } from "../../../command-surface/src/main/index.ts";
 
 export type ToolHandler = (args: Record<string, unknown>) => Promise<unknown> | unknown;
+export type ToolHandlerImplementations = Record<string, unknown>;
 export type { ToolHandlerBinding } from "../../../command-surface/src/main/index.ts";
 export { TOOL_HANDLER_BINDINGS };
 
@@ -22,13 +23,17 @@ export function toolsForHandlerSymbol(handlerSymbol: string): string[] {
     .map(([toolName]) => toolName);
 }
 
-export function bindHandlers(implementations: Record<string, ToolHandler>): Record<string, ToolHandler> {
+export function bindHandlers(implementations: ToolHandlerImplementations): Record<string, ToolHandler> {
   const missing = handlerSymbols().filter((handlerSymbol) => implementations[handlerSymbol] === undefined);
   if (missing.length > 0) {
     throw new Error(`Missing handler implementations: ${missing.join(", ")}`);
   }
+  const nonFunctions = handlerSymbols().filter((handlerSymbol) => typeof implementations[handlerSymbol] !== "function");
+  if (nonFunctions.length > 0) {
+    throw new Error(`Handler implementations must be functions: ${nonFunctions.join(", ")}`);
+  }
   return Object.fromEntries(TOOL_HANDLER_BINDINGS.map(([toolName, handlerSymbol]) => [
     toolName,
-    implementations[handlerSymbol],
+    implementations[handlerSymbol] as ToolHandler,
   ]));
 }

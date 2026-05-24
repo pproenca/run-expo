@@ -46,6 +46,8 @@ export interface CliGlobals {
   debug: boolean;
   maxOutput: string | number | null;
   contentBoundaries: boolean;
+  allowRuntimeEval: string | boolean | null;
+  confirmActions: string | null;
   [key: string]: unknown;
 }
 

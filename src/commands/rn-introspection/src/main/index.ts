@@ -51,6 +51,16 @@ export async function rnCommand(
   const subaction = action === "renders" ? requireString(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
   if (subaction && !["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown React Native renders action: ${subaction}`);
   const bridgeAction = action === "renders" ? `renders-${subaction}` : action;
+  if (!deps.bridgeDomainCommand) {
+    return toolJson({
+      available: false,
+      action,
+      code: "transport-failure",
+      reason: "No React Native bridge dependency is configured.",
+      realValidation: rnRealValidation({ available: false }, action, subaction),
+      limitations: rnLimitations(undefined),
+    });
+  }
   const bridgePayload = await deps.bridgeDomainCommand({
     args,
     domain: "rn",
@@ -610,7 +620,7 @@ function relevantPathFromElement(element: Record<string, any>): string[] {
 
 function nodeName(value: unknown): string | null {
   const record = asRecord(value);
-  return optionalNonemptyString(record?.name ?? record?.component);
+  return optionalNonemptyString(record?.name ?? record?.component) ?? null;
 }
 
 function isRelevantName(name: string | null): name is string {

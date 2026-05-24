@@ -8,6 +8,8 @@ export interface CliGlobals extends Record<string, unknown> {
   debug: boolean;
   maxOutput: string | number | null;
   contentBoundaries: boolean;
+  allowRuntimeEval: string | boolean | null;
+  confirmActions: string | null;
 }
 
 export interface ParsedCommand {
@@ -22,7 +24,7 @@ export interface RunRecorder {
 }
 
 export type ToolHandler = (args: Record<string, unknown>) => Promise<unknown> | unknown;
-export type ToolHandlerImplementations = Record<string, ToolHandler>;
+export type ToolHandlerImplementations = Record<string, unknown>;
 export type ToolHandlerRegistry = Record<string, ToolHandler>;
 
 export interface DispatchDependencies {

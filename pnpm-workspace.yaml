@@ -1,5 +1,21 @@
 packages:
   - "."
 
+minimumReleaseAge: 2880
+
+minimumReleaseAgeExclude:
+  - "@oxc-project/types"
+  - "@oxfmt/*"
+  - "@oxlint/*"
+  - "@types/node"
+  - "@typescript/native-preview*"
+  - "oxfmt"
+  - "oxlint"
+  - "oxlint-tsgolint"
+  - "typescript"
+
+nodeLinker: hoisted
+blockExoticSubdeps: true
+
 onlyBuiltDependencies:
   - esbuild

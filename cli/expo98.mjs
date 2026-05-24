@@ -1,14 +1,35 @@
 #!/usr/bin/env node
 
-// src/core/cli-argv-parser/src/main/index.ts
+// src/core/cli-error-classification/src/main/index.ts
+var EXIT_SUCCESS = 0;
+var EXIT_RUNTIME_FAILURE = 1;
 var EXIT_INVALID_USAGE = 2;
 var CliUsageError = class extends Error {
-  exitCode = EXIT_INVALID_USAGE;
   constructor(message) {
     super(message);
+    this.exitCode = EXIT_INVALID_USAGE;
     this.name = "CliUsageError";
   }
 };
+function exitCodeForError(error) {
+  const record = error;
+  const explicitExitCode = record?.exitCode;
+  if (Number.isInteger(explicitExitCode)) {
+    return explicitExitCode;
+  }
+  const message = String(record?.message ?? "");
+  if (/Unknown command|Unknown tool|requires a value|Expected a finite number|must be a non-empty string|must look like|must not contain whitespace|valid JSON|mutually exclusive/i.test(message)) {
+    return EXIT_INVALID_USAGE;
+  }
+  return EXIT_RUNTIME_FAILURE;
+}
+function errorCodeForExitCode(exitCode) {
+  if (exitCode === EXIT_INVALID_USAGE) return "invalid_usage";
+  if (exitCode === EXIT_RUNTIME_FAILURE) return "runtime_failure";
+  return "error";
+}
+
+// src/core/cli-argv-parser/src/main/index.ts
 function parseCliArgs(argv) {
   const args = { _: [] };
   const globals = defaultGlobals();
@@ -1143,17 +1164,7 @@ function isSecretKey(key) {
 }
 
 // src/core/command-dispatch-envelope/src/main/index.ts
-var EXIT_SUCCESS = 0;
-var EXIT_RUNTIME_FAILURE = 1;
-var EXIT_INVALID_USAGE2 = 2;
 var CLI_NAME = CURRENT_CLI_NAME;
-var CliUsageError2 = class extends Error {
-  exitCode = EXIT_INVALID_USAGE2;
-  constructor(message) {
-    super(message);
-    this.name = "CliUsageError";
-  }
-};
 async function dispatchCommand(parsed, dependencies) {
   const { globals, command, args } = parsed;
   const stdout = dependencies.stdout ?? (() => {
@@ -1161,7 +1172,7 @@ async function dispatchCommand(parsed, dependencies) {
   const stderr = dependencies.stderr ?? (() => {
   });
   if (globals.json && globals.plain) {
-    throw new CliUsageError2("--json and --plain are mutually exclusive.");
+    throw new CliUsageError("--json and --plain are mutually exclusive.");
   }
   if (globals.version) {
     stdout(`${dependencies.cliVersion ?? CLI_VERSION}
@@ -1174,7 +1185,7 @@ async function dispatchCommand(parsed, dependencies) {
   }
   const toolName = COMMAND_ALIASES[command];
   if (!toolName) {
-    throw new CliUsageError2(`Unknown command: ${command}`);
+    throw new CliUsageError(`Unknown command: ${command}`);
   }
   const effectiveArgs = dependencies.projectArgs ? dependencies.projectArgs(command, args, globals) : pickDefined2({ ...args });
   const recorder = await (dependencies.startRunRecord ? dependencies.startRunRecord({ command, args: effectiveArgs, globals }) : noopRecorder());
@@ -1204,7 +1215,7 @@ async function dispatchCommand(parsed, dependencies) {
 async function runToolAndEmitPayload(toolName, args, options) {
   const handler = options.handlers[toolName];
   if (!handler) {
-    throw new CliUsageError2(`Unknown tool: ${toolName}`);
+    throw new CliUsageError(`Unknown tool: ${toolName}`);
   }
   const result = await handler(args);
   const payload = unwrapToolJson(result);
@@ -1300,22 +1311,6 @@ function plainPayload(command, payload) {
   }
   lines.push(`data: ${JSON.stringify(payload)}`);
   return lines;
-}
-function exitCodeForError(error) {
-  const record = error;
-  if (record && Number.isInteger(record.exitCode)) {
-    return record.exitCode;
-  }
-  const message = String(record?.message ?? "");
-  if (/Unknown command|Unknown tool|requires a value|Expected a finite number|must be a non-empty string|must look like|must not contain whitespace|valid JSON/i.test(message)) {
-    return EXIT_INVALID_USAGE2;
-  }
-  return EXIT_RUNTIME_FAILURE;
-}
-function errorCodeForExitCode(exitCode) {
-  if (exitCode === EXIT_INVALID_USAGE2) return "invalid_usage";
-  if (exitCode === EXIT_RUNTIME_FAILURE) return "runtime_failure";
-  return "error";
 }
 function clampNumber(value, min, max) {
   const number = Number(value);
@@ -1460,6 +1455,10 @@ function bindHandlers(implementations) {
   const missing = handlerSymbols().filter((handlerSymbol) => implementations[handlerSymbol] === void 0);
   if (missing.length > 0) {
     throw new Error(`Missing handler implementations: ${missing.join(", ")}`);
+  }
+  const nonFunctions = handlerSymbols().filter((handlerSymbol) => typeof implementations[handlerSymbol] !== "function");
+  if (nonFunctions.length > 0) {
+    throw new Error(`Handler implementations must be functions: ${nonFunctions.join(", ")}`);
   }
   return Object.fromEntries(TOOL_HANDLER_BINDINGS.map(([toolName, handlerSymbol]) => [
     toolName,
@@ -3288,10 +3287,6 @@ var MetroInspectorClient = class {
     this.fetchLocalJson = deps.fetchLocalJson ?? defaultFetchLocalJson;
     this.fetchLocalLoopback = deps.fetchLocalLoopback ?? defaultFetchLocalLoopback;
   }
-  baseUrl;
-  fetchLocalText;
-  fetchLocalJson;
-  fetchLocalLoopback;
   async status() {
     try {
       const text = await this.fetchLocalText(`${this.baseUrl}/status`, { timeoutMs: 1500 });
@@ -4346,45 +4341,18 @@ function defaultSleep(ms) {
   return new Promise((resolve18) => setTimeout(resolve18, ms));
 }
 
-// src/commands/batch-orchestration/src/main/domain.ts
-var EXIT_RUNTIME_FAILURE3 = 1;
-var EXIT_INVALID_USAGE4 = 2;
-var CliUsageError4 = class extends Error {
-  exitCode = EXIT_INVALID_USAGE4;
-  constructor(message) {
-    super(message);
-    this.name = "CliUsageError";
-  }
-};
-
 // src/commands/batch-orchestration/src/main/batch.ts
 import { execFile as nodeExecFile4 } from "node:child_process";
 
 // src/commands/batch-orchestration/src/main/errors.ts
 var MAX_OUTPUT5 = 4e4;
 function batchStepError(error) {
-  const exitCode = exitCodeForError3(error);
+  const exitCode = exitCodeForError(error);
   return {
-    code: errorCodeForExitCode3(exitCode),
+    code: errorCodeForExitCode(exitCode),
     message: sanitizeErrorMessage(formatError2(error)),
     exitCode
   };
-}
-function exitCodeForError3(error) {
-  const record = error;
-  if (record && Number.isInteger(record.exitCode)) {
-    return record.exitCode;
-  }
-  const message = String(record?.message ?? "");
-  if (/Unknown command|Unknown tool|requires a value|Expected a finite number|must be a non-empty string|must look like|must not contain whitespace|valid JSON/i.test(message)) {
-    return EXIT_INVALID_USAGE4;
-  }
-  return EXIT_RUNTIME_FAILURE3;
-}
-function errorCodeForExitCode3(exitCode) {
-  if (exitCode === EXIT_INVALID_USAGE4) return "invalid_usage";
-  if (exitCode === EXIT_RUNTIME_FAILURE3) return "runtime_failure";
-  return "error";
 }
 function truncate6(value, limit = MAX_OUTPUT5) {
   return truncateOutput(value, limit);
@@ -4425,12 +4393,12 @@ var defaultBatchDependencies = {
 };
 function normalizeBatchSteps(steps) {
   if (!Array.isArray(steps)) {
-    throw new CliUsageError4("batch requires one or more command steps.");
+    throw new CliUsageError("batch requires one or more command steps.");
   }
   return steps.map((step, index) => {
     const parsed = typeof step === "string" ? parseJsonArgument(step, `step ${index + 1}`) : step;
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      throw new CliUsageError4(`batch step ${index + 1} must be a non-empty argv array.`);
+      throw new CliUsageError(`batch step ${index + 1} must be a non-empty argv array.`);
     }
     return parsed.map((part) => String(part));
   });
@@ -4438,10 +4406,10 @@ function normalizeBatchSteps(steps) {
 async function runBatchStep(step, batchArgs, deps) {
   const parsed = parseCliArgs(step);
   const { command, args, globals } = parsed;
-  if (!command) throw new CliUsageError4("Batch step is missing a command.");
+  if (!command) throw new CliUsageError("Batch step is missing a command.");
   const aliases = commandAliases();
   const toolName = aliases[command];
-  if (!toolName) throw new CliUsageError4(`Unknown command: ${command}`);
+  if (!toolName) throw new CliUsageError(`Unknown command: ${command}`);
   const mergedGlobals = {
     ...globals,
     json: true,
@@ -9935,6 +9903,14 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   }
   const metroPort = clampNumber19(args.metroPort ?? 8081, 1, 65535);
   const limit = clampNumber19(args.limit ?? 100, 1, 1e3);
+  if (!deps.metroTargets) {
+    return toolJson(networkUnavailable({
+      action: bridgeAction,
+      metroPort,
+      code: "transport-failure",
+      reason: "No Metro target resolver is configured."
+    }));
+  }
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -12025,6 +12001,16 @@ async function rnCommand(args = {}, deps = defaultRnDependencies) {
   const subaction = action === "renders" ? requireString21(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
   if (subaction && !["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown React Native renders action: ${subaction}`);
   const bridgeAction = action === "renders" ? `renders-${subaction}` : action;
+  if (!deps.bridgeDomainCommand) {
+    return toolJson({
+      available: false,
+      action,
+      code: "transport-failure",
+      reason: "No React Native bridge dependency is configured.",
+      realValidation: rnRealValidation({ available: false }, action, subaction),
+      limitations: rnLimitations(void 0)
+    });
+  }
   const bridgePayload = await deps.bridgeDomainCommand({
     args,
     domain: "rn",
@@ -12533,7 +12519,7 @@ function relevantPathFromElement(element) {
 }
 function nodeName(value) {
   const record = asRecord18(value);
-  return optionalNonemptyString(record?.name ?? record?.component);
+  return optionalNonemptyString(record?.name ?? record?.component) ?? null;
 }
 function isRelevantName(name) {
   if (!name) return false;
@@ -13979,7 +13965,7 @@ import { execFile as nodeExecFile13 } from "node:child_process";
 import { mkdir as fsMkdir4, readdir as fsReaddir, writeFile as fsWriteFile4 } from "node:fs/promises";
 import { join as join20, resolve as resolve17 } from "node:path";
 var EXIT_SUCCESS2 = 0;
-var EXIT_INVALID_USAGE5 = 2;
+var EXIT_INVALID_USAGE2 = 2;
 var COMMAND_ALIASES2 = commandAliases();
 var LIVE_BACKLOG_MANIPULATING_COMMANDS = manipulatingCommandNames();
 var ADAPTER_SELF_CHECK_FINDINGS = [
@@ -14445,7 +14431,7 @@ function parseBacklogJson(stdout) {
   }
 }
 function classifyLiveBacklogRow(row, exitCode, parsed) {
-  if (exitCode === EXIT_INVALID_USAGE5) return "expected-usage-error";
+  if (exitCode === EXIT_INVALID_USAGE2) return "expected-usage-error";
   if (exitCode !== EXIT_SUCCESS2) {
     if (row.requirements.length > 0) return "environment-blocked";
     if (row.expectedClass === "expected-usage-error") return "expected-usage-error";

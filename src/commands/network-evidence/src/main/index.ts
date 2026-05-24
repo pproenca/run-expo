@@ -170,6 +170,14 @@ export async function networkCommand(
 
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const limit = clampNumber(args.limit ?? 100, 1, 1000);
+  if (!deps.metroTargets) {
+    return toolJson(networkUnavailable({
+      action: bridgeAction,
+      metroPort,
+      code: "transport-failure",
+      reason: "No Metro target resolver is configured.",
+    }));
+  }
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;

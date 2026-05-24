@@ -59,11 +59,11 @@ export type RefRecord = {
   ref: string;
   targetId?: string;
   stale?: boolean;
-  role?: string;
-  label?: string;
-  text?: string;
-  box?: RefBox;
-  actions?: string[];
+  role?: string | null;
+  label?: string | null;
+  text?: string | null;
+  box?: RefBox | null;
+  actions: string[];
 };
 
 export type RefCache = {
