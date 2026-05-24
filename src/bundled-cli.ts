@@ -9,7 +9,7 @@ import {
 } from "./core/command-dispatch-envelope/src/main/index.ts";
 import { createCliFacade } from "./core/cli-facade-entrypoint/src/main/index.ts";
 import { cliHelpText } from "./core/cli-help-surface/src/main/index.ts";
-import { createCliRuntime } from "./core/cli-runtime-composition/src/main/index.ts";
+import { createCliRuntime, type CliRuntime } from "./core/cli-runtime-composition/src/main/index.ts";
 import { createCliExecutable } from "./core/cli-executable-wrapper/src/main/index.ts";
 import { bindHandlers } from "./core/tool-handler-registry/src/main/index.ts";
 import { COMPATIBILITY_CLI_NAME } from "./core/cli-identity/src/main/index.ts";
@@ -20,7 +20,7 @@ import { sessionCommand, startRunRecord } from "./state/session-run-records/src/
 import { targetCommand } from "./state/target-management/src/main/index.ts";
 import { snapshotCommand, refsCommand, getRefCommand } from "./commands/snapshot-evidence/src/main/index.ts";
 import { findCommand, waitCommand } from "./commands/ref-actions-wait/src/main/index.ts";
-import { batchCommand } from "./commands/batch-orchestration/src/main/index.ts";
+import { batchCommand, type BatchDependencies } from "./commands/batch-orchestration/src/main/index.ts";
 import {
   bootSimulator,
   collectAppLogs,
@@ -73,6 +73,20 @@ import { traceInteraction } from "./commands/interaction-trace-expression/src/ma
 
 const CLI_VERSION = "0.1.0";
 
+let runtime: CliRuntime;
+
+const runToolInCurrentRuntime: BatchDependencies["runToolAndEmitPayload"] = async (toolName, args) => {
+  const handler = runtime.handlers[toolName];
+  if (!handler) {
+    throw new Error(`Unknown batch tool: ${toolName}`);
+  }
+  return handler(args);
+};
+
+function runBatchCommand(args: Record<string, unknown>) {
+  return batchCommand(args, { runToolAndEmitPayload: runToolInCurrentRuntime });
+}
+
 const handlerImplementations = {
   doctor: expo98Doctor,
   projectInfo,
@@ -85,7 +99,7 @@ const handlerImplementations = {
   getRefCommand,
   findCommand,
   waitCommand,
-  batchCommand,
+  batchCommand: runBatchCommand,
   bootSimulator,
   openUrl,
   launchApp,
@@ -140,7 +154,7 @@ const handlerImplementations = {
   traceInteraction,
 };
 
-const runtime = createCliRuntime({
+runtime = createCliRuntime({
   parseCliArgs,
   commandArgs,
   dispatchCommand,

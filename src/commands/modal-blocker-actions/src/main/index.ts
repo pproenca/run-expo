@@ -94,7 +94,7 @@ interface ModalBridgeCommandInput {
 const MAX_OUTPUT = 40_000;
 const MAX_ARRAY_ITEMS = 1000;
 
-export function toolJson(value: unknown): ToolTextResult {
+export function boundedToolJson(value: unknown): ToolTextResult {
   return { content: [{ type: "text", text: stringifyBoundedJson(value) }] };
 }
 
@@ -128,8 +128,8 @@ async function modalBridgeCommand(
   if (!input.actions.includes(action)) throw new Error(`Unknown ${input.domain} action: ${action}`);
   const sideEffect = action === "status" ? "read" : "device";
   const policy = await bridgePolicyDecision(input.args, `${input.domain}.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: input.domain, action, policy }));
-  return toolJson(await bridgeDomainCommand({
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: input.domain, action, policy }));
+  return boundedToolJson(await bridgeDomainCommand({
     args: input.args,
     domain: input.domain,
     action,

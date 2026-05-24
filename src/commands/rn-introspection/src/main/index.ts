@@ -2,7 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import { bridgeDomainCommand } from "../../../bridge-domain-actions/src/main/index.ts";
+import { bridgeDomainCommand, type BridgeDomainPayload, type DomainUnavailable } from "../../../bridge-domain-actions/src/main/index.ts";
+import type { PolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
 import { realValidation, type RealValidation } from "../../../../core/real-validation/src/main/index.ts";
 
 export interface RefCache {
@@ -33,8 +34,10 @@ export interface RnBridgeRequest {
 
 export interface RnIntrospectionDependencies {
   readLatestRefCache?: (args: Record<string, unknown>) => Promise<RefCache | null> | RefCache | null;
-  bridgeDomainCommand?: (request: RnBridgeRequest) => Promise<Record<string, any>> | Record<string, any>;
+  bridgeDomainCommand?: (request: RnBridgeRequest) => Promise<RnBridgeDomainResult> | RnBridgeDomainResult;
 }
+
+export type RnBridgeDomainResult = BridgeDomainPayload | DomainUnavailable | PolicyDeniedPayload;
 
 export async function rnCommand(
   args: Record<string, unknown> = {},
@@ -77,7 +80,7 @@ const defaultRnDependencies: RnIntrospectionDependencies = {
   bridgeDomainCommand: defaultBridgeDomainCommand,
 };
 
-async function defaultBridgeDomainCommand(request: RnBridgeRequest): Promise<Record<string, any>> {
+async function defaultBridgeDomainCommand(request: RnBridgeRequest): Promise<RnBridgeDomainResult> {
   return bridgeDomainCommand(request);
 }
 

@@ -1,5 +1,5 @@
 import { toolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
-import { reviewOverlay } from "../../../review-overlay-workflow/src/main/index.ts";
+import { reviewOverlayAction, type ReviewOverlayPayload } from "../../../review-overlay-workflow/src/main/index.ts";
 
 export interface AnnotateScreenArgs extends Record<string, unknown> {
   action?: unknown;
@@ -16,7 +16,7 @@ export interface AnnotateScreenArgs extends Record<string, unknown> {
 }
 
 export interface AnnotateScreenDependencies {
-  reviewOverlay: (args: Record<string, unknown>) => Promise<ToolTextResult> | ToolTextResult;
+  reviewOverlayAction: (args: Record<string, unknown>) => Promise<ReviewOverlayPayload | ToolTextResult> | ReviewOverlayPayload | ToolTextResult;
 }
 
 const ANNOTATE_ACTIONS = new Set(["prepare", "read", "clear", "scaffold", "server"]);
@@ -48,12 +48,12 @@ export async function annotateScreen(
     });
   }
 
-  const result = await deps.reviewOverlay({
+  const result = await deps.reviewOverlayAction({
     ...args,
     action,
     title: args.title ?? "Codex in-app annotations",
   });
-  const payload = unwrapToolJson(result);
+  const payload = isToolTextResult(result) ? unwrapToolJson(result) : result;
   return toolJson({
     ...(isRecord(payload) ? payload : { value: payload }),
     command: "annotate-screen",
@@ -66,7 +66,7 @@ export async function annotateScreen(
 }
 
 const defaultAnnotateScreenDependencies: AnnotateScreenDependencies = {
-  reviewOverlay,
+  reviewOverlayAction,
 };
 
 export function unwrapToolJson(result: unknown): unknown {
@@ -90,4 +90,8 @@ export function requireOptionalString(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isToolTextResult(value: unknown): value is ToolTextResult {
+  return Array.isArray((value as { content?: unknown } | null)?.content);
 }

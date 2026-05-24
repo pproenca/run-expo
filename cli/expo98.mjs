@@ -1489,7 +1489,7 @@ async function doctor(args = {}) {
   }
   const projectInfoResult = await safeToolSection(() => projectInfo({ cwd }));
   const repairs = args.fix === true ? await doctorRepairs(cwd) : [];
-  return toolJson2({
+  return toolJson({
     cli: { name: CLI_NAME2, version: CLI_VERSION },
     cwd,
     auth: { required: false, source: "not-required" },
@@ -1505,7 +1505,7 @@ async function doctor(args = {}) {
       metroHermes: hasRuntimeGlobal("fetch", args.deps?.hasFetch) && hasRuntimeGlobal("WebSocket", args.deps?.hasWebSocket)
     },
     repairs,
-    project: projectInfoResult.ok ? unwrapToolJson2(projectInfoResult.value) : projectInfoResult
+    project: projectInfoResult.ok ? unwrapToolJson(projectInfoResult.value) : projectInfoResult
   });
 }
 async function doctorRepairs(cwd) {
@@ -1523,7 +1523,7 @@ async function projectInfo(args) {
   const cwd = await normalizeCwd(args.cwd);
   const packageJsonPath = await findUp(cwd, "package.json");
   if (!packageJsonPath) {
-    return toolJson2({
+    return toolJson({
       cwd,
       isExpoProject: false,
       reason: "No package.json found in this directory or its parents."
@@ -1541,7 +1541,7 @@ async function projectInfo(args) {
   const expoConfig = appJson ? asRecord(appJson.expo) ?? appJson : null;
   const appConfigSummary = await readExpoConfigSummary(projectRoot);
   const easJson = await pathExists(path.join(projectRoot, "eas.json")) ? asRecord(await readJsonFile(path.join(projectRoot, "eas.json"))) : null;
-  return toolJson2({
+  return toolJson({
     cwd,
     projectRoot,
     isExpoProject: Boolean(allDeps.expo || expoConfig),
@@ -1888,21 +1888,6 @@ ${truncate(record.stdout)}`);
 ${truncate(record.stderr)}`);
   return parts.join("\n\n");
 }
-function toolJson2(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
-}
-function unwrapToolJson2(result) {
-  const content = asRecord(result)?.content;
-  const first = Array.isArray(content) ? asRecord(content[0]) : null;
-  const text = first?.text;
-  if (typeof text !== "string") return result;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
-}
 async function commandPath(command, deps) {
   if (deps?.commandPath) return deps.commandPath(command);
   const result = await execFilePromise("sh", ["-lc", `command -v ${shellArg(command)}`], {
@@ -2011,7 +1996,7 @@ async function expoRouterSitemap(args = {}, dependencies = {}) {
   const cwd = await normalizeCwd2(args.cwd, deps);
   const appDir = deps.path.resolve(cwd, args.appDir ?? "app");
   if (!await deps.fs.pathExists(appDir)) {
-    return toolJson3({
+    return toolJson({
       cwd,
       appDir,
       routes: [],
@@ -2020,7 +2005,7 @@ async function expoRouterSitemap(args = {}, dependencies = {}) {
     });
   }
   const { routes, specialFiles } = await collectRoutes(appDir, deps, { sortSpecialFiles: true });
-  return toolJson3({ cwd, appDir, routeCount: routes.length, routes, specialFiles });
+  return toolJson({ cwd, appDir, routeCount: routes.length, routes, specialFiles });
 }
 async function expoRouteContext(cwd, dependencies = {}) {
   const deps = resolveDependencies(dependencies);
@@ -2070,10 +2055,6 @@ async function normalizeCwd2(cwd, deps) {
   const stat8 = await deps.fs.stat(resolved);
   if (!stat8?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
-}
-function toolJson3(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
 }
 function resolveDependencies(dependencies) {
   const paths = dependencies.path ?? defaultPath;
@@ -2151,7 +2132,7 @@ async function listDevices(args = {}, dependencies = defaultDeviceListingDepende
   if (platform === "android" || platform === "all") {
     payload.android = await safeToolSection2(async () => listAndroidDevices(limit, dependencies));
   }
-  return toolJson4(payload);
+  return toolJson(payload);
 }
 var defaultDeviceListingDependencies = {
   execFile: (file, args, options = {}) => new Promise((resolve18, reject) => {
@@ -2228,13 +2209,6 @@ function isRecord(value) {
 function stringOrNull(value) {
   return value == null ? null : String(value);
 }
-function toolJson4(value) {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }],
-    isError: false
-  };
-}
 function truncate2(value, limit = MAX_OUTPUT2) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
@@ -2309,27 +2283,23 @@ async function sessionCommand(args = {}, deps = {}) {
   }
   const stateRoot = resolveExpoStateRoot2(args);
   if (action === "list") {
-    return toolJson5({ available: true, action, stateRoot, sessions: await listSessions(stateRoot) });
+    return toolJson({ available: true, action, stateRoot, sessions: await listSessions(stateRoot) });
   }
   if (action === "show") {
-    return toolJson5(await showSession({ stateRoot, name: requireOptionalString(args.name) }));
+    return toolJson(await showSession({ stateRoot, name: requireOptionalString(args.name) }));
   }
   if (action === "close") {
-    return toolJson5(await closeSession({ stateRoot, name: requireOptionalString(args.name), now: deps.now }));
+    return toolJson(await closeSession({ stateRoot, name: requireOptionalString(args.name), now: deps.now }));
   }
   if (action === "clean") {
-    return toolJson5(await cleanSessions({ stateRoot, olderThan: requireOptionalString(args.olderThan) ?? void 0, now: deps.now }));
+    return toolJson(await cleanSessions({ stateRoot, olderThan: requireOptionalString(args.olderThan) ?? void 0, now: deps.now }));
   }
-  return toolJson5(await createSession({
+  return toolJson(await createSession({
     stateRoot,
     name: requireOptionalString(args.name) ?? void 0,
     now: deps.now,
     randomSuffix: deps.randomSuffix
   }));
-}
-function toolJson5(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
 }
 function parseDurationMs(value) {
   const match = /^(\d+)([smhd])$/.exec(String(value));
@@ -3257,9 +3227,6 @@ var LIMITATIONS = [
   "Connected targets can be stale when multiple apps or devices are attached."
 ];
 var MAX_OUTPUT4 = 16384;
-function toolJson6(value) {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
-}
 function clampNumber5(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -3298,12 +3265,12 @@ function targetSummary(target) {
 }
 async function metroCommand(args = {}, deps = {}) {
   const action = requireString4(args.action ?? "status", "action");
-  if (action === "reload") return toolJson6(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
+  if (action === "reload") return toolJson(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
   if (action === "symbolicate") {
-    return toolJson6(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
+    return toolJson(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
   }
   if (action !== "status") throw new Error(`Unknown metro action: ${action}`);
-  return toolJson6(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
+  return toolJson(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
 }
 async function metroStatusPayload(args = {}, deps = {}) {
   const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
@@ -3677,8 +3644,8 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
 var defaultSnapshotDependencies = {
   now: () => /* @__PURE__ */ new Date(),
   randomSuffix: randomBase36Suffix,
-  ensureDirectory: async (path12) => {
-    await mkdir6(path12, { recursive: true });
+  ensureDirectory: async (path14) => {
+    await mkdir6(path14, { recursive: true });
   },
   writeJsonFile: writeJson2,
   updateSessionRecord: async (stateRoot, record) => {
@@ -4108,8 +4075,8 @@ async function readLatestSession2(stateRoot) {
   );
   return sessions[0] ?? null;
 }
-async function readJson4(path12) {
-  return JSON.parse(await readFile6(path12, "utf8"));
+async function readJson4(path14) {
+  return JSON.parse(await readFile6(path14, "utf8"));
 }
 
 // src/commands/ref-actions-wait/src/main/find.ts
@@ -5218,33 +5185,33 @@ async function openUrl(args, deps = {}) {
   const url = requireString7(args.url, "url");
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
   const policy = await routeActionPolicyDecision(args, "open-url", deps);
-  if (!policy.allowed) return toolJson7(policyDeniedPayload({ domain: "route", action: "open-url", policy }));
+  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "route", action: "open-url", policy }));
   const execFile12 = deps.execFile ?? defaultExecFile2;
   if (platform === "android") {
     const adbArgs = androidDeviceArgs2(args.device, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
     const result2 = await execFile12("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
-    return toolJson7(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate7(result2.stdout), stderr: truncate7(result2.stderr) }));
+    return toolJson(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate7(result2.stdout), stderr: truncate7(result2.stderr) }));
   }
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const result = await execFile12("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
-  return toolJson7(redactToolPayload({ platform, device, stdout: truncate7(result.stdout), stderr: truncate7(result.stderr) }));
+  return toolJson(redactToolPayload({ platform, device, stdout: truncate7(result.stdout), stderr: truncate7(result.stderr) }));
 }
 async function openExpoRoute(args, deps = {}) {
   const cwd = await normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
   const url = args.url ? requireString7(args.url, "url") : await buildExpoRouteUrl(cwd, args);
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
   const policy = await routeActionPolicyDecision(args, "open-route", deps);
-  if (!policy.allowed) return toolJson7(policyDeniedPayload({ domain: "route", action: "open-route", policy }));
+  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "route", action: "open-route", policy }));
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const execFile12 = deps.execFile ?? defaultExecFile2;
   const result = await execFile12("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
-  return toolJson7(redactToolPayload({
+  return toolJson(redactToolPayload({
     platform: "ios",
     device,
     url: redactUrlAuthCookie(url),
@@ -5298,10 +5265,6 @@ async function readJsonFile3(file) {
 async function readPolicyDocument(file, deps) {
   const read = deps.readJsonFile ?? readJsonFile3;
   return await read(file);
-}
-function toolJson7(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
 }
 function truncate7(value, limit = MAX_OUTPUT7) {
   const text = String(value ?? "");
@@ -5946,9 +5909,9 @@ function clampNumber9(value, min, max) {
   }
   return Math.min(Math.max(numberValue, min), max);
 }
-function getPath(value, path12) {
+function getPath(value, path14) {
   let current = value;
-  for (const key of path12) {
+  for (const key of path14) {
     current = asRecord4(current)?.[key];
   }
   return current;
@@ -5968,12 +5931,12 @@ import { execFile as execFile5, spawn } from "node:child_process";
 var MAX_OUTPUT9 = 4e4;
 async function automationTakeScreenshot(args, deps = {}) {
   if (args.full === true) {
-    return toolJson8(await (deps.captureFullScreenshot ?? captureFullScreenshot)(args, deps));
+    return toolJson(await (deps.captureFullScreenshot ?? captureFullScreenshot)(args, deps));
   }
   if (args.annotate === true) {
-    return toolJson8(await (deps.annotatedScreenshot ?? annotatedScreenshot)(args, deps));
+    return toolJson(await (deps.annotatedScreenshot ?? annotatedScreenshot)(args, deps));
   }
-  return toolJson8(await (deps.captureScreenshot ?? captureScreenshot)(args, deps));
+  return toolJson(await (deps.captureScreenshot ?? captureScreenshot)(args, deps));
 }
 async function captureFullScreenshot(args, deps = {}) {
   const platform = args.platform ?? "ios";
@@ -6296,13 +6259,6 @@ function truncate8(value, limit = MAX_OUTPUT9) {
 async function pathExists3(file, deps) {
   return deps.access(file).then(() => true, () => false);
 }
-function toolJson8(value) {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }],
-    isError: false
-  };
-}
 async function execFilePromise2(file, args, options, deps = {}) {
   if (deps.execFile) return deps.execFile(file, args, options);
   return new Promise((resolve18, reject) => {
@@ -6581,7 +6537,7 @@ var defaultInteractionDependencies = {
   wait: (ms) => new Promise((resolve18) => setTimeout(resolve18, ms)),
   now: () => /* @__PURE__ */ new Date(),
   tmpdir: osTmpdir,
-  mkdir: (path12, options) => fs7.mkdir(path12, options),
+  mkdir: (path14, options) => fs7.mkdir(path14, options),
   joinPath: joinPath2
 };
 async function defaultCommandPath(command) {
@@ -7203,10 +7159,6 @@ var REVIEW_CONTEXT_QUESTIONS = [
   "Does the app expose a usable simulator hierarchy, or is screenshot/coordinate review the only reliable UI surface?",
   "Are recent native logs showing failed requests, reloads, exceptions, or slow local calls during the reviewed state?"
 ];
-function toolJson11(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function captureUxContext(args = {}, deps = defaultUxContextDependencies) {
   const startedAt = nowMs(deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
@@ -7290,12 +7242,12 @@ async function captureUxContext(args = {}, deps = defaultUxContextDependencies) 
     };
   }
   context.elapsedMs = nowMs(deps) - startedAt;
-  return toolJson11(context);
+  return toolJson(context);
 }
 var defaultUxContextDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd,
   resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString4(device), options),
-  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson3(await projectInfo({ cwd })),
+  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson(await projectInfo({ cwd })),
   inspectMetro: async (metroPort) => {
     const metro = await metroStatusPayload({ metroPort });
     return { metro, runtime: { available: metro.available, targetCount: metro.targetCount, targets: metro.targets } };
@@ -7313,7 +7265,7 @@ var defaultUxContextDependencies = {
       error: result.error ?? null
     };
   },
-  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson3(await automationTakeScreenshot({
+  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson(await automationTakeScreenshot({
     platform: "ios",
     device: udid,
     outputPath: String(outputPath)
@@ -7387,15 +7339,6 @@ function now(deps) {
 function nowMs(deps) {
   return deps.nowMs?.() ?? Date.now();
 }
-function unwrapToolJson3(result) {
-  const text = result?.content?.[0]?.text;
-  if (typeof text !== "string") return result;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
-}
 async function defaultNormalizeProjectCwd(cwd) {
   const resolved = path6.resolve(requireOptionalString4(cwd) ?? ".");
   const details = await stat4(resolved).catch(() => null);
@@ -7431,26 +7374,26 @@ import { createServer as createNetServer } from "node:net";
 import path7 from "node:path";
 import { spawn as spawn2 } from "node:child_process";
 var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
-function toolJson12(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies) {
+  const payload = await reviewOverlayAction(args, deps);
+  return isToolTextResult(payload) ? payload : toolJson(payload);
+}
+async function reviewOverlayAction(args = {}, deps = defaultReviewOverlayDependencies) {
   const action = requireOptionalString5(args.action) ?? "prepare";
   if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
     throw new Error(`Unknown review-overlay action: ${action}`);
   }
-  if (action === "scaffold") return toolJson12(await scaffoldReviewOverlay(args, deps));
+  if (action === "scaffold") return scaffoldReviewOverlay(args, deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
   const outputDir = deps.resolvePath(requireOptionalString5(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
   const eventsPath = deps.joinPath(outputDir, "events.json");
   if (action === "read") {
     const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
-    return toolJson12({ outputDir, eventsPath, ...data2 });
+    return { outputDir, eventsPath, ...data2 };
   }
   if (action === "clear") {
     const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
-    return toolJson12({ outputDir, eventsPath, cleared: true, ...data2 });
+    return { outputDir, eventsPath, cleared: true, ...data2 };
   }
   if (action === "server") {
     return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
@@ -7486,7 +7429,7 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
       stop: `kill ${child.pid}`
     };
   }
-  return toolJson12({
+  return {
     outputDir,
     eventsPath,
     server,
@@ -7496,7 +7439,7 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
       server ? `Pass endpoint="${server.endpoint}" to CodexReviewOverlay. In iOS Simulator, 127.0.0.1 points at the Mac host.` : "Start with --serve true or run review-overlay server before using the overlay in the simulator.",
       `Codex can read in-app review events from ${eventsPath}.`
     ]
-  });
+  };
 }
 var defaultReviewOverlayDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd2,
@@ -7516,6 +7459,9 @@ var defaultReviewOverlayDependencies = {
   execPath: process.execPath,
   scriptPath: process.argv[1] ?? ""
 };
+function isToolTextResult(value) {
+  return Array.isArray(value?.content);
+}
 async function scaffoldReviewOverlay(args = {}, deps) {
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
   const overlayDir = deps.resolvePath(cwd, requireOptionalString5(args.overlayDir) ?? "codex-review-overlay");
@@ -7751,10 +7697,6 @@ function findAvailablePort(start) {
 // src/commands/annotate-screen-artifacts/src/main/index.ts
 var ANNOTATE_ACTIONS = /* @__PURE__ */ new Set(["prepare", "read", "clear", "scaffold", "server"]);
 var SCAFFOLD_CONFIRMATION = "annotate-overlay-scaffold";
-function toolJson13(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireOptionalString6(args.action ?? positionals[0]) ?? "prepare";
@@ -7762,7 +7704,7 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
     throw new Error(`Unknown annotate-screen action: ${action}`);
   }
   if (action === "scaffold" && !hasExplicitConfirmation(args.confirmActions, SCAFFOLD_CONFIRMATION)) {
-    return toolJson13({
+    return toolJson({
       available: false,
       action,
       source: "policy",
@@ -7776,13 +7718,13 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
       }
     });
   }
-  const result = await deps.reviewOverlay({
+  const result = await deps.reviewOverlayAction({
     ...args,
     action,
     title: args.title ?? "Codex in-app annotations"
   });
-  const payload = unwrapToolJson4(result);
-  return toolJson13({
+  const payload = isToolTextResult2(result) ? unwrapToolJson3(result) : result;
+  return toolJson({
     ...isRecord7(payload) ? payload : { value: payload },
     command: "annotate-screen",
     annotationSurface: "in-app-overlay",
@@ -7793,9 +7735,9 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
   });
 }
 var defaultAnnotateScreenDependencies = {
-  reviewOverlay
+  reviewOverlayAction
 };
-function unwrapToolJson4(result) {
+function unwrapToolJson3(result) {
   const text = result?.content?.[0]?.text;
   if (typeof text !== "string") return result;
   try {
@@ -7814,21 +7756,464 @@ function requireOptionalString6(value) {
 function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+function isToolTextResult2(value) {
+  return Array.isArray(value?.content);
+}
 
 // src/commands/runtime-inspector-actions/src/main/index.ts
 import { execFile as nodeExecFile9 } from "node:child_process";
+import { readFile as readFile13 } from "node:fs/promises";
+import path9 from "node:path";
+
+// src/commands/bridge-domain-actions/src/main/index.ts
+import { readFile as readFile12 } from "node:fs/promises";
+import path8 from "node:path";
+var EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+var MAX_OUTPUT10 = 4e4;
+var MAX_ARRAY_ITEMS = 1e3;
+function boundedToolJson(value) {
+  return { content: [{ type: "text", text: stringifyBoundedJson(value) }] };
+}
+async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies) {
+  const positionals = Array.isArray(args._) ? args._ : [];
+  const store = requireString9(args.store ?? positionals[0], "store");
+  const action = requireString9(args.action ?? positionals[1] ?? "list", "action");
+  if (!["list", "get", "set", "clear"].includes(action)) throw new Error(`Unknown storage action: ${action}`);
+  const key = args.key ?? positionals[2];
+  const sideEffect = action === "list" || action === "get" ? "read" : "write";
+  const policy = await policyDecision(args, `storage.${action}`, sideEffect, deps);
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "storage", action, policy }));
+  const value = action === "set" ? parseStorageValue(args.value ?? positionals[3]) : null;
+  return boundedToolJson(await bridgeDomainCommand({
+    args,
+    domain: "storage",
+    action,
+    expression: storageExpression({
+      store,
+      action,
+      key,
+      value,
+      limit: clampNumber14(args.limit ?? 100, 1, 1e3)
+    }),
+    policy
+  }, deps));
+}
+async function stateCommand(args = {}, deps = defaultBridgeDomainDependencies) {
+  const positionals = Array.isArray(args._) ? args._ : [];
+  const action = requireString9(args.action ?? positionals[0] ?? "list", "action");
+  if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
+  const sideEffect = action === "list" ? "read" : "write";
+  const policy = await policyDecision(args, `state.${action}`, sideEffect, deps);
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "state", action, policy }));
+  return boundedToolJson(await bridgeDomainCommand({
+    args,
+    domain: "state",
+    action,
+    expression: stateExpression({ action, name: args.name ?? positionals[1] }),
+    policy
+  }, deps));
+}
+async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies) {
+  const positionals = Array.isArray(args._) ? args._ : [];
+  const action = requireString9(args.action ?? positionals[0] ?? "list", "action");
+  if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
+  const sideEffect = action === "press" ? "device" : "read";
+  const policy = await policyDecision(args, `controls.${action}`, sideEffect, deps);
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "controls", action, policy }));
+  return boundedToolJson(await bridgeDomainCommand({
+    args,
+    domain: "controls",
+    action,
+    expression: controlsExpression({ action, name: args.name ?? positionals[1] }),
+    policy
+  }, deps));
+}
+var defaultBridgeDomainDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression,
+  readJsonFile: async (file) => JSON.parse(await readFile12(file, "utf8")),
+  resolvePath: (file) => path8.resolve(file)
+};
+async function bridgeDomainCommand(input, deps = defaultBridgeDomainDependencies) {
+  const metroPort = clampNumber14(input.args.metroPort ?? 8081, 1, 65535);
+  const sideEffect = bridgeActionSideEffect(input.domain, input.action);
+  if (sideEffect !== "read" && input.policy?.allowed !== true) {
+    return policyDeniedPayload({ domain: input.domain, action: input.action, policy: input.policy ?? {
+      checked: true,
+      action: `${input.domain}.${input.action}`,
+      sideEffect,
+      allowed: false,
+      source: null,
+      reason: "No action policy allowed this state-changing operation."
+    } });
+  }
+  const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
+  const target = targets[0] ?? null;
+  const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
+  if (!webSocketDebuggerUrl) {
+    return domainUnavailable({
+      domain: input.domain,
+      action: input.action,
+      metroPort,
+      code: "no-runtime-target",
+      reason: "No Metro inspector target.",
+      policy: input.policy
+    });
+  }
+  if (!deps.evaluateHermesExpression) {
+    return domainUnavailable({
+      domain: input.domain,
+      action: input.action,
+      metroPort,
+      code: "transport-failure",
+      reason: `${input.domain} bridge did not return a value.`,
+      target: targetSummary3(target),
+      policy: input.policy
+    });
+  }
+  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, input.expression, { timeoutMs: 5e3 });
+  const value = result?.result?.result?.value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return domainUnavailable({
+      domain: input.domain,
+      action: input.action,
+      metroPort,
+      code: "transport-failure",
+      reason: result?.error ?? `${input.domain} bridge did not return a value.`,
+      target: targetSummary3(target),
+      transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
+      policy: input.policy
+    });
+  }
+  const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(value) : value);
+  return sanitizePayload({
+    ...redacted,
+    domain: input.domain,
+    action: input.action,
+    metroPort,
+    target: targetSummary3(target),
+    transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
+    evidenceSource: typeof redacted.source === "string" ? redacted.source : "unknown",
+    policy: input.policy
+  });
+}
+function domainUnavailable(args) {
+  return sanitizePayload({
+    available: false,
+    domain: args.domain,
+    action: args.action,
+    source: "app-instrumentation",
+    evidenceSource: "unavailable",
+    code: args.code ?? "unavailable",
+    reason: args.reason,
+    metroPort: args.metroPort,
+    target: targetSummary3(args.target),
+    transport: args.transport ?? bridgeRuntimeTransport(args.metroPort, args.target ?? null, null),
+    policy: args.policy ?? null,
+    limitations: [`${args.domain} evidence requires the dev-only app instrumentation bridge.`]
+  });
+}
+function bridgeRuntimeTransport(metroPort, target, cdp = null) {
+  return sanitizePayload({
+    name: "metro-inspector-hermes-cdp",
+    metroPort,
+    protocol: "Runtime.evaluate",
+    target: targetSummary3(target),
+    cdp
+  });
+}
+async function policyDecision(args, action, sideEffect, deps = {}) {
+  if (sideEffect === "read") {
+    return { checked: true, action, sideEffect, allowed: true, source: null, reason: "Read action does not require policy approval." };
+  }
+  const policyPath = optionalString5(args.actionPolicy);
+  if (!policyPath) {
+    return { checked: true, action, sideEffect, allowed: false, source: null, reason: "No action policy allowed this state-changing operation." };
+  }
+  const resolved = deps.resolvePath ? deps.resolvePath(policyPath) : policyPath;
+  if (!deps.readJsonFile) throw new Error("policyDecision requires readJsonFile when actionPolicy is supplied.");
+  const policy = await deps.readJsonFile(resolved);
+  const allowed = policyAllowsAction2(policy, action);
+  return {
+    checked: true,
+    action,
+    sideEffect,
+    allowed,
+    source: resolved,
+    reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation."
+  };
+}
+function policyAllowsAction2(policy, action) {
+  const record = asRecord8(policy);
+  if (Array.isArray(record?.allow) && record.allow.includes(action)) return true;
+  const actions = asRecord8(record?.actions);
+  return actions?.[action] === "allow" || actions?.[action] === true;
+}
+function parseStorageValue(value) {
+  if (value === void 0) throw new Error("storage set requires a JSON value.");
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new Error(`Invalid JSON for --value: ${formatError9(error)}`);
+  }
+}
+function storageExpression(args) {
+  return `(() => {
+    const store = ${JSON.stringify(args.store)};
+    const action = ${JSON.stringify(args.action)};
+    const key = ${JSON.stringify(args.key ?? null)};
+    const value = ${JSON.stringify(args.value)};
+    const limit = ${Number(args.limit)};
+    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
+    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
+      globalThis.__ROZENITE_AGENT_BRIDGE__;
+    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
+    const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
+    const pluginStorage = pluginBridge?.storage ||
+      (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.storage : null) ||
+      (pluginBridge?.domainRegistry ? pluginBridge.domainRegistry.storage : null);
+    const pluginCallTool = typeof pluginBridge?.callTool === 'function' ? pluginBridge.callTool.bind(pluginBridge) : null;
+    const callStorage = (name, payload = {}) => {
+      if (pluginStorage && typeof pluginStorage[name] === 'function') return pluginStorage[name](payload);
+      if (pluginStorage && pluginStorage.actions && typeof pluginStorage.actions[name] === 'function') return pluginStorage.actions[name](payload);
+      if (pluginCallTool) return pluginCallTool('storage.' + name, payload);
+      return null;
+    };
+    const hasPluginStorage = Boolean(pluginStorage || pluginCallTool || (Array.isArray(pluginBridge?.domains) && pluginBridge.domains.some((domain) => domain?.name === 'storage')));
+    if (hasPluginStorage) {
+      if (pluginVersion && pluginVersion !== expectedBridgeVersion) {
+        return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'version-mismatch', bridgeVersion: pluginVersion, expectedBridgeVersion, reason: 'Storage plugin bridge version is not compatible with this CLI.', store, action };
+      }
+      const adapters = pluginStorage?.adapters || pluginStorage?.stores || pluginStorage || {};
+      const adapter = adapters[store] || (pluginStorage?.store && pluginStorage.store(store)) || null;
+      const read = (targetKey) => adapter && typeof adapter.get === 'function' ? adapter.get(targetKey) : adapter?.values?.[targetKey];
+      if (!adapter && !pluginCallTool) return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'missing-domain', reason: 'Storage bridge store is not registered.', store, action };
+      if (action === 'list') {
+        const keys = adapter ? (adapter.list ? adapter.list() : adapter.keys || []) : callStorage('list', { store, limit });
+        return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, keys: (Array.isArray(keys) ? keys : []).slice(0, limit) };
+      }
+      if (action === 'get') return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, key, value: adapter ? read(key) : callStorage('get', { store, key }) };
+      if (action === 'set') {
+        const before = adapter ? read(key) : null;
+        const result = adapter && typeof adapter.set === 'function' ? adapter.set(key, value) : callStorage('set', { store, key, value });
+        const after = adapter ? read(key) : null;
+        return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, key, before, after, result: result || { ok: true } };
+      }
+      if (action === 'clear') {
+        const beforeKeys = adapter ? (adapter.list ? adapter.list() : adapter.keys || []) : [];
+        const result = adapter && typeof adapter.clear === 'function' ? adapter.clear() : callStorage('clear', { store });
+        const afterKeys = adapter ? (adapter.list ? adapter.list() : adapter.keys || []) : [];
+        return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, before: { keys: beforeKeys }, after: { keys: afterKeys }, result: result || { ok: true } };
+      }
+    } else if (pluginBridge) {
+      return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'missing-domain', reason: 'Storage bridge domain is not registered.', store, action };
+    }
+    const bridge = globalThis.__EXPO_IOS_STORAGE_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.storage);
+    if (!bridge) return { available: false, source: 'app-instrumentation', code: 'unavailable-bridge', reason: 'Storage bridge is not installed.', store, action };
+    const adapter = bridge[store];
+    if (!adapter) return { available: false, source: 'app-instrumentation', reason: 'Unsupported storage store.', store, action };
+    if (action === 'list') return { available: true, source: 'app-instrumentation', store, action, keys: (adapter.list ? adapter.list() : adapter.keys || []).slice(0, limit) };
+    if (action === 'get') return { available: true, source: 'app-instrumentation', store, action, key, value: adapter.get ? adapter.get(key) : (adapter.values || {})[key] };
+    if (action === 'set') return { available: true, source: 'app-instrumentation', store, action, key, result: adapter.set ? adapter.set(key, value) : { ok: true } };
+    if (action === 'clear') return { available: true, source: 'app-instrumentation', store, action, result: adapter.clear ? adapter.clear() : { ok: true } };
+    return { available: false, source: 'app-instrumentation', reason: 'Unsupported storage action.', store, action };
+  })()`;
+}
+function stateExpression(args) {
+  return `(() => {
+    const action = ${JSON.stringify(args.action)};
+    const name = ${JSON.stringify(args.name ?? null)};
+    const bridge = globalThis.__EXPO_IOS_STATE_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.state);
+    if (!bridge) return { available: false, source: 'app-instrumentation', reason: 'State bridge is not installed.', action };
+    if (action === 'list') return { available: true, source: 'app-instrumentation', action, states: bridge.list ? bridge.list() : bridge.states || [] };
+    if (action === 'save') return { available: true, source: 'app-instrumentation', action, name, result: bridge.save ? bridge.save(name) : { ok: true, name } };
+    if (action === 'load') return { available: true, source: 'app-instrumentation', action, name, result: bridge.load ? bridge.load(name) : { ok: true, name } };
+    if (action === 'clear') return { available: true, source: 'app-instrumentation', action, name, result: bridge.clear ? bridge.clear(name) : { ok: true, name } };
+    return { available: false, source: 'app-instrumentation', reason: 'Unsupported state action.', action };
+  })()`;
+}
+function controlsExpression(args) {
+  return `(() => {
+    const action = ${JSON.stringify(args.action)};
+    const name = ${JSON.stringify(args.name ?? null)};
+    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
+    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+      globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
+      globalThis.__ROZENITE_AGENT_BRIDGE__;
+    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
+    const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
+    const pluginControls = pluginBridge?.controls ||
+      (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.controls : null) ||
+      (pluginBridge?.domainRegistry ? pluginBridge.domainRegistry.controls : null);
+    const pluginCallTool = typeof pluginBridge?.callTool === 'function' ? pluginBridge.callTool.bind(pluginBridge) : null;
+    const callControls = (command, payload = {}) => {
+      if (pluginControls && typeof pluginControls[command] === 'function') return pluginControls[command](payload);
+      if (pluginControls && pluginControls.actions && typeof pluginControls.actions[command] === 'function') return pluginControls.actions[command](payload);
+      if (pluginCallTool) return pluginCallTool('controls.' + command, payload);
+      return null;
+    };
+    const hasPluginControls = Boolean(pluginControls || pluginCallTool || (Array.isArray(pluginBridge?.domains) && pluginBridge.domains.some((domain) => domain?.name === 'controls')));
+    if (hasPluginControls) {
+      if (pluginVersion && pluginVersion !== expectedBridgeVersion) {
+        return { available: false, source: 'plugin-bridge', domain: 'controls', code: 'version-mismatch', bridgeVersion: pluginVersion, expectedBridgeVersion, reason: 'Controls plugin bridge version is not compatible with this CLI.', action };
+      }
+      const listControls = () => {
+        const raw = pluginControls && typeof pluginControls.list === 'function'
+          ? pluginControls.list()
+          : pluginControls?.controls || callControls('list') || [];
+        return Array.isArray(raw) ? raw : [];
+      };
+      if (action === 'list') return { available: true, source: 'plugin-bridge', domain: 'controls', bridgeVersion: pluginVersion, action, controls: listControls() };
+      if (action === 'get') return { available: true, source: 'plugin-bridge', domain: 'controls', bridgeVersion: pluginVersion, action, name, control: pluginControls && typeof pluginControls.get === 'function' ? pluginControls.get(name) : listControls().find((control) => control.name === name) || null };
+      if (action === 'press') {
+        const before = pluginControls && typeof pluginControls.get === 'function' ? pluginControls.get(name) : listControls().find((control) => control.name === name) || null;
+        const result = pluginControls && typeof pluginControls.press === 'function' ? pluginControls.press(name) : callControls('press', { name });
+        const after = pluginControls && typeof pluginControls.get === 'function' ? pluginControls.get(name) : listControls().find((control) => control.name === name) || null;
+        return { available: true, source: 'plugin-bridge', domain: 'controls', bridgeVersion: pluginVersion, action, name, before, after, result: result || { ok: true, name } };
+      }
+    } else if (pluginBridge) {
+      return { available: false, source: 'plugin-bridge', domain: 'controls', code: 'missing-domain', reason: 'Controls bridge domain is not registered.', action };
+    }
+    const bridge = globalThis.__EXPO_IOS_CONTROLS_BRIDGE__ ||
+      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.controls);
+    if (!bridge) return { available: false, source: 'app-instrumentation', code: 'unavailable-bridge', reason: 'Controls bridge is not installed.', action };
+    if (action === 'list') return { available: true, source: 'app-instrumentation', action, controls: bridge.list ? bridge.list() : bridge.controls || [] };
+    if (action === 'get') return { available: true, source: 'app-instrumentation', action, name, control: bridge.get ? bridge.get(name) : (bridge.controls || []).find((control) => control.name === name) || null };
+    if (action === 'press') return { available: true, source: 'app-instrumentation', action, name, result: bridge.press ? bridge.press(name) : { ok: true, name } };
+    return { available: false, source: 'app-instrumentation', reason: 'Unsupported controls action.', action };
+  })()`;
+}
+function targetSummary3(target) {
+  if (!target) return null;
+  return sanitizePayload({
+    id: target.id ?? null,
+    title: target.title ?? null,
+    description: target.description ?? null,
+    appId: target.appId ?? null,
+    deviceName: target.deviceName ?? null,
+    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
+    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
+    reactNative: target.reactNative ?? null,
+    capabilities: target.capabilities ?? {
+      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      reactNative: Boolean(target.reactNative)
+    }
+  });
+}
+function clampNumber14(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
+  return Math.min(Math.max(number, min), max);
+}
+function requireString9(value, name) {
+  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  return value.trim();
+}
+function optionalString5(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+function sanitizePayload(value) {
+  return boundValue(redactValue2(value));
+}
+function stringifyBoundedJson(value) {
+  const sanitized = sanitizePayload(value);
+  const text = JSON.stringify(sanitized, null, 2);
+  if (text.length <= MAX_OUTPUT10) return text;
+  const record = asRecord8(sanitized);
+  const envelope = {
+    available: false,
+    source: "output-boundary",
+    evidenceSource: "output-boundary",
+    code: "output-truncated",
+    outputTruncated: true,
+    originalLength: text.length,
+    domain: record?.domain,
+    action: record?.action,
+    preview: ""
+  };
+  let budget = MAX_OUTPUT10 - JSON.stringify(envelope, null, 2).length - 128;
+  envelope.preview = text.slice(0, Math.max(0, budget));
+  let output = JSON.stringify(envelope, null, 2);
+  while (output.length > MAX_OUTPUT10 && typeof envelope.preview === "string") {
+    budget -= output.length - MAX_OUTPUT10 + 128;
+    envelope.preview = envelope.preview.slice(0, Math.max(0, budget));
+    output = JSON.stringify(envelope, null, 2);
+  }
+  return output;
+}
+function bridgeActionSideEffect(domain, action) {
+  if (domain === "storage") return action === "list" || action === "get" ? "read" : "write";
+  if (domain === "state") return action === "list" ? "read" : "write";
+  if (domain === "controls") return action === "press" ? "device" : "read";
+  return "unknown";
+}
+function boundValue(value) {
+  if (typeof value === "string") return truncate11(value);
+  if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
+  const record = asRecord8(value);
+  if (!record) return value;
+  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
+}
+function redactValue2(value) {
+  if (typeof value === "string") return redactString(value);
+  if (Array.isArray(value)) return value.map(redactValue2);
+  const record = asRecord8(value);
+  if (!record) return value;
+  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
+    key,
+    isSensitiveKey(key) ? "[redacted]" : redactValue2(nested)
+  ]));
+}
+function redactString(value) {
+  try {
+    const parsed = new URL(value);
+    let changed = false;
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (isSensitiveKey(key)) {
+        parsed.searchParams.set(key, "[redacted]");
+        changed = true;
+      }
+    }
+    return changed ? parsed.toString() : value;
+  } catch {
+    return value.replace(/([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi, "$1[redacted]");
+  }
+}
+function isSensitiveKey(key) {
+  return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
+}
+function truncate11(value, max = MAX_OUTPUT10) {
+  const text = String(value ?? "");
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}
+...[truncated ${text.length - max} chars]`;
+}
+function asRecord8(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function formatError9(error) {
+  const record = asRecord8(error);
+  return record?.message == null ? String(error) : String(record.message);
+}
+
+// src/commands/runtime-inspector-actions/src/main/index.ts
 var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"];
 async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
-  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
   const commentTitle = requireOptionalString7(args.commentTitle) ?? "Codex: Add UI comment";
-  const maxComments = clampNumber14(args.maxComments ?? 50, 1, 500);
+  const maxComments = clampNumber15(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
     return toolJson(await deps.openIosDevMenu({ ...args, metroPort }));
   }
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
-  const webSocketDebuggerUrl = asString2(asRecord8(targetList[0])?.webSocketDebuggerUrl);
+  const webSocketDebuggerUrl = asString2(asRecord9(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
     return toolJson({ available: false, action, reason: "No Metro inspector target.", metroPort });
   }
@@ -7837,10 +8222,10 @@ async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies
   return toolJson({
     action,
     metroPort,
-    target: targetSummary3(targetList[0]),
+    target: targetSummary4(targetList[0]),
     inspector: getPath2(result, ["result", "result", "value"]) ?? null,
-    protocolError: getPath2(result, ["result", "exceptionDetails"]) ?? asRecord8(result)?.error ?? null,
-    cdp: asRecord8(result)?.diagnostics ?? asRecord8(result)?.cdp ?? null
+    protocolError: getPath2(result, ["result", "exceptionDetails"]) ?? asRecord9(result)?.error ?? null,
+    cdp: asRecord9(result)?.diagnostics ?? asRecord9(result)?.cdp ?? null
   });
 }
 var defaultRuntimeInspectorDependencies = {
@@ -7857,17 +8242,23 @@ var defaultOpenDevMenuDependencies = {
     url: args.devClientUrl
   })),
   execFile: execFile7,
-  truncate: truncate11
+  readJsonFile: async (file) => JSON.parse(await readFile13(file, "utf8")),
+  resolvePath: (file) => path9.resolve(file),
+  truncate: truncate12
 };
 function normalizeRuntimeInspectorAction(value) {
-  const action = requireString9(value, "action");
+  const action = requireString10(value, "action");
   if (!INSPECTOR_ACTIONS.includes(action)) {
     throw new Error(`Unknown inspector action: ${action}`);
   }
   return action;
 }
 async function openIosDevMenu(args, deps) {
-  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const policy = await policyDecision(args, "open-dev-menu", "device", deps);
+  if (!policy.allowed) {
+    return policyDeniedPayload({ domain: "runtime-inspector", action: "open-dev-menu", policy });
+  }
   let messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
   if (messageSocket.available) {
     return {
@@ -7926,7 +8317,7 @@ async function openIosDevMenu(args, deps) {
     timeout: 15e3,
     rejectOnError: false
   });
-  const truncateFn = deps.truncate ?? truncate11;
+  const truncateFn = deps.truncate ?? truncate12;
   return {
     available: !result.error,
     action: "open-dev-menu",
@@ -8051,8 +8442,8 @@ function runtimeInspectorDispatchSection() {
     }
     return { available: false, action, reason: 'Unknown inspector action: ' + action };`;
 }
-function targetSummary3(target) {
-  const record = asRecord8(target);
+function targetSummary4(target) {
+  const record = asRecord9(target);
   if (!record) return null;
   return {
     title: record.title,
@@ -8061,14 +8452,14 @@ function targetSummary3(target) {
     description: record.description
   };
 }
-function clampNumber14(value, min, max) {
+function clampNumber15(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function requireString9(value, field) {
+function requireString10(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -8076,18 +8467,18 @@ function requireString9(value, field) {
 }
 function requireOptionalString7(value) {
   if (value === void 0 || value === null || value === "") return null;
-  return requireString9(value, "value");
+  return requireString10(value, "value");
 }
-function truncate11(value, limit = 4e4) {
+function truncate12(value, limit = 4e4) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
-function getPath2(value, path12) {
+function getPath2(value, path14) {
   let current = value;
-  for (const part of path12) {
-    current = asRecord8(current)?.[part];
+  for (const part of path14) {
+    current = asRecord9(current)?.[part];
     if (current === void 0) return void 0;
   }
   return current;
@@ -8095,7 +8486,7 @@ function getPath2(value, path12) {
 function asString2(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
-function asRecord8(value) {
+function asRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 async function broadcastMetroMessage(metroPort, method, params) {
@@ -8106,7 +8497,7 @@ async function broadcastMetroMessage(metroPort, method, params) {
     await cdpMessage(url, { method, params: params ?? {} }, 2500);
     return { available: true, metroPort, method, url };
   } catch (error) {
-    return { available: false, metroPort, method, url, reason: formatError9(error) };
+    return { available: false, metroPort, method, url, reason: formatError10(error) };
   }
 }
 async function cdpMessage(url, payload, timeoutMs) {
@@ -8142,23 +8533,19 @@ function execFile7(command, args, options) {
     });
   });
 }
-function formatError9(error) {
+function formatError10(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
 // src/commands/review-next-guidance/src/main/index.ts
 var SUBORDINATE_RULE = "Do not patch or call done until the current constraint is proven or deliberately elevated.";
 var NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigation model without a separate reason."];
-function toolJson14(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function reviewNextStep(args = {}) {
   const surface = args.surface ?? "generic";
   const stage = args.stage ?? "intake";
   const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
   const cwd = requireOptionalString8(args.cwd) ?? ".";
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
   const componentFilter = requireOptionalString8(args.componentFilter);
   const verifierRule = requireOptionalString8(args.verifierRule);
   const flags = reviewFlags(args);
@@ -8166,7 +8553,7 @@ async function reviewNextStep(args = {}) {
   const suggestedCommands = reviewCommandSuggestions({ cwd, metroPort, componentFilter, flags, stage });
   const questionTriggers = reviewQuestionTriggers(flags, verifierRule);
   const constraint = chooseReviewConstraint({ stage, flags, verifierRule });
-  return toolJson14({
+  return toolJson({
     issue,
     surface,
     stage,
@@ -8405,7 +8792,7 @@ function requireOptionalString8(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : void 0;
 }
-function clampNumber15(value, min, max) {
+function clampNumber16(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return min;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
@@ -8445,34 +8832,34 @@ var DEVTOOLS_EVENTS_LIMITATIONS = [
 var DIAGNOSTICS_LIMITATIONS = [
   "Start Metro and connect a debuggable Hermes target before reading JS diagnostics."
 ];
-var MAX_OUTPUT10 = 4e4;
-var MAX_ARRAY_ITEMS = 500;
+var MAX_OUTPUT11 = 4e4;
+var MAX_ARRAY_ITEMS2 = 500;
 var defaultDevtoolsDiagnosticsDependencies = {
   evaluateHermesExpression
 };
-function toolJson15(value) {
-  return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
+function sanitizedToolJson(value) {
+  return { content: [{ type: "text", text: JSON.stringify(sanitizePayload2(value), null, 2) }] };
 }
-function requireString10(value, name) {
+function requireString11(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${name} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber16(value, min, max) {
+function clampNumber17(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function truncate12(value, max = MAX_OUTPUT10) {
+function truncate13(value, max = MAX_OUTPUT11) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
 ...[truncated ${text.length - max} chars]`;
 }
-function targetSummary4(target) {
+function targetSummary5(target) {
   if (!target) return null;
   return {
     id: target.id ?? null,
@@ -8491,10 +8878,10 @@ function targetSummary4(target) {
   };
 }
 async function devtoolsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
-  const action = requireString10(args.action ?? "capabilities", "action");
-  if (action === "status" || action === "panels") return toolJson15(await devtoolsStatusPayload(args, action, deps));
-  if (action === "open") return toolJson15(await devtoolsOpenPayload(args, deps));
-  if (action === "events") return toolJson15(await devtoolsEventsPayload(args, deps));
+  const action = requireString11(args.action ?? "capabilities", "action");
+  if (action === "status" || action === "panels") return sanitizedToolJson(await devtoolsStatusPayload(args, action, deps));
+  if (action === "open") return sanitizedToolJson(await devtoolsOpenPayload(args, deps));
+  if (action === "events") return sanitizedToolJson(await devtoolsEventsPayload(args, deps));
   if (action !== "capabilities") throw new Error(`Unknown devtools action: ${action}`);
   const metro = await metroStatusPayload2(args, deps);
   const rnDevTools = reactNativeDevToolsReport(metro);
@@ -8502,7 +8889,7 @@ async function devtoolsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDepen
   const hasRuntime = metro.targets.some((target) => target.webSocketDebuggerUrl);
   const hasDevtoolsFrontend = rnDevTools.frontend.available;
   const hasNetworkPanel = metro.targets.some(targetHasDevtoolsNetworkPanel);
-  return toolJson15({
+  return sanitizedToolJson({
     action,
     metroPort: metro.metroPort,
     reactNativeDevTools: rnDevTools,
@@ -8625,7 +9012,7 @@ async function devtoolsStatusPayload(args = {}, action = "status", deps = {}) {
     machineReadableDomains: panels.filter((panel) => panel.kind === "machine-readable-domain"),
     humanVisiblePanels: panels.filter((panel) => panel.kind === "human-visible-panel")
   };
-  return sanitizePayload(payload);
+  return sanitizePayload2(payload);
 }
 function reactNativeDevToolsReport(metro) {
   const target = metro.targets.find((item) => item.devtoolsFrontendUrl) ?? metro.targets[0] ?? null;
@@ -8700,7 +9087,7 @@ function reactNativeDevToolsReport(metro) {
       repairHints: hasRuntime ? [] : ["Connect Hermes runtime and confirm React DevTools hook availability."]
     })
   ];
-  return sanitizePayload({
+  return sanitizePayload2({
     target,
     frontend: { available: Boolean(frontendUrl), url: frontendUrl, launchPath: frontendUrl ? "metro-devtools-frontend-url" : null },
     attachmentState,
@@ -8714,7 +9101,7 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
   const target = reactNativeDevTools.target;
   const url = reactNativeDevTools.frontend.url;
   if (!url) {
-    return sanitizePayload({
+    return sanitizePayload2({
       available: false,
       action: "open",
       reason: "No DevTools frontend URL is available.",
@@ -8723,7 +9110,7 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
     });
   }
   const result = await execFile8(deps, "open", [url], { timeout: 1e4, rejectOnError: false });
-  return sanitizePayload({
+  return sanitizePayload2({
     available: !result.error,
     action: "open",
     url,
@@ -8732,24 +9119,24 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
     mirrorsUpstreamLaunch: true,
     attachmentState: reactNativeDevTools.attachmentState,
     attachmentRisk: reactNativeDevTools.attachmentRisk,
-    stdout: truncate12(result.stdout),
-    stderr: truncate12(result.stderr),
+    stdout: truncate13(result.stdout),
+    stderr: truncate13(result.stderr),
     error: result.error ?? null
   });
 }
 async function devtoolsEventsPayload(args = {}, deps = {}) {
-  const subaction = requireString10(args.subaction ?? "read", "subaction");
+  const subaction = requireString11(args.subaction ?? "read", "subaction");
   if (!["start", "read", "stop"].includes(subaction)) throw new Error(`Unknown devtools events action: ${subaction}`);
   const stateRoot = resolveExpoStateRoot4(args, deps);
   const eventsDir = joinPath3(stateRoot, "artifacts", "devtools-events");
   await mkdir11(deps, eventsDir, { recursive: true });
   const file = joinPath3(eventsDir, "events.json");
   const existing = await readJsonFile5(deps, file).catch(() => ({ events: [] }));
-  const previousEvents = Array.isArray(asRecord9(existing)?.events) ? asRecord9(existing)?.events : [];
+  const previousEvents = Array.isArray(asRecord10(existing)?.events) ? asRecord10(existing)?.events : [];
   const event = {
     type: `devtools.${subaction}`,
     timestamp: now2(deps),
-    metro: sanitizePayload(await metroStatusPayload2(args, deps))
+    metro: sanitizePayload2(await metroStatusPayload2(args, deps))
   };
   const payload = {
     available: true,
@@ -8759,7 +9146,7 @@ async function devtoolsEventsPayload(args = {}, deps = {}) {
     events: subaction === "start" ? [event] : [...previousEvents, event],
     limitations: DEVTOOLS_EVENTS_LIMITATIONS
   };
-  const sanitized = sanitizePayload(payload);
+  const sanitized = sanitizePayload2(payload);
   await writeJsonFile3(deps, file, sanitized);
   return sanitized;
 }
@@ -8771,13 +9158,13 @@ async function errorsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDepende
 }
 async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   const action = args.action ?? "read";
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber16(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
   const targetDiscovery = await metroTargetDiscovery(metroPort, deps);
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson15({
+    return sanitizedToolJson({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -8791,19 +9178,19 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtools
   if (action === "clear") {
     const result2 = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
     const value2 = valueFromHermes(result2);
-    return toolJson15({
+    return sanitizedToolJson({
       ...value2 && typeof value2 === "object" && !Array.isArray(value2) ? value2 : { available: false, reason: result2?.error ?? "Runtime diagnostics did not return a value." },
       kind,
       action,
       metroPort,
-      target: targetSummary4(targets[0]),
+      target: targetSummary5(targets[0]),
       cdp: result2?.diagnostics ?? result2?.cdp ?? null
     });
   }
   const result = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5e3 });
   const value = valueFromHermes(result);
   if (!value) {
-    return toolJson15({
+    return sanitizedToolJson({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -8813,13 +9200,13 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtools
       cdp: result?.diagnostics ?? result?.cdp ?? null
     });
   }
-  const record = asRecord9(value) ?? {};
+  const record = asRecord10(value) ?? {};
   const messages = Array.isArray(record.messages) ? record.messages.slice(-limit) : [];
-  return toolJson15({
+  return sanitizedToolJson({
     ...record,
     kind,
     metroPort,
-    target: targetSummary4(targets[0]),
+    target: targetSummary5(targets[0]),
     messages,
     limit,
     cdp: result?.diagnostics ?? result?.cdp ?? null
@@ -8906,7 +9293,7 @@ function frontendUrlForTarget(target, metroPort) {
 }
 async function metroStatusPayload2(args, deps) {
   if (deps.metroStatusPayload) return deps.metroStatusPayload(args);
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
   const baseUrl = `http://127.0.0.1:${metroPort}`;
   const status = await fetchText(deps, `${baseUrl}/status`, 1500);
   if (!status.available) {
@@ -8924,7 +9311,7 @@ async function metroStatusPayload2(args, deps) {
   }
   const targetDiscovery = await fetchMetroTargets(deps, metroPort);
   const version = await fetchJson(deps, `${baseUrl}/json/version`, 1500).catch((error) => ({
-    __error: formatError10(error)
+    __error: formatError11(error)
   }));
   const symbolication = await probeMetroSymbolication(deps, metroPort);
   return {
@@ -8933,8 +9320,8 @@ async function metroStatusPayload2(args, deps) {
     metroPort,
     status: "available",
     statusText: status.text,
-    version: asRecord9(version)?.__error ? null : version,
-    versionError: asRecord9(version)?.__error ?? null,
+    version: asRecord10(version)?.__error ? null : version,
+    versionError: asRecord10(version)?.__error ?? null,
     symbolication,
     targetCount: targetDiscovery.targets.length,
     targets: targetDiscovery.targets,
@@ -8943,9 +9330,9 @@ async function metroStatusPayload2(args, deps) {
 }
 async function fetchMetroTargets(deps, metroPort) {
   const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch((error2) => ({
-    __error: formatError10(error2)
+    __error: formatError11(error2)
   }));
-  const error = asRecord9(raw)?.__error;
+  const error = asRecord10(raw)?.__error;
   if (typeof error === "string") {
     return { available: false, endpoint: "/json/list", targets: [], malformedTargets: [], reason: error };
   }
@@ -9001,7 +9388,7 @@ async function execFile8(deps, file, args, options) {
       resolve18({
         stdout,
         stderr,
-        error: error ? formatError10(error) : null
+        error: error ? formatError11(error) : null
       });
     });
   });
@@ -9025,7 +9412,7 @@ async function readJsonFile5(deps, file) {
   return deps.readJsonFile(file);
 }
 async function writeJsonFile3(deps, file, payload) {
-  const redacted = sanitizePayload(deps.redactValue ? deps.redactValue(payload) : payload);
+  const redacted = sanitizePayload2(deps.redactValue ? deps.redactValue(payload) : payload);
   if (!deps.writeJsonFile) {
     const fs10 = await import("node:fs/promises");
     await fs10.writeFile(file, `${JSON.stringify(redacted, null, 2)}
@@ -9042,7 +9429,7 @@ function joinPath3(...parts) {
   const joined = parts.flatMap((part) => part.split("/")).filter((part, index) => part.length > 0 || absolute && index === 0).join("/");
   return absolute ? `/${joined}`.replace(/\/+/g, "/") : joined.replace(/\/+/g, "/");
 }
-function asRecord9(value) {
+function asRecord10(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 async function probeMetroSymbolication(deps, metroPort) {
@@ -9060,7 +9447,7 @@ async function probeMetroSymbolication(deps, metroPort) {
       reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`
     };
   } catch (error) {
-    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError10(error) };
+    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError11(error) };
   }
 }
 async function fetchText(deps, url, timeoutMs) {
@@ -9068,7 +9455,7 @@ async function fetchText(deps, url, timeoutMs) {
     const response = asFetchResponse(await fetchWithTimeout2(deps, url, { timeoutMs }));
     return { available: response.ok, text: await response.text(), error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {
-    return { available: false, text: null, error: formatError10(error) };
+    return { available: false, text: null, error: formatError11(error) };
   }
 }
 async function fetchJson(deps, url, timeoutMs) {
@@ -9099,19 +9486,19 @@ function asFetchResponse(value) {
   };
 }
 function normalizeMetroTarget(value, index) {
-  const record = asRecord9(value);
+  const record = asRecord10(value);
   if (!record) {
     return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape2(value) } };
   }
   const target = {
-    id: optionalString5(record.id),
-    title: optionalString5(record.title),
-    description: optionalString5(record.description),
-    appId: optionalString5(record.appId),
-    deviceName: optionalString5(record.deviceName),
-    devtoolsFrontendUrl: optionalString5(record.devtoolsFrontendUrl),
-    webSocketDebuggerUrl: optionalString5(record.webSocketDebuggerUrl),
-    reactNative: asRecord9(record.reactNative),
+    id: optionalString6(record.id),
+    title: optionalString6(record.title),
+    description: optionalString6(record.description),
+    appId: optionalString6(record.appId),
+    deviceName: optionalString6(record.deviceName),
+    devtoolsFrontendUrl: optionalString6(record.devtoolsFrontendUrl),
+    webSocketDebuggerUrl: optionalString6(record.webSocketDebuggerUrl),
+    reactNative: asRecord10(record.reactNative),
     attached: record.attached
   };
   if (!target.id && !target.title && !target.webSocketDebuggerUrl && !target.devtoolsFrontendUrl) {
@@ -9122,7 +9509,7 @@ function normalizeMetroTarget(value, index) {
   }
   return { target, error: null };
 }
-function optionalString5(value) {
+function optionalString6(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 function responseShape2(value) {
@@ -9130,32 +9517,32 @@ function responseShape2(value) {
   if (value && typeof value === "object") return { type: "object", keys: Object.keys(value).slice(0, 20) };
   return { type: typeof value };
 }
-function sanitizePayload(value) {
-  return boundValue(redactValue2(value));
+function sanitizePayload2(value) {
+  return boundValue2(redactValue3(value));
 }
-function boundValue(value) {
-  if (typeof value === "string") return truncate12(value);
-  if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
-  const record = asRecord9(value);
+function boundValue2(value) {
+  if (typeof value === "string") return truncate13(value);
+  if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS2).map(boundValue2);
+  const record = asRecord10(value);
   if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
+  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue2(nested)]));
 }
-function redactValue2(value) {
-  if (typeof value === "string") return redactString(value);
-  if (Array.isArray(value)) return value.map(redactValue2);
-  const record = asRecord9(value);
+function redactValue3(value) {
+  if (typeof value === "string") return redactString2(value);
+  if (Array.isArray(value)) return value.map(redactValue3);
+  const record = asRecord10(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
-    isSensitiveKey(key) ? "[redacted]" : redactValue2(nested)
+    isSensitiveKey2(key) ? "[redacted]" : redactValue3(nested)
   ]));
 }
-function redactString(value) {
+function redactString2(value) {
   try {
     const parsed = new URL(value);
     let changed = false;
     for (const key of [...parsed.searchParams.keys()]) {
-      if (isSensitiveKey(key)) {
+      if (isSensitiveKey2(key)) {
         parsed.searchParams.set(key, "[redacted]");
         changed = true;
       }
@@ -9165,27 +9552,27 @@ function redactString(value) {
     return value.replace(/([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi, "$1[redacted]");
   }
 }
-function isSensitiveKey(key) {
+function isSensitiveKey2(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function formatError10(error) {
-  const record = asRecord9(error);
+function formatError11(error) {
+  const record = asRecord10(error);
   const message = record?.message;
   return message == null ? String(error) : String(message);
 }
 
 // src/commands/navigation-deeplinks/src/main/index.ts
-var EXPO_IOS_BRIDGE_VERSION = "1.0.0";
+var EXPO_IOS_BRIDGE_VERSION2 = "1.0.0";
 var NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
   "Use open-route or navigation deep-link when only URL navigation is available."
 ];
-function clampNumber17(value, min, max) {
+function clampNumber18(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
-function targetSummary5(target) {
+function targetSummary6(target) {
   if (!target) return null;
   return {
     id: target.id ?? null,
@@ -9208,7 +9595,7 @@ function navigationTransport(metroPort, target, cdp = null) {
     name: "metro-inspector-hermes-cdp",
     metroPort,
     protocol: "Runtime.evaluate",
-    target: targetSummary5(target),
+    target: targetSummary6(target),
     cdp
   };
 }
@@ -9263,15 +9650,15 @@ async function navigationPolicyDecision(args, action, deps = {}) {
   return deps.policyDecision(args, `navigation.${action}`, "device");
 }
 async function navigationCommand(args = {}, deps = defaultNavigationDependencies) {
-  const action = requireString11(args.action ?? "state", "action");
+  const action = requireString12(args.action ?? "state", "action");
   if (!["state", "back", "pop-to-root", "tab", "deep-link"].includes(action)) {
     throw new Error(`Unknown navigation action: ${action}`);
   }
-  if (action === "deep-link") return toolJson16(await navigationDeepLink(args, deps));
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  if (action === "deep-link") return toolJson(await navigationDeepLink(args, deps));
+  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
   const policy = await navigationPolicyDecision(args, action, deps);
   if (!policy.allowed) {
-    return toolJson16({
+    return toolJson({
       available: false,
       action,
       metroPort,
@@ -9286,14 +9673,14 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson16(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
+    return toolJson(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
   }
   if (!deps.evaluateHermesExpression) {
-    return toolJson16(navigationUnavailable({
+    return toolJson(navigationUnavailable({
       action,
       metroPort,
       reason: "No Hermes evaluator is configured.",
-      target: targetSummary5(target),
+      target: targetSummary6(target),
       policy
     }));
   }
@@ -9304,19 +9691,19 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
   );
   const value = result?.result?.result?.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return toolJson16(navigationUnavailable({
+    return toolJson(navigationUnavailable({
       action,
       metroPort,
       reason: result?.error ?? "Navigation bridge did not return a value.",
-      target: targetSummary5(target),
+      target: targetSummary6(target),
       policy
     }));
   }
-  return toolJson16({
+  return toolJson({
     ...value,
     action,
     metroPort,
-    target: targetSummary5(target),
+    target: targetSummary6(target),
     transport: navigationTransport(metroPort, target, result?.diagnostics),
     evidenceSource: "source" in value && typeof value.source === "string" ? value.source : "unknown",
     policy
@@ -9329,7 +9716,7 @@ async function navigationDeepLink(args = {}, deps = defaultNavigationDependencie
     return { available: false, action: "deep-link", reason: "No open-route adapter is configured.", policy };
   }
   const route = args.route ?? args._?.[1] ?? args._?.[0];
-  const openedRaw = unwrapToolJson5(await deps.openExpoRoute({ ...args, route }));
+  const openedRaw = unwrapToolJson(await deps.openExpoRoute({ ...args, route }));
   if (!openedRaw || typeof openedRaw !== "object" || Array.isArray(openedRaw)) {
     return {
       available: false,
@@ -9371,7 +9758,7 @@ function navigationExpression(args) {
   return `(() => {
     const action = ${JSON.stringify(args.action)};
     const tab = ${JSON.stringify(args.tab ?? null)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION)};
+    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION2)};
     const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
@@ -9478,29 +9865,9 @@ async function selectedTargetId(args = {}, deps = {}) {
 async function latestSessionId(args = {}, deps = {}) {
   return deps.latestSessionId ? deps.latestSessionId(args) : null;
 }
-function requireString11(value, field) {
+function requireString12(value, field) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
-}
-function toolJson16(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
-function unwrapToolJson5(result) {
-  if (isToolTextResult(result)) {
-    const text = result.content[0]?.text;
-    if (typeof text === "string") {
-      try {
-        return JSON.parse(text);
-      } catch {
-        return text;
-      }
-    }
-  }
-  return result;
-}
-function isToolTextResult(value) {
-  return Array.isArray(value.content);
 }
 function sanitizeOpenRouteResult(result) {
   return sanitizeSensitiveUrlStrings(result);
@@ -9524,37 +9891,37 @@ function redactSensitiveUrlQuery2(value) {
 
 // src/commands/network-evidence/src/main/index.ts
 import { promises as fs8 } from "node:fs";
-import path8 from "node:path";
+import path10 from "node:path";
 var CLI_NAME4 = CURRENT_CLI_NAME;
 var CLI_VERSION3 = "0.1.0";
-var EXPO_IOS_BRIDGE_VERSION2 = "1.0.0";
+var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
 var REDACTED3 = "[redacted]";
 var UNAVAILABLE_LIMITATIONS = [
   "Network evidence requires dev-only app instrumentation that patches fetch/XHR or an equivalent app network adapter.",
   "Native networking stacks are unavailable unless the app exposes them through the bridge."
 ];
-function clampNumber18(value, min, max) {
+function clampNumber19(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
 async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
-  const action = requireString12(args.action ?? "status", "action");
+  const action = requireString13(args.action ?? "status", "action");
   if (!["status", "requests", "request", "clear", "har", "waterfall"].includes(action)) {
     throw new Error(`Unknown network action: ${action}`);
   }
-  const harAction = action === "har" ? requireString12(args.harAction ?? "start", "harAction") : null;
+  const harAction = action === "har" ? requireString13(args.harAction ?? "start", "harAction") : null;
   const bridgeAction = action === "har" ? `har-${harAction}` : action;
   if (harAction && !["start", "stop"].includes(harAction)) {
     throw new Error(`Unknown network HAR action: ${harAction}`);
   }
-  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber18(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber19(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber19(args.limit ?? 100, 1, 1e3);
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson17(networkUnavailable({
+    return toolJson(networkUnavailable({
       action: bridgeAction,
       metroPort,
       code: "no-runtime-target",
@@ -9562,12 +9929,12 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     }));
   }
   if (!deps.evaluateHermesExpression) {
-    return toolJson17(networkUnavailable({
+    return toolJson(networkUnavailable({
       action: bridgeAction,
       metroPort,
       code: "transport-failure",
       reason: "No Hermes evaluator is configured.",
-      target: targetSummary6(target)
+      target: targetSummary7(target)
     }));
   }
   const result = await deps.evaluateHermesExpression(
@@ -9577,12 +9944,12 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   );
   const value = result?.result?.result?.value;
   if (!value) {
-    return toolJson17(networkUnavailable({
+    return toolJson(networkUnavailable({
       action: bridgeAction,
       metroPort,
       code: "transport-failure",
       reason: result?.error ?? "Network bridge did not return a value.",
-      target: targetSummary6(target),
+      target: targetSummary7(target),
       transport: networkTransport(metroPort, target, result?.diagnostics)
     }));
   }
@@ -9604,11 +9971,11 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     const fileSystem = deps.fileSystem ?? defaultFileSystem;
     await fileSystem.mkdir(paths.dirname(outputPath), { recursive: true });
     await fileSystem.writeJsonFile(outputPath, har);
-    return toolJson17({
+    return toolJson({
       ...redacted,
       action: bridgeAction,
       metroPort,
-      target: targetSummary6(target),
+      target: targetSummary7(target),
       transport,
       evidenceSource: redacted.source ?? "unknown",
       limitations: networkLimitations(redacted),
@@ -9621,13 +9988,13 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     ...redacted,
     action: bridgeAction,
     metroPort,
-    target: targetSummary6(target),
+    target: targetSummary7(target),
     transport,
     evidenceSource: redacted.source ?? "unknown",
     limitations: networkLimitations(redacted),
     captureTiming: networkCaptureTiming(redacted, clock)
   };
-  return toolJson17(action === "waterfall" ? networkWaterfallPayload(payload) : payload);
+  return toolJson(action === "waterfall" ? networkWaterfallPayload(payload) : payload);
 }
 var defaultNetworkDependencies = {
   metroTargets: defaultMetroTargets,
@@ -9681,7 +10048,7 @@ function networkExpression(input) {
     const action = ${JSON.stringify(action)};
     const requestId = ${JSON.stringify(requestId ?? null)};
     const limit = ${Number(limit)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION2)};
+    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION3)};
     const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
@@ -9853,7 +10220,7 @@ function networkTransport(metroPort, target, cdp = null) {
     name: "metro-inspector-hermes-cdp",
     metroPort,
     protocol: "Runtime.evaluate",
-    target: targetSummary6(target),
+    target: targetSummary7(target),
     cdp
   };
 }
@@ -9946,16 +10313,16 @@ function normalizeNetworkRequest(request) {
   if (!isRecord8(request)) return request;
   const url = String(request.url ?? (isRecord8(request.request) ? request.request.url : "") ?? "");
   const parsed = parseUrlParts(url);
-  const startedAt = optionalString6(request.startedAt);
+  const startedAt = optionalString7(request.startedAt);
   const durationMs = numberOrNull2(request.durationMs);
-  const endedAt = optionalString6(request.endedAt ?? request.completedAt) ?? inferEndedAt(startedAt, durationMs);
+  const endedAt = optionalString7(request.endedAt ?? request.completedAt) ?? inferEndedAt(startedAt, durationMs);
   const response = isRecord8(request.response) ? request.response : {};
   const status = numberOrNull2(request.status) ?? numberOrNull2(response.status);
   return {
     ...request,
-    id: optionalString6(request.id) ?? optionalString6(request.requestId) ?? null,
-    requestId: optionalString6(request.requestId) ?? optionalString6(request.id) ?? null,
-    method: optionalString6(request.method) ?? optionalString6(isRecord8(request.request) ? request.request.method : null) ?? "GET",
+    id: optionalString7(request.id) ?? optionalString7(request.requestId) ?? null,
+    requestId: optionalString7(request.requestId) ?? optionalString7(request.id) ?? null,
+    method: optionalString7(request.method) ?? optionalString7(isRecord8(request.request) ? request.request.method : null) ?? "GET",
     url,
     origin: parsed.origin,
     path: parsed.path,
@@ -9969,7 +10336,7 @@ function normalizeNetworkRequest(request) {
     cache: isRecord8(request.cache) ? request.cache : void 0,
     retryCount: numberOrNull2(request.retryCount) ?? 0,
     aborted: request.aborted === true,
-    error: optionalString6(request.error),
+    error: optionalString7(request.error),
     initiator: normalizeInitiator(request.initiator)
   };
 }
@@ -10031,7 +10398,7 @@ function annotateHar(har, metadata) {
   };
   return copy;
 }
-function targetSummary6(target) {
+function targetSummary7(target) {
   if (!target) return null;
   return {
     id: target.id ?? null,
@@ -10049,10 +10416,7 @@ function targetSummary6(target) {
     }
   };
 }
-function toolJson17(value) {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
-}
-function requireString12(value, field) {
+function requireString13(value, field) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -10151,7 +10515,7 @@ function inferEndedAt(startedAt, durationMs) {
   if (!Number.isFinite(started)) return null;
   return new Date(started + durationMs).toISOString();
 }
-function optionalString6(value) {
+function optionalString7(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 function numberOrNull2(value) {
@@ -10161,12 +10525,12 @@ function numberOrNull2(value) {
 function normalizeInitiator(value) {
   if (!isRecord8(value)) return void 0;
   const out = {
-    route: optionalString6(value.route),
-    screen: optionalString6(value.screen),
-    interactionId: optionalString6(value.interactionId),
-    interactionName: optionalString6(value.interactionName),
-    queryKey: optionalString6(value.queryKey),
-    component: optionalString6(value.component),
+    route: optionalString7(value.route),
+    screen: optionalString7(value.screen),
+    interactionId: optionalString7(value.interactionId),
+    interactionName: optionalString7(value.interactionName),
+    queryKey: optionalString7(value.queryKey),
+    component: optionalString7(value.component),
     source: isRecord8(value.source) ? value.source : void 0
   };
   return Object.values(out).some((item) => item !== void 0 && item !== null) ? out : void 0;
@@ -10175,9 +10539,9 @@ var systemClock2 = {
   now: () => /* @__PURE__ */ new Date()
 };
 var defaultPath2 = {
-  resolve: (filePath) => path8.resolve(filePath),
-  join: (...segments) => path8.join(...segments),
-  dirname: (filePath) => path8.dirname(filePath)
+  resolve: (filePath) => path10.resolve(filePath),
+  join: (...segments) => path10.join(...segments),
+  dirname: (filePath) => path10.dirname(filePath)
 };
 var defaultFileSystem = {
   mkdir: (filePath, options) => fs8.mkdir(filePath, options).then(() => void 0),
@@ -10189,445 +10553,9 @@ function defaultResolveExpoStateRoot(args) {
   return ".scratch/expo98";
 }
 
-// src/commands/bridge-domain-actions/src/main/index.ts
-import { readFile as readFile12 } from "node:fs/promises";
-import path9 from "node:path";
-var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
-var MAX_OUTPUT11 = 4e4;
-var MAX_ARRAY_ITEMS2 = 1e3;
-function toolJson18(value) {
-  return { content: [{ type: "text", text: stringifyBoundedJson(value) }] };
-}
-async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies) {
-  const positionals = Array.isArray(args._) ? args._ : [];
-  const store = requireString13(args.store ?? positionals[0], "store");
-  const action = requireString13(args.action ?? positionals[1] ?? "list", "action");
-  if (!["list", "get", "set", "clear"].includes(action)) throw new Error(`Unknown storage action: ${action}`);
-  const key = args.key ?? positionals[2];
-  const sideEffect = action === "list" || action === "get" ? "read" : "write";
-  const policy = await policyDecision(args, `storage.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson18(policyDeniedPayload({ domain: "storage", action, policy }));
-  const value = action === "set" ? parseStorageValue(args.value ?? positionals[3]) : null;
-  return toolJson18(await bridgeDomainCommand({
-    args,
-    domain: "storage",
-    action,
-    expression: storageExpression({
-      store,
-      action,
-      key,
-      value,
-      limit: clampNumber19(args.limit ?? 100, 1, 1e3)
-    }),
-    policy
-  }, deps));
-}
-async function stateCommand(args = {}, deps = defaultBridgeDomainDependencies) {
-  const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString13(args.action ?? positionals[0] ?? "list", "action");
-  if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
-  const sideEffect = action === "list" ? "read" : "write";
-  const policy = await policyDecision(args, `state.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson18(policyDeniedPayload({ domain: "state", action, policy }));
-  return toolJson18(await bridgeDomainCommand({
-    args,
-    domain: "state",
-    action,
-    expression: stateExpression({ action, name: args.name ?? positionals[1] }),
-    policy
-  }, deps));
-}
-async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies) {
-  const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString13(args.action ?? positionals[0] ?? "list", "action");
-  if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
-  const sideEffect = action === "press" ? "device" : "read";
-  const policy = await policyDecision(args, `controls.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson18(policyDeniedPayload({ domain: "controls", action, policy }));
-  return toolJson18(await bridgeDomainCommand({
-    args,
-    domain: "controls",
-    action,
-    expression: controlsExpression({ action, name: args.name ?? positionals[1] }),
-    policy
-  }, deps));
-}
-var defaultBridgeDomainDependencies = {
-  metroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression,
-  readJsonFile: async (file) => JSON.parse(await readFile12(file, "utf8")),
-  resolvePath: (file) => path9.resolve(file)
-};
-async function bridgeDomainCommand(input, deps = defaultBridgeDomainDependencies) {
-  const metroPort = clampNumber19(input.args.metroPort ?? 8081, 1, 65535);
-  const sideEffect = bridgeActionSideEffect(input.domain, input.action);
-  if (sideEffect !== "read" && input.policy?.allowed !== true) {
-    return policyDeniedPayload({ domain: input.domain, action: input.action, policy: input.policy ?? {
-      checked: true,
-      action: `${input.domain}.${input.action}`,
-      sideEffect,
-      allowed: false,
-      source: null,
-      reason: "No action policy allowed this state-changing operation."
-    } });
-  }
-  const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
-  const target = targets[0] ?? null;
-  const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
-  if (!webSocketDebuggerUrl) {
-    return domainUnavailable({
-      domain: input.domain,
-      action: input.action,
-      metroPort,
-      code: "no-runtime-target",
-      reason: "No Metro inspector target.",
-      policy: input.policy
-    });
-  }
-  if (!deps.evaluateHermesExpression) {
-    return domainUnavailable({
-      domain: input.domain,
-      action: input.action,
-      metroPort,
-      code: "transport-failure",
-      reason: `${input.domain} bridge did not return a value.`,
-      target: targetSummary7(target),
-      policy: input.policy
-    });
-  }
-  const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, input.expression, { timeoutMs: 5e3 });
-  const value = result?.result?.result?.value;
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return domainUnavailable({
-      domain: input.domain,
-      action: input.action,
-      metroPort,
-      code: "transport-failure",
-      reason: result?.error ?? `${input.domain} bridge did not return a value.`,
-      target: targetSummary7(target),
-      transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
-      policy: input.policy
-    });
-  }
-  const redacted = sanitizePayload2(deps.redactValue ? deps.redactValue(value) : value);
-  return sanitizePayload2({
-    ...redacted,
-    domain: input.domain,
-    action: input.action,
-    metroPort,
-    target: targetSummary7(target),
-    transport: bridgeRuntimeTransport(metroPort, target, result?.diagnostics ?? result?.cdp ?? null),
-    evidenceSource: typeof redacted.source === "string" ? redacted.source : "unknown",
-    policy: input.policy
-  });
-}
-function domainUnavailable(args) {
-  return sanitizePayload2({
-    available: false,
-    domain: args.domain,
-    action: args.action,
-    source: "app-instrumentation",
-    evidenceSource: "unavailable",
-    code: args.code ?? "unavailable",
-    reason: args.reason,
-    metroPort: args.metroPort,
-    target: targetSummary7(args.target),
-    transport: args.transport ?? bridgeRuntimeTransport(args.metroPort, args.target ?? null, null),
-    policy: args.policy ?? null,
-    limitations: [`${args.domain} evidence requires the dev-only app instrumentation bridge.`]
-  });
-}
-function bridgeRuntimeTransport(metroPort, target, cdp = null) {
-  return sanitizePayload2({
-    name: "metro-inspector-hermes-cdp",
-    metroPort,
-    protocol: "Runtime.evaluate",
-    target: targetSummary7(target),
-    cdp
-  });
-}
-async function policyDecision(args, action, sideEffect, deps = {}) {
-  if (sideEffect === "read") {
-    return { checked: true, action, sideEffect, allowed: true, source: null, reason: "Read action does not require policy approval." };
-  }
-  const policyPath = optionalString7(args.actionPolicy);
-  if (!policyPath) {
-    return { checked: true, action, sideEffect, allowed: false, source: null, reason: "No action policy allowed this state-changing operation." };
-  }
-  const resolved = deps.resolvePath ? deps.resolvePath(policyPath) : policyPath;
-  if (!deps.readJsonFile) throw new Error("policyDecision requires readJsonFile when actionPolicy is supplied.");
-  const policy = await deps.readJsonFile(resolved);
-  const allowed = policyAllowsAction2(policy, action);
-  return {
-    checked: true,
-    action,
-    sideEffect,
-    allowed,
-    source: resolved,
-    reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation."
-  };
-}
-function policyAllowsAction2(policy, action) {
-  const record = asRecord10(policy);
-  if (Array.isArray(record?.allow) && record.allow.includes(action)) return true;
-  const actions = asRecord10(record?.actions);
-  return actions?.[action] === "allow" || actions?.[action] === true;
-}
-function parseStorageValue(value) {
-  if (value === void 0) throw new Error("storage set requires a JSON value.");
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    throw new Error(`Invalid JSON for --value: ${formatError11(error)}`);
-  }
-}
-function storageExpression(args) {
-  return `(() => {
-    const store = ${JSON.stringify(args.store)};
-    const action = ${JSON.stringify(args.action)};
-    const key = ${JSON.stringify(args.key ?? null)};
-    const value = ${JSON.stringify(args.value)};
-    const limit = ${Number(args.limit)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION3)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
-      globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
-      globalThis.__ROZENITE_AGENT_BRIDGE__;
-    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
-    const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
-    const pluginStorage = pluginBridge?.storage ||
-      (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.storage : null) ||
-      (pluginBridge?.domainRegistry ? pluginBridge.domainRegistry.storage : null);
-    const pluginCallTool = typeof pluginBridge?.callTool === 'function' ? pluginBridge.callTool.bind(pluginBridge) : null;
-    const callStorage = (name, payload = {}) => {
-      if (pluginStorage && typeof pluginStorage[name] === 'function') return pluginStorage[name](payload);
-      if (pluginStorage && pluginStorage.actions && typeof pluginStorage.actions[name] === 'function') return pluginStorage.actions[name](payload);
-      if (pluginCallTool) return pluginCallTool('storage.' + name, payload);
-      return null;
-    };
-    const hasPluginStorage = Boolean(pluginStorage || pluginCallTool || (Array.isArray(pluginBridge?.domains) && pluginBridge.domains.some((domain) => domain?.name === 'storage')));
-    if (hasPluginStorage) {
-      if (pluginVersion && pluginVersion !== expectedBridgeVersion) {
-        return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'version-mismatch', bridgeVersion: pluginVersion, expectedBridgeVersion, reason: 'Storage plugin bridge version is not compatible with this CLI.', store, action };
-      }
-      const adapters = pluginStorage?.adapters || pluginStorage?.stores || pluginStorage || {};
-      const adapter = adapters[store] || (pluginStorage?.store && pluginStorage.store(store)) || null;
-      const read = (targetKey) => adapter && typeof adapter.get === 'function' ? adapter.get(targetKey) : adapter?.values?.[targetKey];
-      if (!adapter && !pluginCallTool) return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'missing-domain', reason: 'Storage bridge store is not registered.', store, action };
-      if (action === 'list') {
-        const keys = adapter ? (adapter.list ? adapter.list() : adapter.keys || []) : callStorage('list', { store, limit });
-        return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, keys: (Array.isArray(keys) ? keys : []).slice(0, limit) };
-      }
-      if (action === 'get') return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, key, value: adapter ? read(key) : callStorage('get', { store, key }) };
-      if (action === 'set') {
-        const before = adapter ? read(key) : null;
-        const result = adapter && typeof adapter.set === 'function' ? adapter.set(key, value) : callStorage('set', { store, key, value });
-        const after = adapter ? read(key) : null;
-        return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, key, before, after, result: result || { ok: true } };
-      }
-      if (action === 'clear') {
-        const beforeKeys = adapter ? (adapter.list ? adapter.list() : adapter.keys || []) : [];
-        const result = adapter && typeof adapter.clear === 'function' ? adapter.clear() : callStorage('clear', { store });
-        const afterKeys = adapter ? (adapter.list ? adapter.list() : adapter.keys || []) : [];
-        return { available: true, source: 'plugin-bridge', domain: 'storage', bridgeVersion: pluginVersion, store, action, before: { keys: beforeKeys }, after: { keys: afterKeys }, result: result || { ok: true } };
-      }
-    } else if (pluginBridge) {
-      return { available: false, source: 'plugin-bridge', domain: 'storage', code: 'missing-domain', reason: 'Storage bridge domain is not registered.', store, action };
-    }
-    const bridge = globalThis.__EXPO_IOS_STORAGE_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.storage);
-    if (!bridge) return { available: false, source: 'app-instrumentation', code: 'unavailable-bridge', reason: 'Storage bridge is not installed.', store, action };
-    const adapter = bridge[store];
-    if (!adapter) return { available: false, source: 'app-instrumentation', reason: 'Unsupported storage store.', store, action };
-    if (action === 'list') return { available: true, source: 'app-instrumentation', store, action, keys: (adapter.list ? adapter.list() : adapter.keys || []).slice(0, limit) };
-    if (action === 'get') return { available: true, source: 'app-instrumentation', store, action, key, value: adapter.get ? adapter.get(key) : (adapter.values || {})[key] };
-    if (action === 'set') return { available: true, source: 'app-instrumentation', store, action, key, result: adapter.set ? adapter.set(key, value) : { ok: true } };
-    if (action === 'clear') return { available: true, source: 'app-instrumentation', store, action, result: adapter.clear ? adapter.clear() : { ok: true } };
-    return { available: false, source: 'app-instrumentation', reason: 'Unsupported storage action.', store, action };
-  })()`;
-}
-function stateExpression(args) {
-  return `(() => {
-    const action = ${JSON.stringify(args.action)};
-    const name = ${JSON.stringify(args.name ?? null)};
-    const bridge = globalThis.__EXPO_IOS_STATE_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.state);
-    if (!bridge) return { available: false, source: 'app-instrumentation', reason: 'State bridge is not installed.', action };
-    if (action === 'list') return { available: true, source: 'app-instrumentation', action, states: bridge.list ? bridge.list() : bridge.states || [] };
-    if (action === 'save') return { available: true, source: 'app-instrumentation', action, name, result: bridge.save ? bridge.save(name) : { ok: true, name } };
-    if (action === 'load') return { available: true, source: 'app-instrumentation', action, name, result: bridge.load ? bridge.load(name) : { ok: true, name } };
-    if (action === 'clear') return { available: true, source: 'app-instrumentation', action, name, result: bridge.clear ? bridge.clear(name) : { ok: true, name } };
-    return { available: false, source: 'app-instrumentation', reason: 'Unsupported state action.', action };
-  })()`;
-}
-function controlsExpression(args) {
-  return `(() => {
-    const action = ${JSON.stringify(args.action)};
-    const name = ${JSON.stringify(args.name ?? null)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION3)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
-      globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
-      globalThis.__ROZENITE_AGENT_BRIDGE__;
-    const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
-    const pluginVersion = pluginMetadata.bridgeVersion || pluginBridge?.bridgeVersion || pluginBridge?.version || null;
-    const pluginControls = pluginBridge?.controls ||
-      (pluginBridge?.domains && !Array.isArray(pluginBridge.domains) ? pluginBridge.domains.controls : null) ||
-      (pluginBridge?.domainRegistry ? pluginBridge.domainRegistry.controls : null);
-    const pluginCallTool = typeof pluginBridge?.callTool === 'function' ? pluginBridge.callTool.bind(pluginBridge) : null;
-    const callControls = (command, payload = {}) => {
-      if (pluginControls && typeof pluginControls[command] === 'function') return pluginControls[command](payload);
-      if (pluginControls && pluginControls.actions && typeof pluginControls.actions[command] === 'function') return pluginControls.actions[command](payload);
-      if (pluginCallTool) return pluginCallTool('controls.' + command, payload);
-      return null;
-    };
-    const hasPluginControls = Boolean(pluginControls || pluginCallTool || (Array.isArray(pluginBridge?.domains) && pluginBridge.domains.some((domain) => domain?.name === 'controls')));
-    if (hasPluginControls) {
-      if (pluginVersion && pluginVersion !== expectedBridgeVersion) {
-        return { available: false, source: 'plugin-bridge', domain: 'controls', code: 'version-mismatch', bridgeVersion: pluginVersion, expectedBridgeVersion, reason: 'Controls plugin bridge version is not compatible with this CLI.', action };
-      }
-      const listControls = () => {
-        const raw = pluginControls && typeof pluginControls.list === 'function'
-          ? pluginControls.list()
-          : pluginControls?.controls || callControls('list') || [];
-        return Array.isArray(raw) ? raw : [];
-      };
-      if (action === 'list') return { available: true, source: 'plugin-bridge', domain: 'controls', bridgeVersion: pluginVersion, action, controls: listControls() };
-      if (action === 'get') return { available: true, source: 'plugin-bridge', domain: 'controls', bridgeVersion: pluginVersion, action, name, control: pluginControls && typeof pluginControls.get === 'function' ? pluginControls.get(name) : listControls().find((control) => control.name === name) || null };
-      if (action === 'press') {
-        const before = pluginControls && typeof pluginControls.get === 'function' ? pluginControls.get(name) : listControls().find((control) => control.name === name) || null;
-        const result = pluginControls && typeof pluginControls.press === 'function' ? pluginControls.press(name) : callControls('press', { name });
-        const after = pluginControls && typeof pluginControls.get === 'function' ? pluginControls.get(name) : listControls().find((control) => control.name === name) || null;
-        return { available: true, source: 'plugin-bridge', domain: 'controls', bridgeVersion: pluginVersion, action, name, before, after, result: result || { ok: true, name } };
-      }
-    } else if (pluginBridge) {
-      return { available: false, source: 'plugin-bridge', domain: 'controls', code: 'missing-domain', reason: 'Controls bridge domain is not registered.', action };
-    }
-    const bridge = globalThis.__EXPO_IOS_CONTROLS_BRIDGE__ ||
-      (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.controls);
-    if (!bridge) return { available: false, source: 'app-instrumentation', code: 'unavailable-bridge', reason: 'Controls bridge is not installed.', action };
-    if (action === 'list') return { available: true, source: 'app-instrumentation', action, controls: bridge.list ? bridge.list() : bridge.controls || [] };
-    if (action === 'get') return { available: true, source: 'app-instrumentation', action, name, control: bridge.get ? bridge.get(name) : (bridge.controls || []).find((control) => control.name === name) || null };
-    if (action === 'press') return { available: true, source: 'app-instrumentation', action, name, result: bridge.press ? bridge.press(name) : { ok: true, name } };
-    return { available: false, source: 'app-instrumentation', reason: 'Unsupported controls action.', action };
-  })()`;
-}
-function targetSummary7(target) {
-  if (!target) return null;
-  return sanitizePayload2({
-    id: target.id ?? null,
-    title: target.title ?? null,
-    description: target.description ?? null,
-    appId: target.appId ?? null,
-    deviceName: target.deviceName ?? null,
-    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
-    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
-    reactNative: target.reactNative ?? null,
-    capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
-      reactNative: Boolean(target.reactNative)
-    }
-  });
-}
-function clampNumber19(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
-  return Math.min(Math.max(number, min), max);
-}
-function requireString13(value, name) {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
-  return value.trim();
-}
-function optionalString7(value) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-function sanitizePayload2(value) {
-  return boundValue2(redactValue3(value));
-}
-function stringifyBoundedJson(value) {
-  const sanitized = sanitizePayload2(value);
-  const text = JSON.stringify(sanitized, null, 2);
-  if (text.length <= MAX_OUTPUT11) return text;
-  const record = asRecord10(sanitized);
-  const envelope = {
-    available: false,
-    source: "output-boundary",
-    evidenceSource: "output-boundary",
-    code: "output-truncated",
-    outputTruncated: true,
-    originalLength: text.length,
-    domain: record?.domain,
-    action: record?.action,
-    preview: ""
-  };
-  let budget = MAX_OUTPUT11 - JSON.stringify(envelope, null, 2).length - 128;
-  envelope.preview = text.slice(0, Math.max(0, budget));
-  let output = JSON.stringify(envelope, null, 2);
-  while (output.length > MAX_OUTPUT11 && typeof envelope.preview === "string") {
-    budget -= output.length - MAX_OUTPUT11 + 128;
-    envelope.preview = envelope.preview.slice(0, Math.max(0, budget));
-    output = JSON.stringify(envelope, null, 2);
-  }
-  return output;
-}
-function bridgeActionSideEffect(domain, action) {
-  if (domain === "storage") return action === "list" || action === "get" ? "read" : "write";
-  if (domain === "state") return action === "list" ? "read" : "write";
-  if (domain === "controls") return action === "press" ? "device" : "read";
-  return "unknown";
-}
-function boundValue2(value) {
-  if (typeof value === "string") return truncate13(value);
-  if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS2).map(boundValue2);
-  const record = asRecord10(value);
-  if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue2(nested)]));
-}
-function redactValue3(value) {
-  if (typeof value === "string") return redactString2(value);
-  if (Array.isArray(value)) return value.map(redactValue3);
-  const record = asRecord10(value);
-  if (!record) return value;
-  return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
-    key,
-    isSensitiveKey2(key) ? "[redacted]" : redactValue3(nested)
-  ]));
-}
-function redactString2(value) {
-  try {
-    const parsed = new URL(value);
-    let changed = false;
-    for (const key of [...parsed.searchParams.keys()]) {
-      if (isSensitiveKey2(key)) {
-        parsed.searchParams.set(key, "[redacted]");
-        changed = true;
-      }
-    }
-    return changed ? parsed.toString() : value;
-  } catch {
-    return value.replace(/([?&](?:cookie|token|authorization|password|secret|api[-_]?key|apikey)=)[^&\s]+/gi, "$1[redacted]");
-  }
-}
-function isSensitiveKey2(key) {
-  return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
-}
-function truncate13(value, max = MAX_OUTPUT11) {
-  const text = String(value ?? "");
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}
-...[truncated ${text.length - max} chars]`;
-}
-function asRecord10(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function formatError11(error) {
-  const record = asRecord10(error);
-  return record?.message == null ? String(error) : String(record.message);
-}
-
 // src/commands/bridge-command-adapter/src/main/index.ts
 import { promises as fs9 } from "node:fs";
-import path10 from "node:path";
+import path11 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION4 = "1.0.0";
 var BRIDGE_SCHEMA_VERSION = 1;
 var BRIDGE_DIR = ".expo98";
@@ -10639,15 +10567,15 @@ async function bridgeCommand(args = {}, dependencies = {}) {
   const io = bridgeCommandIo(dependencies);
   const cwd = await resolveProjectCwd(args.cwd, io);
   const status = await bridgeInstallStatus(cwd, io);
-  const plan = bridgeInstallPlan(cwd, status);
-  if (action === "status") return toolJson19({ available: true, action, ...status });
-  if (action === "plan") return toolJson19({ available: true, action, status: status.state, projectRoot: status.projectRoot, plan });
+  const plan = bridgeInstallPlan(status);
+  if (action === "status") return toolJson({ available: true, action, ...status });
+  if (action === "plan") return toolJson({ available: true, action, status: status.state, projectRoot: status.projectRoot, plan });
   if (action === "health" || action === "domains") {
-    return toolJson19(await io.bridgeHealthPayload(args, { action, status, plan }));
+    return toolJson(await io.bridgeHealthPayload(args, { action, status, plan }));
   }
   const permission = action === "install" ? "bridge-install" : "bridge-remove";
   if (!hasExplicitConfirmation2(args.confirmActions, permission)) {
-    return toolJson19({
+    return toolJson({
       available: false,
       action,
       status: status.state,
@@ -10662,13 +10590,13 @@ async function bridgeCommand(args = {}, dependencies = {}) {
     await io.mkdir(io.joinPath(cwd, "src"), { recursive: true });
     await io.writeJsonFile(io.joinPath(cwd, BRIDGE_DIR, "bridge.json"), bridgeMetadata());
     await io.writeFile(io.joinPath(cwd, "src", BRIDGE_SOURCE_FILE), bridgeSource(), "utf8");
-    return toolJson19({ available: true, action, projectRoot: cwd, installed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
+    return toolJson({ available: true, action, projectRoot: cwd, installed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
   }
   await removeIgnoringErrors(io, io.joinPath(cwd, BRIDGE_DIR, "bridge.json"));
   await removeIgnoringErrors(io, io.joinPath(cwd, LEGACY_BRIDGE_DIR, "bridge.json"));
   await removeIgnoringErrors(io, io.joinPath(cwd, "src", BRIDGE_SOURCE_FILE));
   await removeIgnoringErrors(io, io.joinPath(cwd, "src", LEGACY_BRIDGE_SOURCE_FILE));
-  return toolJson19({ available: true, action, projectRoot: cwd, removed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
+  return toolJson({ available: true, action, projectRoot: cwd, removed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
 }
 async function bridgeInstallStatus(projectRoot, dependencies = {}) {
   const io = bridgeCommandIo(dependencies);
@@ -10730,7 +10658,7 @@ async function bridgeInstallStatus(projectRoot, dependencies = {}) {
     issues
   };
 }
-function bridgeInstallPlan(projectRoot, status) {
+function bridgeInstallPlan(status) {
   return {
     permissionRequired: true,
     requiredConfirmations: ["bridge-install", "bridge-remove"],
@@ -10798,10 +10726,6 @@ export function registerExpoIosDevtoolsBridge(): Expo98DevtoolsBridgeRegistratio
 }
 `;
 }
-function toolJson19(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
-}
 function requireString14(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
@@ -10812,7 +10736,7 @@ function hasExplicitConfirmation2(value, required) {
   return String(value ?? "").split(",").map((item) => item.trim()).includes(required);
 }
 async function normalizeProjectCwd2(cwd, options = {}) {
-  const resolved = path10.resolve(cwd ?? process.cwd());
+  const resolved = path11.resolve(cwd ?? process.cwd());
   const stat8 = await fs9.stat(resolved).catch(() => null);
   if (!stat8?.isDirectory()) {
     throw new Error(`Directory does not exist: ${resolved}`);
@@ -10840,8 +10764,8 @@ function bridgeCommandIo(dependencies) {
     writeJsonFile: dependencies.writeJsonFile ?? writeJsonFile4,
     writeFile: dependencies.writeFile ?? fs9.writeFile,
     rm: dependencies.rm ?? fs9.rm,
-    joinPath: dependencies.joinPath ?? path10.join,
-    resolvePath: dependencies.resolvePath ?? path10.resolve,
+    joinPath: dependencies.joinPath ?? path11.join,
+    resolvePath: dependencies.resolvePath ?? path11.resolve,
     currentCwd: dependencies.currentCwd ?? process.cwd
   };
 }
@@ -10895,23 +10819,19 @@ function asRecord11(value) {
 }
 
 // src/commands/accessibility-actions/src/main/index.ts
-import { readdir as readdir8, readFile as readFile13 } from "node:fs/promises";
+import { readdir as readdir8, readFile as readFile14 } from "node:fs/promises";
 import { execFile as nodeExecFile10 } from "node:child_process";
 import { basename as basename5, join as join10, resolve as resolve5 } from "node:path";
 var FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
-function toolJson20(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function accessibilityCommand(args = {}, deps = defaultAccessibilityDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString15(args.action ?? positionals[0] ?? "tree", "action");
   if (!["tree", "inspect", "audit", "focus"].includes(action)) throw new Error(`Unknown accessibility action: ${action}`);
   if (action === "focus") {
     const ref = requireString15(args.ref ?? positionals[1], "ref");
-    if (!deps.refActionCommand) return toolJson20({ available: false, action, ref, reason: "No ref action adapter is configured." });
+    if (!deps.refActionCommand) return toolJson({ available: false, action, ref, reason: "No ref action adapter is configured." });
     const result = asRecord12(unwrapToolJson(await deps.refActionCommand({ ...args, command: "focus", ref }))) ?? {};
-    return toolJson20({
+    return toolJson({
       ...result,
       action,
       source: result.source ?? "ref-action",
@@ -10921,23 +10841,23 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
   if (action === "inspect") {
     const ref = requireString15(args.ref ?? positionals[1], "ref");
     const cache = await readLatestRefCache4(args, deps);
-    if (!cache) return toolJson20({ available: false, action, reason: "No snapshot exists for the current session.", ref });
+    if (!cache) return toolJson({ available: false, action, reason: "No snapshot exists for the current session.", ref });
     const record = (cache.refs ?? []).find((item) => item.ref === ref);
-    return toolJson20(record ? { available: true, action, ref, snapshotId: cache.snapshotId, targetId: cache.targetId, record } : { available: false, action, reason: "Ref not found in the latest snapshot.", ref });
+    return toolJson(record ? { available: true, action, ref, snapshotId: cache.snapshotId, targetId: cache.targetId, record } : { available: false, action, reason: "Ref not found in the latest snapshot.", ref });
   }
   if (action === "audit") {
     const cache = await readLatestRefCache4(args, deps);
-    if (!cache) return toolJson20({ available: false, action, reason: "No snapshot exists for the current session.", issues: [] });
+    if (!cache) return toolJson({ available: false, action, reason: "No snapshot exists for the current session.", issues: [] });
     const issues = auditAccessibilityRefs(cache);
-    return toolJson20({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
+    return toolJson({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
   }
-  return toolJson20(await accessibilityTreePayload(args, deps));
+  return toolJson(await accessibilityTreePayload(args, deps));
 }
 var defaultAccessibilityDependencies = {
   commandPath: defaultCommandPath2,
   resolveIosDevice: (device, options) => resolveIosDevice(typeof device === "string" ? device : null, options),
   execFile: defaultExecFile4,
-  refActionCommand: (args) => toolJson20({
+  refActionCommand: (args) => toolJson({
     available: false,
     action: "focus",
     ref: args.ref ?? null,
@@ -11038,7 +10958,7 @@ function sessionDirectory2(stateRoot, sessionId) {
   return join10(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile7(file) {
-  return JSON.parse(await readFile13(file, "utf8"));
+  return JSON.parse(await readFile14(file, "utf8"));
 }
 function requireString15(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11067,9 +10987,11 @@ function asSessionRecord(value) {
 }
 
 // src/commands/modal-blocker-actions/src/main/index.ts
+import { readFile as readFile15 } from "node:fs/promises";
+import path12 from "node:path";
 var MAX_OUTPUT12 = 4e4;
 var MAX_ARRAY_ITEMS3 = 1e3;
-function toolJson21(value) {
+function boundedToolJson2(value) {
   return { content: [{ type: "text", text: stringifyBoundedJson2(value) }] };
 }
 async function dialogCommand(args = {}, deps = defaultModalBridgeDependencies) {
@@ -11080,21 +11002,18 @@ async function sheetCommand(args = {}, deps = defaultModalBridgeDependencies) {
 }
 var defaultModalBridgeDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
-  evaluateHermesExpression
+  evaluateHermesExpression,
+  readJsonFile: async (file) => JSON.parse(await readFile15(file, "utf8")),
+  resolvePath: (file) => path12.resolve(file)
 };
 async function modalBridgeCommand(input, deps) {
   const positionals = Array.isArray(input.args._) ? input.args._ : [];
   const action = requireString16(input.args.action ?? positionals[0] ?? "status", "action");
   if (!input.actions.includes(action)) throw new Error(`Unknown ${input.domain} action: ${action}`);
   const sideEffect = action === "status" ? "read" : "device";
-  const policy = {
-    checked: true,
-    action: `${input.domain}.${action}`,
-    sideEffect,
-    allowed: true,
-    reason: "Modal action is non-destructive."
-  };
-  return toolJson21(await bridgeDomainCommand2({
+  const policy = await policyDecision(input.args, `${input.domain}.${action}`, sideEffect, deps);
+  if (!policy.allowed) return boundedToolJson2(policyDeniedPayload({ domain: input.domain, action, policy }));
+  return boundedToolJson2(await bridgeDomainCommand2({
     args: input.args,
     domain: input.domain,
     action,
@@ -11300,13 +11219,9 @@ function asRecord13(value) {
 
 // src/commands/record-artifacts/src/main/index.ts
 import { spawn as spawn3 } from "node:child_process";
-import { access as access4, mkdir as mkdir12, readdir as readdir9, readFile as readFile14, writeFile as writeFile7 } from "node:fs/promises";
+import { access as access4, mkdir as mkdir12, readdir as readdir9, readFile as readFile16, writeFile as writeFile7 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname4, join as join11, resolve as resolve6 } from "node:path";
 var RECORD_LIMITATION = "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
-function toolJson22(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function recordCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString17(args.action ?? positionals[0] ?? "start", "action");
@@ -11339,7 +11254,7 @@ async function recordCommand(args = {}, deps = {}) {
       limitations: [RECORD_LIMITATION]
     };
     await writeJsonFile5(metadataPath, metadata2);
-    return toolJson22({ ...metadata2, metadataPath });
+    return toolJson({ ...metadata2, metadataPath });
   }
   const previous = asRecord14(await readJsonFile8(metadataPath).catch(() => null));
   const previousPid = Number(previous?.pid);
@@ -11364,7 +11279,7 @@ async function recordCommand(args = {}, deps = {}) {
     fileExists: await pathExists5(finalOutputPath)
   };
   await writeJsonFile5(metadataPath, metadata);
-  return toolJson22(metadata);
+  return toolJson(metadata);
 }
 function runRecordMetadataPath(stateRoot) {
   return join11(stateRoot, "artifacts", "recordings", "recording.json");
@@ -11390,7 +11305,7 @@ function resolveExpoStateRoot6(args = {}) {
   return join11(root, ".scratch", "expo98");
 }
 async function readJsonFile8(file) {
-  return JSON.parse(await readFile14(file, "utf8"));
+  return JSON.parse(await readFile16(file, "utf8"));
 }
 async function writeJsonFile5(file, value) {
   await writeFile7(file, `${JSON.stringify(value, null, 2)}
@@ -11427,14 +11342,10 @@ function asRecord14(value) {
 }
 
 // src/commands/review-evidence-reports/src/main/index.ts
-import { mkdir as mkdir13, readdir as readdir10, readFile as readFile15, stat as stat6, writeFile as writeFile8 } from "node:fs/promises";
+import { mkdir as mkdir13, readdir as readdir10, readFile as readFile17, stat as stat6, writeFile as writeFile8 } from "node:fs/promises";
 import { basename as basename7, dirname as dirname5, join as join12, resolve as resolve7 } from "node:path";
 var REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
 var ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
-function toolJson23(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString18(args.action ?? positionals[0] ?? "report", "action");
@@ -11447,7 +11358,7 @@ async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const latestRefs = await readLatestRefCache5(args);
   const payload = action === "matrix" ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath }) : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
   await writeJsonFile6(outputPath, payload);
-  return toolJson23(payload);
+  return toolJson(payload);
 }
 async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
@@ -11474,7 +11385,7 @@ async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
     outputPath
   };
   await writeJsonFile6(outputPath, payload);
-  return toolJson23(payload);
+  return toolJson(payload);
 }
 var defaultReviewDiffDependencies = {
   openExpoRoute,
@@ -11528,9 +11439,9 @@ async function routeDiffPayload(args = {}, deps = defaultReviewDiffDependencies)
   const routeB = requireString18(args.routeB, "routeB");
   const screenshot = args.screenshot === true;
   if (!deps.openExpoRoute) return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
-  const openedA = unwrapToolJson6(await deps.openExpoRoute({ ...args, route: routeA }));
+  const openedA = unwrapToolJson(await deps.openExpoRoute({ ...args, route: routeA }));
   const shotA = screenshot ? await captureRouteScreenshot(args, deps, `route-a-${nowMs2(deps)}.png`) : null;
-  const openedB = unwrapToolJson6(await deps.openExpoRoute({ ...args, route: routeB }));
+  const openedB = unwrapToolJson(await deps.openExpoRoute({ ...args, route: routeB }));
   const shotB = screenshot ? await captureRouteScreenshot(args, deps, `route-b-${nowMs2(deps)}.png`) : null;
   return {
     available: true,
@@ -11640,7 +11551,7 @@ function sessionDirectory3(stateRoot, sessionId) {
   return join12(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile9(file) {
-  return JSON.parse(await readFile15(file, "utf8"));
+  return JSON.parse(await readFile17(file, "utf8"));
 }
 async function writeJsonFile6(file, value) {
   await writeFile8(file, `${JSON.stringify(value, null, 2)}
@@ -11660,10 +11571,6 @@ async function captureRouteScreenshot(args, deps, filename) {
   const outputPath = join12(resolveExpoStateRoot7(args), "artifacts", filename);
   return deps.captureScreenshot({ ...args, outputPath });
 }
-function unwrapToolJson6(result) {
-  const text = result.content[0]?.text ?? "null";
-  return JSON.parse(text);
-}
 function isoStamp2(deps) {
   return (deps.now ? deps.now() : /* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
 }
@@ -11675,14 +11582,10 @@ function asRecord15(value) {
 }
 
 // src/commands/debug-inspect-highlight/src/main/index.ts
-import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile16, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile18, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename as basename8, dirname as dirname6, join as join13, resolve as resolve8 } from "node:path";
-function toolJson24(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function debugInspectCommand(args = {}, deps = {}) {
-  return toolJson24(await debugInspectPayload(args, deps));
+  return toolJson(await debugInspectPayload(args, deps));
 }
 async function debugInspectPayload(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
@@ -11741,9 +11644,9 @@ async function debugInspectPayload(args = {}, deps = {}) {
 async function highlightCommand(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
   const found = await readRefRecord2(ref, args, deps);
-  if (found.available === false) return toolJson24({ ...found, action: "highlight" });
+  if (found.available === false) return toolJson({ ...found, action: "highlight" });
   if (!found.record.box) {
-    return toolJson24({
+    return toolJson({
       available: false,
       action: "highlight",
       ref,
@@ -11753,7 +11656,7 @@ async function highlightCommand(args = {}, deps = {}) {
   }
   const box = asBox(found.record.box);
   if (box.width <= 0 || box.height <= 0) {
-    return toolJson24({
+    return toolJson({
       available: false,
       action: "highlight",
       ref,
@@ -11766,7 +11669,7 @@ async function highlightCommand(args = {}, deps = {}) {
   const outputPath = resolve8(String(args.outputPath ?? join13(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`)));
   await (deps.mkdir ?? fsMkdir)(dirname6(outputPath), { recursive: true });
   await (deps.writeFile ?? fsWriteFile)(outputPath, highlightSvg({ ref, record: found.record, durationMs: args.durationMs }), "utf8");
-  return toolJson24({
+  return toolJson({
     available: true,
     action: "highlight",
     ref,
@@ -11836,7 +11739,7 @@ function sessionDirectory4(stateRoot, sessionId) {
   return join13(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile10(file) {
-  return JSON.parse(await readFile16(file, "utf8"));
+  return JSON.parse(await readFile18(file, "utf8"));
 }
 function requireString19(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11889,44 +11792,26 @@ function asTargetRecord(value) {
 }
 
 // src/commands/expo-introspection-actions/src/main/index.ts
-import { access as access5, readFile as readFile17, stat as stat7 } from "node:fs/promises";
-import path11 from "node:path";
+import { access as access5, readFile as readFile19, stat as stat7 } from "node:fs/promises";
+import path13 from "node:path";
 var EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"];
-function toolJson25(value) {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }],
-    isError: false
-  };
-}
-function unwrapToolJson7(value) {
-  const text = asRecord17(value)?.content;
-  if (!Array.isArray(text)) return value;
-  const first = asRecord17(text[0]);
-  if (first?.type !== "text" || typeof first.text !== "string") return value;
-  try {
-    return JSON.parse(first.text);
-  } catch {
-    return { text: first.text };
-  }
-}
 async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   const action = requireString20(args.action ?? "modules", "action");
   if (!isExpoAction(action)) throw new Error(`Unknown Expo action: ${action}`);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(args.cwd ?? deps.currentWorkingDirectory()));
   const summary = await deps.runtimeSummary(cwd);
   if (action === "doctor") {
-    return toolJson25({
+    return toolJson({
       available: true,
       action,
       sources: ["project", "native"],
       projectRoot: summary.projectRoot,
-      summary: unwrapToolJson7(await deps.doctor({ cwd: summary.projectRoot }))
+      summary: unwrapToolJson(await deps.doctor({ cwd: summary.projectRoot }))
     });
   }
   if (action === "upstream-policy") {
-    const info = asRecord17(unwrapToolJson7(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
-    return toolJson25({
+    const info = asRecord17(unwrapToolJson(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
+    return toolJson({
       available: Boolean(info.isExpoProject),
       action,
       sources: ["project"],
@@ -11938,7 +11823,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
     });
   }
   if (action === "config") {
-    return toolJson25({
+    return toolJson({
       available: true,
       action,
       sources: ["project"],
@@ -11948,7 +11833,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   }
   const modules = await expoModuleRecords(summary.projectRoot, deps);
   if (action === "modules") {
-    return toolJson25({
+    return toolJson({
       available: true,
       action,
       sources: ["project"],
@@ -11960,7 +11845,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
     });
   }
   const risks = await expoPrebuildRisks(summary.projectRoot, modules, deps);
-  return toolJson25({
+  return toolJson({
     available: true,
     action,
     sources: ["project"],
@@ -11977,10 +11862,10 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
 }
 var defaultExpoCommandDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd3,
-  resolvePath: (input) => path11.resolve(input),
+  resolvePath: (input) => path13.resolve(input),
   currentWorkingDirectory: () => process.cwd(),
   runtimeSummary: async (cwd) => {
-    const info = asRecord17(unwrapToolJson7(await projectInfo({ cwd }))) ?? {};
+    const info = asRecord17(unwrapToolJson(await projectInfo({ cwd }))) ?? {};
     return {
       projectRoot: String(info.projectRoot ?? cwd),
       expoDependency: info.expoDependency ?? null,
@@ -11992,17 +11877,17 @@ var defaultExpoCommandDependencies = {
   projectInfo,
   buildUpstreamDependencyReport,
   findUp: findUp3,
-  readJsonFile: async (filePath) => JSON.parse(await readFile17(filePath, "utf8")),
-  joinPath: (...parts) => path11.join(...parts),
+  readJsonFile: async (filePath) => JSON.parse(await readFile19(filePath, "utf8")),
+  joinPath: (...parts) => path13.join(...parts),
   pathExists: async (filePath) => access5(filePath).then(() => true, () => false),
   firstExisting: async (projectRoot, names) => {
     for (const name of names) {
-      const candidate = path11.join(projectRoot, name);
+      const candidate = path13.join(projectRoot, name);
       if (await access5(candidate).then(() => true, () => false)) return candidate;
     }
     return null;
   },
-  readTextFile: (filePath) => readFile17(filePath, "utf8")
+  readTextFile: (filePath) => readFile19(filePath, "utf8")
 };
 async function expoModuleRecords(projectRoot, deps) {
   const packageJsonPath = await deps.findUp(projectRoot, "package.json");
@@ -12095,34 +11980,30 @@ function asRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 async function defaultNormalizeProjectCwd3(cwd) {
-  const resolved = path11.resolve(cwd ?? ".");
+  const resolved = path13.resolve(cwd ?? ".");
   const details = await stat7(resolved).catch(() => null);
   if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp3(projectRoot, filename) {
-  let current = path11.resolve(projectRoot);
+  let current = path13.resolve(projectRoot);
   while (true) {
-    const candidate = path11.join(current, filename);
+    const candidate = path13.join(current, filename);
     if (await access5(candidate).then(() => true, () => false)) return candidate;
-    const parent = path11.dirname(current);
+    const parent = path13.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
 
 // src/commands/rn-introspection/src/main/index.ts
-import { readdir as readdir12, readFile as readFile18 } from "node:fs/promises";
+import { readdir as readdir12, readFile as readFile20 } from "node:fs/promises";
 import { basename as basename9, join as join14, resolve as resolve9 } from "node:path";
-function toolJson26(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function rnCommand(args = {}, deps = defaultRnDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString21(args.action ?? positionals[0] ?? "tree", "action");
   if (!["tree", "inspect", "renders", "fiber"].includes(action)) throw new Error(`Unknown React Native action: ${action}`);
-  if (action === "inspect") return toolJson26(await rnInspectPayload(args, deps));
+  if (action === "inspect") return toolJson(await rnInspectPayload(args, deps));
   const subaction = action === "renders" ? requireString21(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
   if (subaction && !["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown React Native renders action: ${subaction}`);
   const bridgeAction = action === "renders" ? `renders-${subaction}` : action;
@@ -12140,7 +12021,7 @@ async function rnCommand(args = {}, deps = defaultRnDependencies) {
     }
   });
   const outputPayload = action === "tree" && !wantsRawOutput(args) ? summarizeRnTreePayload(bridgePayload) : bridgePayload;
-  return toolJson26({
+  return toolJson({
     ...outputPayload,
     action,
     ...subaction ? { subaction, bridgeAction } : {},
@@ -12424,7 +12305,7 @@ function sessionDirectory5(stateRoot, sessionId) {
   return join14(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile11(file) {
-  return JSON.parse(await readFile18(file, "utf8"));
+  return JSON.parse(await readFile20(file, "utf8"));
 }
 function requireString21(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -12525,10 +12406,10 @@ function flattenTreeResults(nodes) {
 function pathTreeFromElements(elements) {
   const root = { component: "root", children: /* @__PURE__ */ new Map() };
   for (const element of elements) {
-    const path12 = relevantPathFromElement(element);
-    if (path12.length === 0) continue;
+    const path14 = relevantPathFromElement(element);
+    if (path14.length === 0) continue;
     let cursor = root;
-    for (const name of path12) {
+    for (const name of path14) {
       let child = cursor.children.get(name);
       if (!child) {
         child = { component: name, children: /* @__PURE__ */ new Map() };
@@ -12610,27 +12491,27 @@ function inferControlLabel(box, textRecords) {
 }
 function inferComponentPath(tree, elements) {
   for (const element of elements) {
-    const path13 = relevantPathFromElement(element).filter((name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name));
-    if (path13.length > 0) return path13.slice(0, 16);
+    const path15 = relevantPathFromElement(element).filter((name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name));
+    if (path15.length > 0) return path15.slice(0, 16);
   }
-  const path12 = [];
+  const path14 = [];
   let cursor = asRecord18(tree[0]);
   let depth = 0;
   while (cursor && depth < 40) {
     const name = nodeName(cursor);
-    if (isRelevantName(name)) path12.push(name);
+    if (isRelevantName(name)) path14.push(name);
     const child = Array.isArray(cursor.children) ? asRecord18(cursor.children[0]) : null;
     cursor = child;
     depth += 1;
   }
-  return unique(path12).slice(0, 16);
+  return unique(path14).slice(0, 16);
 }
 function relevantPathFromElement(element) {
   const hierarchy = Array.isArray(element.hierarchy) ? element.hierarchy : [];
-  const path12 = hierarchy.map((item) => nodeName(item)).filter((name) => Boolean(name && isRelevantName(name)));
+  const path14 = hierarchy.map((item) => nodeName(item)).filter((name) => Boolean(name && isRelevantName(name)));
   const elementName = optionalNonemptyString(element.name);
-  if (elementName && isRelevantName(elementName)) path12.push(elementName);
-  return unique(path12).slice(0, 24);
+  if (elementName && isRelevantName(elementName)) path14.push(elementName);
+  return unique(path14).slice(0, 24);
 }
 function nodeName(value) {
   const record = asRecord18(value);
@@ -12754,12 +12635,12 @@ import { mkdir as fsMkdir3, writeFile as fsWriteFile3 } from "node:fs/promises";
 import { dirname as dirname8, join as join17, resolve as resolve13 } from "node:path";
 
 // src/commands/perf-evidence/src/main/artifacts.ts
-import { mkdir as fsMkdir2, readFile as readFile20 } from "node:fs/promises";
+import { mkdir as fsMkdir2, readFile as readFile22 } from "node:fs/promises";
 import { dirname as dirname7, join as join16, resolve as resolve12 } from "node:path";
 
 // src/commands/perf-evidence/src/main/dependencies.ts
 import { execFile as nodeExecFile11 } from "node:child_process";
-import { readFile as readFile19, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
+import { readFile as readFile21, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
 import { resolve as resolve11 } from "node:path";
 async function projectCwd(cwd, deps) {
   if (deps.normalizeProjectCwd) {
@@ -12784,17 +12665,17 @@ async function findUpFile(cwd, name, deps) {
 }
 async function readJson6(file, deps) {
   if (deps.readJsonFile) return deps.readJsonFile(file);
-  return JSON.parse(await readFile19(file, "utf8"));
+  return JSON.parse(await readFile21(file, "utf8"));
 }
 async function writeJsonFile7(file, value, deps) {
   await (deps.writeFile ?? fsWriteFile2)(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-async function exists(path12, deps) {
-  return deps.pathExists ? deps.pathExists(path12) : fsStat(path12).then(() => true, () => false);
+async function exists(path14, deps) {
+  return deps.pathExists ? deps.pathExists(path14) : fsStat(path14).then(() => true, () => false);
 }
-async function fileStat(path12, deps) {
-  return deps.stat ? deps.stat(path12) : fsStat(path12).catch(() => null);
+async function fileStat(path14, deps) {
+  return deps.stat ? deps.stat(path14) : fsStat(path14).catch(() => null);
 }
 function execFile9(file, argv, options) {
   return new Promise((resolveExec) => {
@@ -12817,8 +12698,8 @@ async function writePerfArtifact(args, action, payload, deps = {}) {
   await writeJsonFile7(artifactPath, withArtifact, deps);
   return withArtifact;
 }
-async function parseNativeSampleArtifact(file, deps = {}) {
-  const text = await readFile20(file, "utf8").catch(() => null);
+async function parseNativeSampleArtifact(file) {
+  const text = await readFile22(file, "utf8").catch(() => null);
   if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
   const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);
   const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/);
@@ -13468,7 +13349,7 @@ async function perfInteractionPayload(args = {}, deps = {}) {
 async function perfReportPayload(args = {}, deps = {}) {
   const nativeArtifact = requireOptionalString9(args.nativeArtifact);
   const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: "report", label: args.interaction ?? args.label });
-  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve13(nativeArtifact), deps) : null;
+  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve13(nativeArtifact)) : null;
   const report = normalizePerfReport(evidence.bridgePayload, nativeSummary);
   const payload = {
     available: report.available,
@@ -13594,7 +13475,7 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
 `, "utf8");
   }
   const projectRoot = await projectCwd(args.cwd, deps);
-  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact, deps);
+  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact);
   const payload = {
     available: true,
     action: profiler,
@@ -13672,13 +13553,9 @@ async function perfCommand(args = {}, deps = {}) {
 }
 
 // src/commands/dashboard-observability/src/main/index.ts
-import { mkdir as mkdir14, readdir as readdir13, readFile as readFile21, writeFile as writeFile9 } from "node:fs/promises";
+import { mkdir as mkdir14, readdir as readdir13, readFile as readFile23, writeFile as writeFile9 } from "node:fs/promises";
 import { basename as basename11, dirname as dirname9, join as join18, resolve as resolve14 } from "node:path";
 var DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
-function toolJson27(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function dashboardCommand(args = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString23(args.action ?? positionals[0] ?? "status", "action");
@@ -13706,7 +13583,7 @@ async function dashboardCommand(args = {}) {
   await writeDashboardHtml(payload.artifacts.html, payload);
   await writeJsonFile8(payload.artifacts.json, payload);
   await writeJsonFile8(statePath, payload);
-  return toolJson27(payload);
+  return toolJson(payload);
 }
 async function dashboardSessions(stateRoot) {
   const sessionsDir = join18(stateRoot, "sessions");
@@ -13751,7 +13628,7 @@ function resolveExpoStateRoot11(args = {}) {
   return join18(root, ".scratch", "expo98");
 }
 async function readJsonFile12(file) {
-  return JSON.parse(await readFile21(file, "utf8"));
+  return JSON.parse(await readFile23(file, "utf8"));
 }
 async function writeJsonFile8(file, value) {
   await mkdir14(dirname9(file), { recursive: true });
@@ -13775,12 +13652,8 @@ function asRecord19(value) {
 }
 
 // src/core/policy-redaction/src/main/command-boundary.ts
-import { mkdir as mkdir15, readFile as readFile22, writeFile as writeFile10 } from "node:fs/promises";
+import { mkdir as mkdir15, readFile as readFile24, writeFile as writeFile10 } from "node:fs/promises";
 import { dirname as dirname10, resolve as resolve15 } from "node:path";
-function toolJson28(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
-}
 async function policyCommand(args = {}) {
   const action = requireString24(args.action ?? "show", "action");
   if (action !== "show" && action !== "check") {
@@ -13790,7 +13663,7 @@ async function policyCommand(args = {}) {
   const resolvedPolicyPath = policyPath ? resolve15(policyPath) : null;
   const policy = resolvedPolicyPath ? await readJsonFile13(resolvedPolicyPath) : null;
   if (action === "show") {
-    return toolJson28({
+    return toolJson({
       available: true,
       action,
       source: resolvedPolicyPath,
@@ -13818,7 +13691,7 @@ async function policyCommand(args = {}) {
     source: resolvedPolicyPath,
     allowRuntimeEval: args.allowRuntimeEval === true
   });
-  return toolJson28({
+  return toolJson({
     available: true,
     action: "check",
     subject,
@@ -13829,7 +13702,7 @@ async function policyCommand(args = {}) {
 }
 async function redactCommand(args = {}) {
   const file = resolve15(requireString24(args.file, "file"));
-  const raw = await readFile22(file, "utf8");
+  const raw = await readFile24(file, "utf8");
   let payload;
   try {
     payload = redactJson(JSON.parse(raw));
@@ -13844,7 +13717,7 @@ async function redactCommand(args = {}) {
     await writeFile10(resolvedOutputPath, `${text}
 `, "utf8");
   }
-  return toolJson28({
+  return toolJson({
     available: true,
     action: "redact",
     inputPath: file,
@@ -13853,7 +13726,7 @@ async function redactCommand(args = {}) {
   });
 }
 async function readJsonFile13(file) {
-  return JSON.parse(await readFile22(file, "utf8"));
+  return JSON.parse(await readFile24(file, "utf8"));
 }
 function requireString24(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -13868,22 +13741,18 @@ function requireOptionalString10(value) {
 // src/commands/plugin-self-management/src/main/index.ts
 import { execFile as nodeExecFile12 } from "node:child_process";
 import { existsSync } from "node:fs";
-import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile23, writeFile as writeFile11 } from "node:fs/promises";
+import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile25, writeFile as writeFile11 } from "node:fs/promises";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname11, join as join19, resolve as resolve16 } from "node:path";
 var CLI_NAME5 = CURRENT_CLI_NAME;
 var CLI_VERSION4 = "0.1.0";
-function toolJson29(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function skillsCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString25(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "get"].includes(action)) throw new Error(`Unknown skills action: ${action}`);
   const skills = await listBundledSkills(deps);
   if (action === "list") {
-    return toolJson29({
+    return toolJson({
       available: true,
       action,
       pluginVersion: CLI_VERSION4,
@@ -13892,8 +13761,8 @@ async function skillsCommand(args = {}, deps = {}) {
   }
   const name = requireString25(args.name ?? positionals[1], "name");
   const skill = skills.find((item) => item.name === name);
-  if (!skill) return toolJson29({ available: false, action, name, reason: "Skill not found.", pluginVersion: CLI_VERSION4 });
-  return toolJson29({ available: true, action, pluginVersion: CLI_VERSION4, ...skill });
+  if (!skill) return toolJson({ available: false, action, name, reason: "Skill not found.", pluginVersion: CLI_VERSION4 });
+  return toolJson({ available: true, action, pluginVersion: CLI_VERSION4, ...skill });
 }
 async function listBundledSkills(deps = {}) {
   const skillsRoot = join19(pluginRoot(deps), "skills");
@@ -13902,7 +13771,7 @@ async function listBundledSkills(deps = {}) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const file = join19(skillsRoot, entry.name, "SKILL.md");
-    const content = await readFile23(file, "utf8").catch(() => null);
+    const content = await readFile25(file, "utf8").catch(() => null);
     if (!content) continue;
     const metadata = parseSkillFrontmatter(content);
     skills.push({
@@ -13930,7 +13799,7 @@ async function installCommand(args = {}, deps = {}) {
   if (action !== "check") throw new Error(`Unknown install action: ${action}`);
   const prefix = resolve16(optionalString8(args.prefix) ?? join19(deps.homeDir ?? homedir2(), ".local"));
   const binPath = join19(prefix, "bin", CLI_NAME5);
-  return toolJson29({
+  return toolJson({
     available: true,
     action,
     prefix,
@@ -13946,7 +13815,7 @@ async function upgradeCommand(args = {}, deps = {}) {
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown upgrade action: ${action}`);
   const prefix = resolve16(optionalString8(args.prefix) ?? join19(deps.homeDir ?? homedir2(), ".local"));
-  return toolJson29({
+  return toolJson({
     available: true,
     action,
     prefix,
@@ -13972,7 +13841,7 @@ async function releaseCommand(args = {}, deps = defaultPluginSelfManagementDepen
     await releaseCheck("doctor-json", ["--json", "doctor"], outsideCwd, (result) => JSON.parse(result.stdout).ok === true, deps),
     await releaseCheck("routes-fixture-json", ["--json", "routes", "--cwd", fixture], outsideCwd, (result) => JSON.parse(result.stdout).data.routeCount >= 1, deps)
   ];
-  return toolJson29({
+  return toolJson({
     available: checks.every((check) => check.ok),
     action,
     cwd: outsideCwd,
@@ -14122,10 +13991,6 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     recommendedFix: "Mount the dev-only Profiler wrapper and rerun rn renders start/read/stop."
   }
 ];
-function toolJson30(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
 async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependencies) {
   const action = requireString26(args.action ?? firstPositional3(args) ?? "matrix", "action");
   if (!["matrix", "self-check", "run"].includes(action)) throw new Error(`Unknown live-backlog action: ${action}`);
@@ -14134,13 +13999,13 @@ async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependenci
   const matrix = buildLiveBacklogMatrix({ ...args, cwd, scope });
   const selfCheck = liveBacklogSelfCheck(matrix);
   if (action === "self-check") {
-    return toolJson30({ available: selfCheck.ok, action, cwd, scope, selfCheck, source: matrix.source, rowCount: matrix.rows.length });
+    return toolJson({ available: selfCheck.ok, action, cwd, scope, selfCheck, source: matrix.source, rowCount: matrix.rows.length });
   }
   if (action === "matrix") {
-    return toolJson30({ available: true, action, cwd, scope, source: matrix.source, selfCheck, rowCount: matrix.rows.length, rows: matrix.rows });
+    return toolJson({ available: true, action, cwd, scope, source: matrix.source, selfCheck, rowCount: matrix.rows.length, rows: matrix.rows });
   }
   if (!selfCheck.ok) {
-    return toolJson30({ available: false, action, cwd, scope, source: matrix.source, selfCheck, reason: "Live backlog self-check failed before executing rows." });
+    return toolJson({ available: false, action, cwd, scope, source: matrix.source, selfCheck, reason: "Live backlog self-check failed before executing rows." });
   }
   const outputDir = resolve17(args.outputDir ?? join20(cwd, ".scratch", "expo98", "live-backlog", isoStamp3(deps)));
   await (deps.mkdir ?? fsMkdir4)(outputDir, { recursive: true });
@@ -14168,7 +14033,7 @@ async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependenci
   };
   const reportPath = join20(outputDir, "live-backlog-report.json");
   await writeJsonFile10(reportPath, report, deps);
-  return toolJson30({ ...report, reportPath });
+  return toolJson({ ...report, reportPath });
 }
 var defaultLiveBacklogDependencies = {
   execFile: execFile11

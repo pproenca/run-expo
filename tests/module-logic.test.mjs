@@ -330,4 +330,44 @@ describe("policy gate negative paths", () => {
     assert.equal(metroCalls, 1);
     assert.equal(evalCalls, 1);
   });
+
+  it("denies open-dev-menu before Metro broadcast, device resolution, or xcrun", async () => {
+    const { openIosDevMenu } = await importSourceModule("dev-menu-policy", "src/commands/runtime-inspector-actions/src/main/index.ts", [
+      "openIosDevMenu",
+    ]);
+    let broadcastCalls = 0;
+    let resolvedDevice = false;
+    let execCalls = 0;
+    const deps = {
+      broadcastMetroMessage: async () => {
+        broadcastCalls += 1;
+        return { available: true };
+      },
+      resolveIosDevice: async () => {
+        resolvedDevice = true;
+        return { udid: "sim-1" };
+      },
+      openDevClientForMessageSocket: async () => ({ available: true }),
+      execFile: async () => {
+        execCalls += 1;
+        return {};
+      },
+      resolvePath: (file) => `/tmp/${file}`,
+      readJsonFile: async () => ({ allow: ["open-dev-menu"] }),
+    };
+
+    const denied = await openIosDevMenu({}, deps);
+    assert.equal(denied.code, "policy-denied");
+    assert.equal(denied.denied, true);
+    assert.equal(broadcastCalls, 0);
+    assert.equal(resolvedDevice, false);
+    assert.equal(execCalls, 0);
+
+    const allowed = await openIosDevMenu({ actionPolicy: "policy.json" }, deps);
+    assert.equal(allowed.available, true);
+    assert.equal(allowed.transport, "metro-message-socket");
+    assert.equal(broadcastCalls, 1);
+    assert.equal(resolvedDevice, false);
+    assert.equal(execCalls, 0);
+  });
 });

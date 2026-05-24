@@ -39,17 +39,27 @@ export interface ReviewOverlayDependencies {
   scriptPath: string;
 }
 
+export type ReviewOverlayPayload = Record<string, any>;
+
 const REVIEW_OVERLAY_ACTIONS = new Set(["prepare", "scaffold", "server", "read", "clear"]);
 
 export async function reviewOverlay(
   args: ReviewOverlayArgs = {},
   deps: ReviewOverlayDependencies = defaultReviewOverlayDependencies,
 ): Promise<ToolTextResult> {
+  const payload = await reviewOverlayAction(args, deps);
+  return isToolTextResult(payload) ? payload : toolJson(payload);
+}
+
+export async function reviewOverlayAction(
+  args: ReviewOverlayArgs = {},
+  deps: ReviewOverlayDependencies = defaultReviewOverlayDependencies,
+): Promise<ReviewOverlayPayload | ToolTextResult> {
   const action = requireOptionalString(args.action) ?? "prepare";
   if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
     throw new Error(`Unknown review-overlay action: ${action}`);
   }
-  if (action === "scaffold") return toolJson(await scaffoldReviewOverlay(args, deps));
+  if (action === "scaffold") return scaffoldReviewOverlay(args, deps);
 
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true })
     .catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
@@ -58,11 +68,11 @@ export async function reviewOverlay(
 
   if (action === "read") {
     const data = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
-    return toolJson({ outputDir, eventsPath, ...data });
+    return { outputDir, eventsPath, ...data };
   }
   if (action === "clear") {
     const data = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
-    return toolJson({ outputDir, eventsPath, cleared: true, ...data });
+    return { outputDir, eventsPath, cleared: true, ...data };
   }
   if (action === "server") {
     return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
@@ -100,7 +110,7 @@ export async function reviewOverlay(
     };
   }
 
-  return toolJson({
+  return {
     outputDir,
     eventsPath,
     server,
@@ -112,7 +122,7 @@ export async function reviewOverlay(
         : "Start with --serve true or run review-overlay server before using the overlay in the simulator.",
       `Codex can read in-app review events from ${eventsPath}.`,
     ],
-  });
+  };
 }
 
 const defaultReviewOverlayDependencies: ReviewOverlayDependencies = {
@@ -133,6 +143,10 @@ const defaultReviewOverlayDependencies: ReviewOverlayDependencies = {
   execPath: process.execPath,
   scriptPath: process.argv[1] ?? "",
 };
+
+function isToolTextResult(value: unknown): value is ToolTextResult {
+  return Array.isArray((value as { content?: unknown } | null)?.content);
+}
 
 export async function scaffoldReviewOverlay(
   args: ReviewOverlayArgs = {},

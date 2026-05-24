@@ -209,6 +209,17 @@ describe("expo98 package bin", () => {
     assert.equal(payload.data.policy.action, "state.save");
   });
 
+  it("denies open-dev-menu without an action policy before runtime mutation", async () => {
+    const payload = await runJson(["open-dev-menu"]);
+
+    assert.equal(payload.ok, true);
+    assert.equal(payload.data.available, false);
+    assert.equal(payload.data.domain, "runtime-inspector");
+    assert.equal(payload.data.action, "open-dev-menu");
+    assert.equal(payload.data.code, "policy-denied");
+    assert.equal(payload.data.policy.action, "open-dev-menu");
+  });
+
   it("prepares annotate-screen as an in-app overlay without HTML board artifacts", async () => {
     const project = await makeFixtureProject("expo98-annotate-prepare-");
     try {

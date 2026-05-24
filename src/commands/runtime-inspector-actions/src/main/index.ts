@@ -1,10 +1,14 @@
 import { execFile as nodeExecFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 import { evaluateHermesExpression as sharedEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
 import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
 import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
+import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
 import { toolJson, unwrapToolJson, type ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
+import { policyDecision as bridgePolicyDecision } from "../../../bridge-domain-actions/src/main/index.ts";
 
 export const INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"] as const;
 export type InspectorAction = (typeof INSPECTOR_ACTIONS)[number];
@@ -19,6 +23,8 @@ export interface RuntimeInspectorArgs {
   bundleId?: unknown;
   restartDevClient?: unknown;
   crashCheckMs?: unknown;
+  actionPolicy?: unknown;
+  [key: string]: unknown;
 }
 
 export interface MetroTargetSummary {
@@ -62,6 +68,8 @@ export interface OpenDevMenuDependencies {
     crashCheckMs: unknown;
   }) => Promise<Record<string, unknown>>;
   execFile: (command: string, args: string[], options: { timeout: number; rejectOnError: false }) => Promise<ExecResult>;
+  readJsonFile?: (file: string) => Promise<unknown>;
+  resolvePath?: (file: string) => string;
   truncate?: (value: unknown) => string;
 }
 
@@ -115,6 +123,8 @@ const defaultOpenDevMenuDependencies: OpenDevMenuDependencies = {
     url: args.devClientUrl,
   })) as Record<string, unknown>,
   execFile,
+  readJsonFile: async (file) => JSON.parse(await readFile(file, "utf8")),
+  resolvePath: (file) => path.resolve(file),
   truncate,
 };
 
@@ -131,6 +141,10 @@ export async function openIosDevMenu(
   deps: OpenDevMenuDependencies,
 ): Promise<Record<string, unknown>> {
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
+  const policy = await bridgePolicyDecision(args, "open-dev-menu", "device", deps);
+  if (!policy.allowed) {
+    return policyDeniedPayload({ domain: "runtime-inspector", action: "open-dev-menu", policy });
+  }
   let messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
   if (messageSocket.available) {
     return {

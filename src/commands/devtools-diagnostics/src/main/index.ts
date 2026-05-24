@@ -133,7 +133,7 @@ const defaultDevtoolsDiagnosticsDependencies: DevtoolsDiagnosticsDependencies = 
   evaluateHermesExpression: defaultEvaluateHermesExpression,
 };
 
-export function toolJson(value: unknown): ToolTextResult {
+export function sanitizedToolJson(value: unknown): ToolTextResult {
   return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
 }
 
@@ -182,9 +182,9 @@ export async function devtoolsCommand(
   deps: DevtoolsDiagnosticsDependencies = defaultDevtoolsDiagnosticsDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "capabilities", "action");
-  if (action === "status" || action === "panels") return toolJson(await devtoolsStatusPayload(args, action, deps));
-  if (action === "open") return toolJson(await devtoolsOpenPayload(args, deps));
-  if (action === "events") return toolJson(await devtoolsEventsPayload(args, deps));
+  if (action === "status" || action === "panels") return sanitizedToolJson(await devtoolsStatusPayload(args, action, deps));
+  if (action === "open") return sanitizedToolJson(await devtoolsOpenPayload(args, deps));
+  if (action === "events") return sanitizedToolJson(await devtoolsEventsPayload(args, deps));
   if (action !== "capabilities") throw new Error(`Unknown devtools action: ${action}`);
 
   const metro = await metroStatusPayload(args, deps);
@@ -193,7 +193,7 @@ export async function devtoolsCommand(
   const hasRuntime = metro.targets.some((target) => target.webSocketDebuggerUrl);
   const hasDevtoolsFrontend = rnDevTools.frontend.available;
   const hasNetworkPanel = metro.targets.some(targetHasDevtoolsNetworkPanel);
-  return toolJson({
+  return sanitizedToolJson({
     action,
     metroPort: metro.metroPort,
     reactNativeDevTools: rnDevTools,
@@ -518,7 +518,7 @@ export async function diagnosticMessagesCommand(
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson({
+    return sanitizedToolJson({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -532,7 +532,7 @@ export async function diagnosticMessagesCommand(
   if (action === "clear") {
     const result = await evaluateHermesExpression(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5000 });
     const value = valueFromHermes(result);
-    return toolJson({
+    return sanitizedToolJson({
       ...(value && typeof value === "object" && !Array.isArray(value) ? value : { available: false, reason: result?.error ?? "Runtime diagnostics did not return a value." }),
       kind,
       action,
@@ -544,7 +544,7 @@ export async function diagnosticMessagesCommand(
   const result = await evaluateHermesExpression(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5000 });
   const value = valueFromHermes(result);
   if (!value) {
-    return toolJson({
+    return sanitizedToolJson({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -556,7 +556,7 @@ export async function diagnosticMessagesCommand(
   }
   const record = asRecord(value) ?? {};
   const messages = Array.isArray(record.messages) ? record.messages.slice(-limit) : [];
-  return toolJson({
+  return sanitizedToolJson({
     ...record,
     kind,
     metroPort,

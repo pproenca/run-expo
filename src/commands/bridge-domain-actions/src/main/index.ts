@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { evaluateHermesExpression as defaultEvaluateHermesExpression } from "../../../../platform/hermes-cdp-client/src/main/index.ts";
 import { metroTargets } from "../../../metro-probes/src/main/index.ts";
-import { policyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
+import { policyDeniedPayload, type PolicyDeniedPayload } from "../../../../core/policy-redaction/src/main/policy-service.ts";
 import type { ToolTextResult } from "../../../../core/tool-json-envelope/src/main/index.ts";
 
 export interface BridgeTarget {
@@ -90,11 +90,13 @@ export interface BridgeDomainCommandInput {
   policy: PolicyDecision | null;
 }
 
+export type BridgeDomainPayload = Record<string, any>;
+
 const EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 const MAX_OUTPUT = 40_000;
 const MAX_ARRAY_ITEMS = 1000;
 
-export function toolJson(value: unknown): ToolTextResult {
+export function boundedToolJson(value: unknown): ToolTextResult {
   return { content: [{ type: "text", text: stringifyBoundedJson(value) }] };
 }
 
@@ -109,9 +111,9 @@ export async function storageCommand(
   const key = args.key ?? positionals[2];
   const sideEffect = action === "list" || action === "get" ? "read" : "write";
   const policy = await policyDecision(args, `storage.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "storage", action, policy }));
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "storage", action, policy }));
   const value = action === "set" ? parseStorageValue(args.value ?? positionals[3]) : null;
-  return toolJson(await bridgeDomainCommand({
+  return boundedToolJson(await bridgeDomainCommand({
     args,
     domain: "storage",
     action,
@@ -135,8 +137,8 @@ export async function stateCommand(
   if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
   const sideEffect = action === "list" ? "read" : "write";
   const policy = await policyDecision(args, `state.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "state", action, policy }));
-  return toolJson(await bridgeDomainCommand({
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "state", action, policy }));
+  return boundedToolJson(await bridgeDomainCommand({
     args,
     domain: "state",
     action,
@@ -154,8 +156,8 @@ export async function controlsCommand(
   if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
   const sideEffect = action === "press" ? "device" : "read";
   const policy = await policyDecision(args, `controls.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson(policyDeniedPayload({ domain: "controls", action, policy }));
-  return toolJson(await bridgeDomainCommand({
+  if (!policy.allowed) return boundedToolJson(policyDeniedPayload({ domain: "controls", action, policy }));
+  return boundedToolJson(await bridgeDomainCommand({
     args,
     domain: "controls",
     action,
@@ -174,7 +176,7 @@ const defaultBridgeDomainDependencies: BridgeDomainDependencies = {
 export async function bridgeDomainCommand(
   input: BridgeDomainCommandInput,
   deps: BridgeDomainDependencies = defaultBridgeDomainDependencies,
-): Promise<Record<string, any> | DomainUnavailable> {
+): Promise<BridgeDomainPayload | DomainUnavailable | PolicyDeniedPayload> {
   const metroPort = clampNumber(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
   if (sideEffect !== "read" && input.policy?.allowed !== true) {

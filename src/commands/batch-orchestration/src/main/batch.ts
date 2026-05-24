@@ -10,7 +10,9 @@ import { toolJson, unwrapToolJson } from "./tool-json.js";
 
 /**
  * RULE-023: batch steps run serially, share root/state by default, and can
- * bail after the first failure.
+ * bail after the first failure. The bundled CLI injects the current handler
+ * registry so package execution stays in-process; the CLI subprocess adapter is
+ * retained for direct module use.
  */
 export async function batchCommand(
   args: Record<string, unknown>,

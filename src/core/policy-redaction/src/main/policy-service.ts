@@ -20,6 +20,19 @@ export type PolicyDeniedDecision = {
   [key: string]: unknown;
 };
 
+export interface PolicyDeniedPayload {
+  available: false;
+  domain: string;
+  action: string;
+  source: "policy";
+  evidenceSource: "policy";
+  code: "policy-denied";
+  denied: true;
+  reason: "Policy denied action.";
+  policy: PolicyDeniedDecision;
+  [key: string]: unknown;
+}
+
 export interface DefaultPolicySummary {
   allow: string[];
   defaults: {
@@ -123,7 +136,7 @@ export function policyDeniedPayload({ domain, action, policy }: {
   domain: string;
   action: string;
   policy: PolicyDeniedDecision;
-}) {
+}): PolicyDeniedPayload {
   return {
     available: false,
     domain,
