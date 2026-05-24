@@ -283,6 +283,105 @@ describe("expo98 package bin", () => {
     }
   });
 
+  it("returns agent-relevant rn tree summaries by default and keeps raw evidence opt-in", async () => {
+    const nativeInspectorPayload = {
+      available: true,
+      source: "native-inspector",
+      evidenceSource: "native-inspector",
+      elementCount: 3,
+      viewport: { width: 402, height: 874, scale: 3 },
+      elements: [
+        {
+          name: "Text",
+          label: "Secure clinic sign-in",
+          frame: { left: 72, top: 248, width: 257, height: 35 },
+          componentStack: "large stack should not be returned by default",
+          hierarchy: [
+            { name: "withDevTools(App)" },
+            { name: "RootLayout(./_layout.tsx)" },
+            { name: "Route(index)" },
+            { name: "ScheduleRoute(./index.tsx)" },
+            { name: "SignIn" },
+            { name: "SignInIntro" },
+            { name: "Text" },
+            { name: "RCTText" },
+          ],
+        },
+        {
+          name: "View",
+          role: "button",
+          testID: "native-send-magic-link",
+          frame: { left: 28, top: 559, width: 345, height: 46 },
+          hierarchy: [
+            { name: "RootLayout(./_layout.tsx)" },
+            { name: "Route(index)" },
+            { name: "ScheduleRoute(./index.tsx)" },
+            { name: "SignIn" },
+            { name: "ConsoleButton" },
+            { name: "Pressable" },
+            { name: "View" },
+            { name: "RCTView" },
+          ],
+        },
+        {
+          name: "Text",
+          label: "Send sign-in link",
+          frame: { left: 135, top: 570, width: 132, height: 24 },
+          hierarchy: [
+            { name: "RootLayout(./_layout.tsx)" },
+            { name: "Route(index)" },
+            { name: "ScheduleRoute(./index.tsx)" },
+            { name: "SignIn" },
+            { name: "ConsoleButton" },
+            { name: "Text" },
+            { name: "RCTText" },
+          ],
+        },
+      ],
+      tree: [{
+        name: "withDevTools(App)",
+        children: [{
+          name: "RootLayout(./_layout.tsx)",
+          children: [{
+            name: "Route(index)",
+            children: [{
+              name: "ScheduleRoute(./index.tsx)",
+              children: [{ name: "SignIn" }],
+            }],
+          }],
+        }],
+      }],
+      transport: { cdp: { connectedUrl: "ws://localhost/inspector/debug" } },
+    };
+    const metro = await makeFakeHermesMetro(nativeInspectorPayload);
+    try {
+      const concise = await runJson(["rn", "tree", "--metro-port", String(metro.port)]);
+
+      assert.equal(concise.ok, true);
+      assert.equal(concise.data.available, true);
+      assert.equal(concise.data.source, "native-inspector");
+      assert.equal(concise.data.counts.visibleText, 2);
+      assert.equal(concise.data.controls[0].testID, "native-send-magic-link");
+      assert.equal(concise.data.controls[0].label, "Send sign-in link");
+      assert.deepEqual(concise.data.screen.path.slice(0, 4), [
+        "RootLayout(./_layout.tsx)",
+        "Route(index)",
+        "ScheduleRoute(./index.tsx)",
+        "SignIn",
+      ]);
+      assert.equal(concise.data.rawAvailable, true);
+      assert.equal("elements" in concise.data, false);
+      assert.equal("transport" in concise.data, false);
+      assert.doesNotMatch(JSON.stringify(concise), /componentStack|inspector\/debug/);
+
+      const raw = await runJson(["rn", "tree", "--metro-port", String(metro.port), "--raw", "true"]);
+      assert.equal(Array.isArray(raw.data.elements), true);
+      assert.match(JSON.stringify(raw), /componentStack|inspector\/debug/);
+    } finally {
+      await metro.close();
+    }
+  });
+
   it("reads console diagnostics through the shared Hermes evaluator", async () => {
     const metro = await makeFakeHermesMetro({
       available: true,

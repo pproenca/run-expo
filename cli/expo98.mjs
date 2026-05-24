@@ -601,6 +601,8 @@ function commandArgs(command, args, globals = {}) {
         subaction: args.subaction ?? (args._[0] === "renders" ? args._[1] : void 0),
         ref: args.ref ?? (["inspect", "fiber"].includes(String(args._[0])) ? args._[1] : void 0),
         metroPort: args.metroPort,
+        raw: args.raw,
+        detail: args.detail,
         cwd,
         root: globals.root,
         stateDir: globals.stateDir
@@ -11967,11 +11969,12 @@ async function rnCommand(args = {}, deps = defaultRnDependencies) {
       reason: "React Native introspection is read-only."
     }
   });
+  const outputPayload = action === "tree" && !wantsRawOutput(args) ? summarizeRnTreePayload(bridgePayload) : bridgePayload;
   return toolJson28({
-    ...bridgePayload,
+    ...outputPayload,
     action,
     ...subaction ? { subaction, bridgeAction } : {},
-    limitations: rnLimitations(bridgePayload.limitations)
+    limitations: rnLimitations(outputPayload.limitations)
   });
 }
 var defaultRnDependencies = {
@@ -12213,6 +12216,295 @@ function requireString21(value, name) {
 }
 function asRecord18(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function wantsRawOutput(args) {
+  return args.raw === true || args.detail === "raw" || args.detail === "full";
+}
+function summarizeRnTreePayload(payload) {
+  if (payload.available === false) return payload;
+  const tree = Array.isArray(payload.tree) ? payload.tree : [];
+  const elements = Array.isArray(payload.elements) ? payload.elements : [];
+  const target = compactTarget(payload.target);
+  const viewport = asRecord18(payload.viewport);
+  const structure = compactStructure(tree, elements);
+  const visibleText = visibleTextRecords(elements);
+  const controls = controlRecords(elements, visibleText);
+  const componentPath = inferComponentPath(tree, elements);
+  return {
+    available: payload.available !== false,
+    source: payload.source,
+    sources: payload.sources,
+    evidenceSource: payload.evidenceSource,
+    domain: payload.domain,
+    action: payload.action,
+    route: payload.route ?? payload.routeHint ?? null,
+    screen: {
+      route: componentPath.find((name) => /^Route\(/.test(name)) ?? null,
+      component: componentPath.find((name) => /Route\(|Layout|Screen|SignIn|Schedule|Console/.test(name)) ?? null,
+      path: componentPath
+    },
+    counts: {
+      sampledElements: numberOrNull2(payload.elementCount) ?? (elements.length || null),
+      relevantNodes: countRelevantNodes(structure),
+      visibleText: visibleText.length,
+      controls: controls.length,
+      rawTreeRoots: tree.length || null
+    },
+    viewport: viewport ? pickDefined4({
+      width: viewport.width,
+      height: viewport.height,
+      scale: viewport.scale,
+      fontScale: viewport.fontScale
+    }) : null,
+    target,
+    structure,
+    visibleText,
+    controls,
+    rawAvailable: true,
+    rawHint: "Rerun rn tree with --raw true for full component stacks, CDP transport, and unpruned trees.",
+    limitations: [
+      "Output is pruned for agent relevance; infrastructure wrappers, native host views, component stacks, and transport internals are omitted by default.",
+      ...arrayOfStrings(payload.limitations)
+    ]
+  };
+}
+function compactTarget(value) {
+  const target = asRecord18(value);
+  if (!target) return null;
+  return pickDefined4({
+    appId: target.appId,
+    deviceName: target.deviceName,
+    title: target.title
+  });
+}
+function compactStructure(tree, elements) {
+  const fromTree = flattenTreeResults(tree.flatMap((node) => simplifyTreeNode(node, 0)));
+  if (fromTree.length > 0) return fromTree.slice(0, 80);
+  return pathTreeFromElements(elements);
+}
+function simplifyTreeNode(value, depth) {
+  if (depth > 60) return [];
+  const node = asRecord18(value);
+  if (!node) return [];
+  const name = nodeName(node);
+  const element = asRecord18(node.element);
+  const children = Array.isArray(node.children) ? node.children.flatMap((child) => simplifyTreeNode(child, depth + 1)) : [];
+  const details = elementDetails(element ?? node);
+  const meaningful = isRelevantName(name) || Object.keys(details).length > 0;
+  if (!meaningful) return children;
+  return [pickDefined4({
+    component: name,
+    ...details,
+    children: children.length > 0 ? children : void 0
+  })];
+}
+function flattenTreeResults(nodes) {
+  const compacted = [];
+  for (const node of nodes) {
+    const children = Array.isArray(node.children) ? flattenTreeResults(node.children) : [];
+    compacted.push({ ...node, ...children.length > 0 ? { children } : {} });
+  }
+  return compacted;
+}
+function pathTreeFromElements(elements) {
+  const root = { component: "root", children: /* @__PURE__ */ new Map() };
+  for (const element of elements) {
+    const path12 = relevantPathFromElement(element);
+    if (path12.length === 0) continue;
+    let cursor = root;
+    for (const name of path12) {
+      let child = cursor.children.get(name);
+      if (!child) {
+        child = { component: name, children: /* @__PURE__ */ new Map() };
+        cursor.children.set(name, child);
+      }
+      cursor = child;
+    }
+    const details = elementDetails(element);
+    Object.assign(cursor, details);
+  }
+  return [...root.children.values()].map(pathNodeToRecord);
+}
+function pathNodeToRecord(node) {
+  const children = [...node.children.values()].map(pathNodeToRecord);
+  return pickDefined4({
+    component: node.component,
+    label: node.label,
+    role: node.role,
+    testID: node.testID,
+    box: node.box,
+    children: children.length > 0 ? children : void 0
+  });
+}
+function visibleTextRecords(elements) {
+  const records = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const element of elements) {
+    const label = optionalNonemptyString(element.label ?? asRecord18(element.element)?.label);
+    if (!label || seen.has(label)) continue;
+    const name = optionalNonemptyString(element.name ?? asRecord18(element.element)?.name);
+    const role = optionalNonemptyString(element.role ?? asRecord18(element.element)?.role);
+    const testID = optionalNonemptyString(element.testID ?? asRecord18(element.element)?.testID);
+    if (role || testID || name === "Text" || name === "RCTText" || label.length > 1) {
+      seen.add(label);
+      records.push(pickDefined4({
+        text: label,
+        component: name,
+        path: relevantPathFromElement(element),
+        box: boxFromFrame(element.frame ?? asRecord18(element.element)?.frame)
+      }));
+    }
+  }
+  return records.slice(0, 80);
+}
+function controlRecords(elements, textRecords) {
+  const controls = [];
+  for (const element of elements) {
+    const elementRecord = asRecord18(element.element) ?? element;
+    const role = optionalNonemptyString(element.role ?? elementRecord.role);
+    const testID = optionalNonemptyString(element.testID ?? elementRecord.testID);
+    const name = optionalNonemptyString(element.name ?? elementRecord.name);
+    const isInput = /TextInput|Input/i.test(String(name));
+    if (!role && !testID && !isInput) continue;
+    const box = boxFromFrame(element.frame ?? elementRecord.frame);
+    const inferredLabel = optionalNonemptyString(element.label ?? elementRecord.label) ?? inferControlLabel(box, textRecords);
+    controls.push(pickDefined4({
+      type: isInput ? "input" : role ?? "control",
+      label: inferredLabel,
+      testID,
+      component: name,
+      path: relevantPathFromElement(element),
+      box
+    }));
+  }
+  return controls.slice(0, 60);
+}
+function inferControlLabel(box, textRecords) {
+  if (!box) return void 0;
+  for (const record of textRecords) {
+    const textBox = asRecord18(record.box);
+    if (!textBox) continue;
+    const centerX = Number(textBox.x) + Number(textBox.width) / 2;
+    const centerY = Number(textBox.y) + Number(textBox.height) / 2;
+    if (centerX >= box.x && centerX <= box.x + box.width && centerY >= box.y && centerY <= box.y + box.height) {
+      return String(record.text);
+    }
+  }
+  return void 0;
+}
+function inferComponentPath(tree, elements) {
+  for (const element of elements) {
+    const path13 = relevantPathFromElement(element).filter((name) => !["Text", "View", "Pressable", "SymbolModule"].includes(name));
+    if (path13.length > 0) return path13.slice(0, 16);
+  }
+  const path12 = [];
+  let cursor = asRecord18(tree[0]);
+  let depth = 0;
+  while (cursor && depth < 40) {
+    const name = nodeName(cursor);
+    if (isRelevantName(name)) path12.push(name);
+    const child = Array.isArray(cursor.children) ? asRecord18(cursor.children[0]) : null;
+    cursor = child;
+    depth += 1;
+  }
+  return unique(path12).slice(0, 16);
+}
+function relevantPathFromElement(element) {
+  const hierarchy = Array.isArray(element.hierarchy) ? element.hierarchy : [];
+  const path12 = hierarchy.map((item) => nodeName(item)).filter((name) => Boolean(name && isRelevantName(name)));
+  const elementName = optionalNonemptyString(element.name);
+  if (elementName && isRelevantName(elementName)) path12.push(elementName);
+  return unique(path12).slice(0, 24);
+}
+function nodeName(value) {
+  const record = asRecord18(value);
+  return optionalNonemptyString(record?.name ?? record?.component);
+}
+function isRelevantName(name) {
+  if (!name) return false;
+  if (/^RCT|^RNC|^RNS|ViewManagerAdapter|HostRoot|HostComponent|HostText/.test(name)) return false;
+  if (WRAPPER_NAMES.has(name)) return false;
+  if (/^(Screen|ScreenStack|ScreenStackItem|InnerScreen|Suspender|Freeze|DelayedFreeze)$/.test(name)) return false;
+  if (/^(View|Animated\(View\)|ScrollView|Text)$/.test(name)) return false;
+  return true;
+}
+var WRAPPER_NAMES = /* @__PURE__ */ new Set([
+  "withDevTools(App)",
+  "App",
+  "ExpoRoot",
+  "ContextNavigator",
+  "Content",
+  "SceneView",
+  "WrappedScreenComponent",
+  "Anonymous",
+  "anonymous",
+  "ForwardRef",
+  "StaticContainer",
+  "EnsureSingleNavigator",
+  "NavigationProvider",
+  "PreventRemoveProvider",
+  "NavigationStateListenerProvider",
+  "NavigationContent",
+  "BaseNavigationContainer",
+  "NavigationContainerInner",
+  "ThemeProvider",
+  "SafeAreaProvider",
+  "SafeAreaProviderCompat",
+  "RNCSafeAreaProvider",
+  "RNSSafeAreaView",
+  "NativeStackNavigator",
+  "Screen"
+]);
+function elementDetails(element) {
+  const label = optionalNonemptyString(element.label);
+  const text = optionalNonemptyString(element.text);
+  const role = optionalNonemptyString(element.role);
+  const testID = optionalNonemptyString(element.testID);
+  const box = boxFromFrame(element.frame ?? element.box);
+  const actions = Array.isArray(element.actions) && element.actions.length > 0 ? element.actions.map(String).slice(0, 10) : void 0;
+  return pickDefined4({ label, text, role, testID, box, actions });
+}
+function boxFromFrame(value) {
+  const frame = asRecord18(value);
+  if (!frame) return void 0;
+  const x = numberOrNull2(frame.x ?? frame.left);
+  const y = numberOrNull2(frame.y ?? frame.top);
+  const width = numberOrNull2(frame.width);
+  const height = numberOrNull2(frame.height);
+  if (x == null || y == null || width == null || height == null) return void 0;
+  return { x: round(x), y: round(y), width: round(width), height: round(height) };
+}
+function countRelevantNodes(nodes) {
+  let count = 0;
+  for (const node of nodes) {
+    count += 1;
+    if (Array.isArray(node.children)) count += countRelevantNodes(node.children);
+  }
+  return count;
+}
+function arrayOfStrings(value) {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+function optionalNonemptyString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : void 0;
+}
+function numberOrNull2(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function round(value) {
+  return Math.round(value * 100) / 100;
+}
+function unique(values) {
+  const seen = /* @__PURE__ */ new Set();
+  return values.filter((value) => {
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+function pickDefined4(record) {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== void 0));
 }
 
 // src/modules/perf-evidence/src/main/index.ts

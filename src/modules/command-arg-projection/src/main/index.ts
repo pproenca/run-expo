@@ -481,6 +481,8 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         subaction: args.subaction ?? (args._[0] === "renders" ? args._[1] : undefined),
         ref: args.ref ?? (["inspect", "fiber"].includes(String(args._[0])) ? args._[1] : undefined),
         metroPort: args.metroPort,
+        raw: args.raw,
+        detail: args.detail,
         cwd,
         root: globals.root,
         stateDir: globals.stateDir,
