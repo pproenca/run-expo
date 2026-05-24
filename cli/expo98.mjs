@@ -641,6 +641,7 @@ function commandArgs(command, args, globals = {}) {
         ...common,
         ref: args.ref ?? args._[0],
         durationMs: args.durationMs,
+        outputPath: args.outputPath,
         cwd,
         root: globals.root,
         stateDir: globals.stateDir
@@ -7056,7 +7057,7 @@ function defaultExecFile3(file, args, options = {}) {
     return defaultSpawnFile(file, args, options);
   }
   return new Promise((resolve15, reject) => {
-    nodeExecFile7(file, args, { timeout: options.timeout, maxBuffer: MAX_OUTPUT9 }, (error, stdout, stderr) => {
+    nodeExecFile7(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT9 }, (error, stdout, stderr) => {
       if (error && options.rejectOnError !== false) {
         Object.assign(error, { stdout, stderr });
         reject(error);
@@ -7124,7 +7125,8 @@ async function defaultResolveIosDevice2(requested) {
     return { udid: requested, name: requested, state: "unknown" };
   }
   const { stdout } = await defaultExecFile3("xcrun", ["simctl", "list", "devices", "available", "--json"], {
-    timeout: 2e4
+    timeout: 2e4,
+    maxBuffer: 4 * 1024 * 1024
   });
   const parsed = JSON.parse(String(stdout ?? "{}"));
   const devices = Object.entries(parsed.devices ?? {}).flatMap(
@@ -11597,8 +11599,7 @@ async function highlightCommand(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
   const found = await readRefRecord(ref, args, deps);
   if (found.available === false) return toolJson26({ ...found, action: "highlight" });
-  const box = found.record.box;
-  if (!box) {
+  if (!found.record.box) {
     return toolJson26({
       available: false,
       action: "highlight",
@@ -11607,9 +11608,19 @@ async function highlightCommand(args = {}, deps = {}) {
       record: found.record
     });
   }
+  const box = asBox(found.record.box);
+  if (box.width <= 0 || box.height <= 0) {
+    return toolJson26({
+      available: false,
+      action: "highlight",
+      ref,
+      reason: "Ref bounds are zero-sized, so no useful highlight can be drawn.",
+      record: found.record
+    });
+  }
   const stateRoot = resolveExpoStateRoot8(args);
   const timestamp = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  const outputPath = join13(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`);
+  const outputPath = resolve8(String(args.outputPath ?? join13(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`)));
   await (deps.mkdir ?? fsMkdir)(dirname6(outputPath), { recursive: true });
   await (deps.writeFile ?? fsWriteFile)(outputPath, highlightSvg({ ref, record: found.record, durationMs: args.durationMs }), "utf8");
   return toolJson26({

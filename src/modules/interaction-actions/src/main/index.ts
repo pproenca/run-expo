@@ -23,6 +23,7 @@ export type ExecResult = {
 
 export type ExecOptions = {
   timeout?: number;
+  maxBuffer?: number;
   rejectOnError?: boolean;
   input?: string;
 };
@@ -711,7 +712,7 @@ function defaultExecFile(file: string, args: string[], options: ExecOptions = {}
     return defaultSpawnFile(file, args, options);
   }
   return new Promise((resolve, reject) => {
-    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT }, (error, stdout, stderr) => {
       if (error && options.rejectOnError !== false) {
         Object.assign(error, { stdout, stderr });
         reject(error);
@@ -779,6 +780,7 @@ async function defaultResolveIosDevice(requested: string | undefined): Promise<I
   }
   const { stdout } = await defaultExecFile("xcrun", ["simctl", "list", "devices", "available", "--json"], {
     timeout: 20_000,
+    maxBuffer: 4 * 1024 * 1024,
   });
   const parsed = JSON.parse(String(stdout ?? "{}")) as { devices?: Record<string, unknown[]> };
   const devices = Object.entries(parsed.devices ?? {}).flatMap(([runtime, runtimeDevices]) =>

@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -257,6 +257,87 @@ describe("expo98 package bin", () => {
       assert.equal(payload.data.code, "external-annotation-server-removed");
       assert.match(payload.data.replacement.prepare, /annotate-screen prepare --serve true/);
       assert.doesNotMatch(JSON.stringify(payload), /annotate\.html|file:\/\//i);
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves iOS devices for interaction commands when simctl device JSON is large", async () => {
+    const project = await makeFixtureProject("expo98-large-simctl-");
+    const fakeBin = resolve(project, "bin");
+    const policyPath = resolve(project, "policy.json");
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      const devices = Array.from({ length: 900 }, (_, index) => ({
+        name: `iPhone Fixture ${index}`,
+        udid: `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`,
+        state: index === 123 ? "Booted" : "Shutdown",
+        isAvailable: true,
+      }));
+      const simctlPayload = JSON.stringify({ devices: { "com.apple.CoreSimulator.SimRuntime.iOS-99-0": devices } });
+      assert.ok(Buffer.byteLength(simctlPayload) > 40_000);
+      const xcrunPath = resolve(fakeBin, "xcrun");
+      const axePath = resolve(fakeBin, "axe");
+      await writeFile(xcrunPath, `#!/bin/sh\nprintf '%s\\n' '${simctlPayload}'\n`, "utf8");
+      await writeFile(axePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(xcrunPath, 0o755);
+      await chmod(axePath, 0o755);
+      await writeFile(policyPath, JSON.stringify({ allow: ["keyboard.press"] }), "utf8");
+
+      const payload = await runJson([
+        "--root",
+        project,
+        "press",
+        "--key",
+        "Return",
+        "--dry-run",
+        "true",
+        "--action-policy",
+        policyPath,
+      ], {
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ""}` },
+      });
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, true);
+      assert.equal(payload.data.device.name, "iPhone Fixture 123");
+      assert.equal(payload.data.device.state, "Booted");
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("honors highlight output-path and refuses zero-sized bounds", async () => {
+    const project = await makeFixtureProject("expo98-highlight-");
+    const sessionDir = resolve(project, ".scratch", "expo-ios", "sessions", "s1");
+    const outputPath = resolve(project, "custom-highlight.svg");
+    try {
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
+        sessionId: "s1",
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+        lastSnapshotId: "snap1",
+      }), "utf8");
+      await writeFile(resolve(sessionDir, "refs.json"), JSON.stringify({
+        snapshotId: "snap1",
+        targetId: "target1",
+        refs: [
+          { ref: "@e1", stale: false, label: "Save", box: { x: 10, y: 20, width: 80, height: 30 }, actions: ["tap"] },
+          { ref: "@e2", stale: false, label: "Empty", box: { x: 0, y: 0, width: 0, height: 0 }, actions: [] },
+        ],
+      }), "utf8");
+
+      const highlighted = await runJson(["--root", project, "highlight", "@e1", "--output-path", outputPath]);
+      assert.equal(highlighted.ok, true);
+      assert.equal(highlighted.data.available, true);
+      assert.equal(highlighted.data.outputPath, outputPath);
+      await access(outputPath);
+
+      const zeroSized = await runJson(["--root", project, "highlight", "@e2"]);
+      assert.equal(zeroSized.ok, true);
+      assert.equal(zeroSized.data.available, false);
+      assert.match(zeroSized.data.reason, /zero-sized/);
     } finally {
       await rm(project, { recursive: true, force: true });
     }

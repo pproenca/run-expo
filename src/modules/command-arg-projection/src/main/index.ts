@@ -523,6 +523,7 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         ...common,
         ref: args.ref ?? args._[0],
         durationMs: args.durationMs,
+        outputPath: args.outputPath,
         cwd,
         root: globals.root,
         stateDir: globals.stateDir,

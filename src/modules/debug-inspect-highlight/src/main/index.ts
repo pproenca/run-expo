@@ -106,8 +106,7 @@ export async function highlightCommand(
   const found = await readRefRecord(ref, args, deps);
   if (found.available === false) return toolJson({ ...found, action: "highlight" });
 
-  const box = found.record.box;
-  if (!box) {
+  if (!found.record.box) {
     return toolJson({
       available: false,
       action: "highlight",
@@ -116,10 +115,20 @@ export async function highlightCommand(
       record: found.record,
     });
   }
+  const box = asBox(found.record.box);
+  if (box.width <= 0 || box.height <= 0) {
+    return toolJson({
+      available: false,
+      action: "highlight",
+      ref,
+      reason: "Ref bounds are zero-sized, so no useful highlight can be drawn.",
+      record: found.record,
+    });
+  }
 
   const stateRoot = resolveExpoStateRoot(args);
   const timestamp = (deps.now?.() ?? new Date()).toISOString().replace(/[:.]/g, "-");
-  const outputPath = join(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`);
+  const outputPath = resolve(String(args.outputPath ?? join(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`)));
   await (deps.mkdir ?? fsMkdir)(dirname(outputPath), { recursive: true });
   await (deps.writeFile ?? fsWriteFile)(outputPath, highlightSvg({ ref, record: found.record, durationMs: args.durationMs }), "utf8");
   return toolJson({
