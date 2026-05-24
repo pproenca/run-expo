@@ -1,0 +1,20 @@
+{
+  "name": "@expo98/expo-introspection-actions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Modernized expo98 Expo introspection command actions.",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main/index.d.ts",
+      "default": "./dist/main/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  }
+}

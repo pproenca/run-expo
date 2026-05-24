@@ -1,5 +1,16 @@
-.DS_Store
 node_modules/
-coverage/
+.npm/
+.tmp/
+.cache/
 .scratch/
-*.log
+coverage/
+dist/
+*.tgz
+.DS_Store
+.env
+.env.*
+
+# Local evidence produced by --record and manual CLI runs
+expo98.policy.json
+*.har
+*.memgraph

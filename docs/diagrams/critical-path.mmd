@@ -1,0 +1,18 @@
+flowchart TD
+  S1["1. User invokes expo-ios --json session new review<br/>main<br/><small>CLI argv</small>"]
+  S2["2. Dispatcher resolves alias and records run<br/>runTool<br/><small>Local run records</small>"]
+  S1 --> S2
+  S3["3. Create session namespace<br/>session<br/><small>Session JSON</small>"]
+  S2 --> S3
+  S4["4. Discover/select target<br/>target<br/><small>Metro HTTP + Native device tooling + Target JSON</small>"]
+  S3 --> S4
+  S5["5. Capture semantic snapshot<br/>snapshot<br/><small>Hermes CDP Runtime.evaluate + Snapshot artifacts</small>"]
+  S4 --> S5
+  S6["6. Resolve refs/find waits<br/>refs/find/wait<br/><small>Snapshot artifacts</small>"]
+  S5 --> S6
+  S7["7. Capture screenshot and annotate<br/>automation_take_screenshot<br/><small>Native device tooling + Annotation artifacts</small>"]
+  S6 --> S7
+  S8["8. Build review context/report<br/>review / ux-context<br/><small>Review overlay events + Dashboard artifacts</small>"]
+  S7 --> S8
+  classDef critical fill:#3b2c25,stroke:#cc785c,color:#fff
+  class S1,S2,S3,S4,S5,S6,S7,S8 critical

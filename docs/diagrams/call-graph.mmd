@@ -1,0 +1,102 @@
+graph TD
+  subgraph Entry_Packaging["Entry / Packaging"]
+    cli_wrapper["cli-wrapper"]
+    package_json["package.json"]
+  end
+  subgraph Dispatch_Envelope["Dispatch / Envelope"]
+    commandArgs["commandArgs"]
+    dist_runtime["dist-runtime"]
+    main["main"]
+    runTool["runTool"]
+  end
+  subgraph Project_Discovery["Project Discovery"]
+    doctor["doctor"]
+    project_info["project_info"]
+  end
+  subgraph Session_State_Policy["Session / State / Policy"]
+    policyDecision["policyDecision"]
+    session["session"]
+    writeJsonFile["writeJsonFile"]
+  end
+  subgraph Device_Target_Input["Device / Target / Input"]
+    automation_take_screenshot["automation_take_screenshot"]
+    target["target"]
+  end
+  subgraph Semantic_Evidence["Semantic Evidence"]
+    find["find"]
+    refs["refs"]
+    snapshot["snapshot"]
+    wait["wait"]
+  end
+  subgraph Runtime_Bridge["Runtime / Bridge"]
+    bridge["bridge"]
+    navigation["navigation"]
+    network["network"]
+    storage["storage"]
+  end
+  subgraph Review_UX["Review UX"]
+    review_next_step["review_next_step"]
+    review_overlay["review_overlay"]
+  end
+  subgraph Performance_Observability["Performance / Observability"]
+    dashboard["dashboard"]
+    perf["perf"]
+  end
+  subgraph Support_Utilities["Support Utilities"]
+    evaluateHermesExpression["evaluateHermesExpression"]
+    execFilePromise["execFilePromise"]
+    fetchLocalJson["fetchLocalJson"]
+  end
+  package_json -->|package bin| cli_wrapper
+  cli_wrapper -->|static import| dist_runtime
+  dist_runtime -->|runtime entry| main
+  main -->|argv mapping| commandArgs
+  main -->|dispatcher| runTool
+  runTool -->|handler dispatch| bridge
+  runTool -->|handler dispatch| dashboard
+  runTool -->|handler dispatch| doctor
+  runTool -->|handler dispatch| find
+  runTool -->|handler dispatch| navigation
+  runTool -->|handler dispatch| network
+  runTool -->|handler dispatch| perf
+  runTool -->|handler dispatch| project_info
+  runTool -->|handler dispatch| refs
+  runTool -->|handler dispatch| review_next_step
+  runTool -->|handler dispatch| review_overlay
+  runTool -->|handler dispatch| automation_take_screenshot
+  runTool -->|handler dispatch| session
+  runTool -->|handler dispatch| snapshot
+  runTool -->|handler dispatch| storage
+  runTool -->|handler dispatch| target
+  runTool -->|handler dispatch| wait
+  bridge -->|utility call| writeJsonFile
+  dashboard -->|utility call| writeJsonFile
+  navigation -->|utility call| evaluateHermesExpression
+  network -->|utility call| evaluateHermesExpression
+  network -->|utility call| writeJsonFile
+  session -->|utility call| writeJsonFile
+  snapshot -->|utility call| execFilePromise
+  snapshot -->|utility call| writeJsonFile
+  storage -->|utility call| policyDecision
+  target -->|utility call| writeJsonFile
+  class session entry
+  class main entry
+  class automation_take_screenshot entry
+  class refs entry
+  class bridge entry
+  class dashboard entry
+  class target entry
+  class network entry
+  class review_overlay entry
+  class wait entry
+  class snapshot entry
+  class perf entry
+  class cli_wrapper entry
+  class doctor entry
+  class storage entry
+  class project_info entry
+  class navigation entry
+  class package_json entry
+  class find entry
+  class review_next_step entry
+  classDef entry fill:#5c362c,stroke:#cc785c,stroke-width:2px,color:#fff

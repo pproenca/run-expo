@@ -1,0 +1,123 @@
+graph TD
+  subgraph Entry["Entry / Packaging"]
+    PKG["package.json + Makefile"]
+    BIN["cli/expo-ios.mjs"]
+    DIST["dist/expo-ios.mjs"]
+  end
+
+  subgraph Core["Core Dispatch + Contracts"]
+    DISPATCH["CLI parser / aliases / handlers"]
+    CONTRACTS["src contracts + adapter interfaces"]
+    STATE["session, run records, artifacts"]
+    POLICY["policy + redaction"]
+  end
+
+  subgraph Discovery["Discovery"]
+    DOCTOR["doctor"]
+    PROJECT["project-info / routes / expo"]
+  end
+
+  subgraph Device["Device + Target"]
+    TARGET["target list/select/current"]
+    DEVICE["devices / app lifecycle / open-url"]
+    INPUT["screenshot / logs / gestures / keyboard / set"]
+  end
+
+  subgraph Evidence["Semantic Evidence"]
+    SNAP["snapshot"]
+    REFS["refs / get / find"]
+    WAIT["wait / batch"]
+    AXRN["accessibility / rn inspect"]
+  end
+
+  subgraph Runtime["Runtime + Bridge"]
+    METRO["metro inspector"]
+    DEVTOOLS["devtools / console / errors"]
+    BRIDGE["bridge health/install/domains"]
+    APPDOMAINS["navigation / network / storage / state / controls / dialog / sheet"]
+  end
+
+  subgraph Review["Review UX"]
+    UX["ux-context"]
+    ANNO["annotate-screen"]
+    OVERLAY["review-overlay / annotation-server"]
+    NEXT["review-next / review"]
+  end
+
+  subgraph Observability["Observability"]
+    PERF["perf / profiler"]
+    DIFF["diff / record"]
+    DASH["dashboard / skills"]
+  end
+
+  PKG --> BIN
+  BIN --> DIST
+  DIST --> DISPATCH
+  DISPATCH --> DOCTOR
+  DISPATCH --> PROJECT
+  DISPATCH --> STATE
+  DISPATCH --> TARGET
+  DISPATCH --> DEVICE
+  DISPATCH --> INPUT
+  DISPATCH --> SNAP
+  DISPATCH --> REFS
+  DISPATCH --> WAIT
+  DISPATCH --> METRO
+  DISPATCH --> DEVTOOLS
+  DISPATCH --> BRIDGE
+  DISPATCH --> APPDOMAINS
+  DISPATCH --> UX
+  DISPATCH --> OVERLAY
+  DISPATCH --> PERF
+  DISPATCH --> DIFF
+  DISPATCH --> DASH
+
+  CONTRACTS -.type surface.-> DISPATCH
+  CONTRACTS -.shared schemas.-> SNAP
+  CONTRACTS -.adapter shapes.-> APPDOMAINS
+
+  DOCTOR --> PROJECT
+  PROJECT --> DEVICE
+  PROJECT --> UX
+  PROJECT --> PERF
+
+  STATE --> TARGET
+  STATE --> SNAP
+  STATE --> REFS
+  STATE --> DIFF
+  STATE --> DASH
+
+  TARGET --> SNAP
+  TARGET --> INPUT
+  TARGET --> DEVTOOLS
+  TARGET --> APPDOMAINS
+
+  METRO --> TARGET
+  METRO --> DEVTOOLS
+  METRO --> BRIDGE
+  METRO --> APPDOMAINS
+  METRO --> PERF
+
+  DEVTOOLS --> SNAP
+  BRIDGE --> SNAP
+  BRIDGE --> APPDOMAINS
+  POLICY --> DEVICE
+  POLICY --> APPDOMAINS
+  POLICY --> BRIDGE
+
+  SNAP --> REFS
+  REFS --> WAIT
+  REFS --> INPUT
+  REFS --> AXRN
+  REFS --> ANNO
+  SNAP --> DIFF
+
+  INPUT --> UX
+  METRO --> UX
+  UX --> ANNO
+  UX --> NEXT
+  OVERLAY --> NEXT
+
+  APPDOMAINS --> PERF
+  PERF --> DASH
+  DIFF --> DASH

@@ -1,0 +1,20 @@
+{
+  "name": "@expo98/devtools-diagnostics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Modernized expo98 DevTools and runtime diagnostics behavior.",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main/index.d.ts",
+      "default": "./dist/main/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  }
+}

@@ -1,0 +1,49 @@
+graph LR
+  prog_session["session"]
+  prog_target["target"]
+  prog_snapshot["snapshot"]
+  prog_refs["refs"]
+  prog_find["find"]
+  prog_wait["wait"]
+  prog_automation_take_screenshot["automation_take_screenshot"]
+  prog_annotate_screen["annotate_screen"]
+  prog_review_overlay["review_overlay"]
+  prog_network["network"]
+  prog_storage["storage"]
+  prog_bridge["bridge"]
+  prog_perf["perf"]
+  prog_dashboard["dashboard"]
+  prog_annotate_screen -->|writes| store_Annotation_artifacts[(Annotation artifacts)]
+  prog_annotate_screen -->|reads| store_Expo_app_config[(Expo app config)]
+  prog_bridge -->|reads| store_Expo_app_config[(Expo app config)]
+  prog_dashboard -->|writes| store_Session_JSON[(Session JSON)]
+  prog_dashboard -->|writes| store_Dashboard_artifacts[(Dashboard artifacts)]
+  prog_dashboard -->|reads| store_Expo_app_config[(Expo app config)]
+  prog_network -->|writes| store_HAR_network_artifacts[(HAR/network artifacts)]
+  prog_network -->|reads| store_Hermes_CDP_Runtime_evaluate[(Hermes CDP Runtime.evaluate)]
+  prog_perf -->|writes| store_Performance_artifacts[(Performance artifacts)]
+  prog_review_overlay -->|writes| store_Review_overlay_events[(Review overlay events)]
+  prog_session -->|writes| store_Session_JSON[(Session JSON)]
+  prog_session -->|writes| store_Target_JSON[(Target JSON)]
+  prog_snapshot -->|writes| store_Session_JSON[(Session JSON)]
+  prog_snapshot -->|writes| store_Target_JSON[(Target JSON)]
+  prog_snapshot -->|writes| store_Snapshot_artifacts[(Snapshot artifacts)]
+  prog_snapshot -->|reads| store_Expo_app_config[(Expo app config)]
+  prog_snapshot -->|reads| store_Native_device_tooling[(Native device tooling)]
+  prog_storage -->|writes| store_App_bridge_domains[(App bridge domains)]
+  prog_target -->|writes| store_Session_JSON[(Session JSON)]
+  prog_target -->|writes| store_Target_JSON[(Target JSON)]
+  prog_target -->|reads| store_Expo_app_config[(Expo app config)]
+  classDef store fill:#2d3b45,stroke:#cc785c,color:#d4d4d4
+  class store_Annotation_artifacts store
+  class store_Expo_app_config store
+  class store_Session_JSON store
+  class store_Dashboard_artifacts store
+  class store_HAR_network_artifacts store
+  class store_Hermes_CDP_Runtime_evaluate store
+  class store_Performance_artifacts store
+  class store_Review_overlay_events store
+  class store_Target_JSON store
+  class store_Snapshot_artifacts store
+  class store_Native_device_tooling store
+  class store_App_bridge_domains store

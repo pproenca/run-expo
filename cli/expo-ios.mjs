@@ -1,3 +1,3 @@
 #!/usr/bin/env node
 
-import "../dist/expo-ios.mjs";
+import "./expo98.mjs";

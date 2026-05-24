@@ -1,14 +1,16 @@
 {
   "name": "expo98",
   "version": "0.1.0",
-  "private": true,
-  "description": "Standalone expo-ios local evidence CLI for Expo React Native iOS work.",
+  "description": "Modernized expo98 local evidence CLI for Expo React Native work.",
   "type": "module",
   "bin": {
+    "expo98": "./cli/expo98.mjs",
     "expo-ios": "./cli/expo-ios.mjs"
   },
   "scripts": {
-    "doctor": "node cli/expo-ios.mjs --json doctor",
+    "build": "node scripts/build-bundled-cli.mjs",
+    "doctor": "node cli/expo98.mjs --json doctor",
+    "prepack": "npm run build",
     "test": "node --test tests/*.mjs"
   },
   "engines": {
@@ -16,11 +18,9 @@
   },
   "files": [
     "cli/",
-    "dist/",
-    "skills/",
-    "src/",
-    "SPEC.md",
-    "README.md",
-    "LICENSE"
-  ]
+    "README.md"
+  ],
+  "dependencies": {
+    "esbuild": "^0.25.12"
+  }
 }
