@@ -21,20 +21,10 @@
  * in production); it is the READ/evidence channel, NOT a dangerous capability —
  * the policy gate above is what authorises a mutate, enforced before any call.
  */
-import {
-  gate,
-  policyDeniedPayload,
-  type PolicyDeniedPayload,
-  type PolicyDocument,
-  type SideEffect
-} from "@expo98/core"
+import { gate, policyDeniedPayload, type PolicyDeniedPayload, type PolicyDocument, type SideEffect } from "@expo98/core"
 import { Effect } from "effect"
 import { boundBridgeValue } from "./bound.js"
-import {
-  BridgeTransport,
-  type BridgeCallResult,
-  type BridgeUnavailableCode
-} from "./bridge-transport.js"
+import { BridgeTransport, type BridgeCallResult, type BridgeUnavailableCode } from "./bridge-transport.js"
 
 export type DomainName = "storage" | "state" | "controls"
 
@@ -43,21 +33,18 @@ const READ_ACTIONS: Readonly<Record<DomainName, ReadonlyArray<string>>> = {
   storage: ["list", "get"],
   state: ["list"],
   // controls is inverted: `press` is the only device action; the rest are reads.
-  controls: []
+  controls: [],
 }
 
 /** Device (mutating) actions per domain — only meaningful for `controls`. */
 const DEVICE_ACTIONS: Readonly<Record<DomainName, ReadonlyArray<string>>> = {
   storage: [],
   state: [],
-  controls: ["press"]
+  controls: ["press"],
 }
 
 /** Classify a `domain/action` into its side-effect class (AC-006). */
-export const domainActionSideEffect = (
-  domain: DomainName,
-  action: string
-): SideEffect => {
+export const domainActionSideEffect = (domain: DomainName, action: string): SideEffect => {
   if (domain === "controls") {
     // `press` → device, everything else → read.
     return DEVICE_ACTIONS.controls.includes(action) ? "device" : "read"
@@ -96,25 +83,20 @@ const TRANSPORT = "expo-devtools-bridge" as const
 const EVIDENCE_SOURCE = "bridge" as const
 
 /** The policy-gate action key for a domain action (`<domain>.<action>`). */
-export const domainActionKey = (domain: DomainName, action: string): string =>
-  `${domain}.${action}`
+export const domainActionKey = (domain: DomainName, action: string): string => `${domain}.${action}`
 
 /** Is this non-read action allowed by the policy? (the gate predicate.) */
 const nonReadAllowed = (
   domain: DomainName,
   action: string,
   sideEffect: SideEffect,
-  policy: PolicyDocument
+  policy: PolicyDocument,
 ): boolean => {
   const descriptor = { action: domainActionKey(domain, action), sideEffect }
   return gate(descriptor, policy)._tag === "allow"
 }
 
-const evidence = (
-  input: DomainActionInput,
-  sideEffect: SideEffect,
-  call: BridgeCallResult
-): DomainActionEvidence => ({
+const evidence = (input: DomainActionInput, sideEffect: SideEffect, call: BridgeCallResult): DomainActionEvidence => ({
   domain: input.domain,
   action: input.action,
   sideEffect,
@@ -125,7 +107,7 @@ const evidence = (
   policy: input.policy,
   available: call.available,
   value: boundBridgeValue(call.value),
-  ...(call.code !== undefined ? { code: call.code } : {})
+  ...(call.code !== undefined ? { code: call.code } : {}),
 })
 
 /**
@@ -133,9 +115,7 @@ const evidence = (
  * `policyDeniedPayload` (without touching the bridge) for a withheld mutate, else
  * the size-bounded bridge evidence.
  */
-export const runDomainAction = (
-  input: DomainActionInput
-): Effect.Effect<DomainActionResult, never, BridgeTransport> =>
+export const runDomainAction = (input: DomainActionInput): Effect.Effect<DomainActionResult, never, BridgeTransport> =>
   Effect.gen(function* () {
     const { action, domain, policy } = input
     const sideEffect = domainActionSideEffect(domain, action)
@@ -155,10 +135,7 @@ export const runDomainAction = (
     // 3. DEFENSE-IN-DEPTH: re-check the gate after the call so a classification
     //    drift cannot surface a mutate's result without an allow.
     if (!isRead && !nonReadAllowed(domain, action, sideEffect, policy)) {
-      return policyDeniedPayload(
-        `Policy denied action "${actionKey}" (defense-in-depth).`,
-        policy
-      )
+      return policyDeniedPayload(`Policy denied action "${actionKey}" (defense-in-depth).`, policy)
     }
 
     // 4. Surface bounded evidence (redaction happens at core's output boundary).

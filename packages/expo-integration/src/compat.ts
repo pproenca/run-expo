@@ -30,24 +30,13 @@ export interface CompatMap {
 /** The bundled data-file map (the default source; replaceable by a manifest). */
 export const DEFAULT_COMPAT_MAP: CompatMap = {
   version: compatData.version,
-  expoToReactNative: compatData.expoToReactNative
+  expoToReactNative: compatData.expoToReactNative,
 }
 
 /** Prefixes a package manager leaves UNRESOLVED in a manifest (AC-020). */
-export const UNRESOLVED_PREFIXES = [
-  "catalog:",
-  "workspace:",
-  "file:",
-  "link:",
-  "portal:"
-] as const
+export const UNRESOLVED_PREFIXES = ["catalog:", "workspace:", "file:", "link:", "portal:"] as const
 
-export type CompatClass =
-  | "missing"
-  | "declared-unresolved"
-  | "unknown"
-  | "compatible"
-  | "mismatched"
+export type CompatClass = "missing" | "declared-unresolved" | "unknown" | "compatible" | "mismatched"
 
 export interface CompatResult {
   readonly classification: CompatClass
@@ -70,7 +59,7 @@ const VERSION_RE = /\d+\.\d+(?:\.\d+)?/
 
 /** Parse the first semver-ish run out of a declared version string. */
 export const parseVersion = (
-  raw: string
+  raw: string,
 ): { readonly major: number; readonly minor: number; readonly minorString: string } | null => {
   const match = VERSION_RE.exec(raw)
   if (match === null) {
@@ -85,8 +74,7 @@ export const parseVersion = (
   return { major, minor, minorString: `${major}.${minor}` }
 }
 
-const isUnresolved = (raw: string): boolean =>
-  UNRESOLVED_PREFIXES.some((prefix) => raw.startsWith(prefix))
+const isUnresolved = (raw: string): boolean => UNRESOLVED_PREFIXES.some((prefix) => raw.startsWith(prefix))
 
 const isMissing = (raw: string | undefined | null): raw is undefined | null | "" =>
   raw === undefined || raw === null || raw.trim().length === 0
@@ -99,7 +87,7 @@ const isMissing = (raw: string | undefined | null): raw is undefined | null | ""
  */
 export const classifyCompat = (
   input: { readonly expo?: string | null; readonly reactNative?: string | null },
-  map: CompatMap = DEFAULT_COMPAT_MAP
+  map: CompatMap = DEFAULT_COMPAT_MAP,
 ): CompatResult => {
   const expoRaw = input.expo ?? null
   const rnRaw = input.reactNative ?? null
@@ -110,7 +98,7 @@ export const classifyCompat = (
     expoMajor: null,
     reactNativeMinor: null,
     expectedReactNativeMinor: null,
-    mapVersion: map.version
+    mapVersion: map.version,
   } satisfies Omit<CompatResult, "classification">
 
   // missing — either side absent/blank.
@@ -138,19 +126,18 @@ export const classifyCompat = (
       ...base,
       classification: "unknown",
       expoMajor: expoParsed.major,
-      reactNativeMinor: rnParsed?.minorString ?? null
+      reactNativeMinor: rnParsed?.minorString ?? null,
     }
   }
 
   const reactNativeMinor = rnParsed?.minorString ?? null
-  const classification: CompatClass =
-    reactNativeMinor === expected ? "compatible" : "mismatched"
+  const classification: CompatClass = reactNativeMinor === expected ? "compatible" : "mismatched"
 
   return {
     ...base,
     classification,
     expoMajor: expoParsed.major,
     reactNativeMinor,
-    expectedReactNativeMinor: expected
+    expectedReactNativeMinor: expected,
   }
 }

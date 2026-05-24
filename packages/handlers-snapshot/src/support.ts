@@ -76,7 +76,7 @@ export const round = (v: number): number => Math.round(v * 100) / 100
  */
 export const descriptor = <S extends SideEffect>(
   action: string,
-  sideEffect: S
+  sideEffect: S,
 ): CommandDescriptor & { readonly sideEffect: S } => ({ action, sideEffect })
 
 // ── Capture capability SEAMS (documented; the live transport is injected) ───
@@ -112,9 +112,10 @@ export interface SemanticCaptureService {
   readonly capture: () => Effect.Effect<SemanticCapturePayload | null>
 }
 
-export class SemanticCapture extends Context.Tag(
-  "@expo98/handlers-snapshot/SemanticCapture"
-)<SemanticCapture, SemanticCaptureService>() {}
+export class SemanticCapture extends Context.Tag("@expo98/handlers-snapshot/SemanticCapture")<
+  SemanticCapture,
+  SemanticCaptureService
+>() {}
 
 /** The native `axe describe-ui` element shape (subset we map to a snapshot). */
 export interface NativeAxeElement {
@@ -145,6 +146,4 @@ export interface NativeAxeService {
   readonly describeUi: () => Effect.Effect<NativeAxeResult>
 }
 
-export class NativeAxe extends Context.Tag(
-  "@expo98/handlers-snapshot/NativeAxe"
-)<NativeAxe, NativeAxeService>() {}
+export class NativeAxe extends Context.Tag("@expo98/handlers-snapshot/NativeAxe")<NativeAxe, NativeAxeService>() {}

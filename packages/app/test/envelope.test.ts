@@ -1,12 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
+import { formatJson, formatPlain, ndjsonEnvelope, selectMode } from "@expo98/app"
 import { OUTPUT_BUDGET } from "@expo98/core"
 import { Chunk, Effect, Stream } from "effect"
-import {
-  formatJson,
-  formatPlain,
-  ndjsonEnvelope,
-  selectMode
-} from "@expo98/app"
 
 describe("Output envelope — --json { ok, data } / { ok, error } (§3.2)", () => {
   it("success → { ok:true, data } with the payload redacted", () => {
@@ -61,7 +56,7 @@ describe("AC-041 — --ndjson streaming: per-event redaction + running-total tru
     Effect.gen(function* () {
       const events = Stream.fromIterable([
         { step: 1, token: "SECRET" },
-        { step: 2, password: "hunter2" }
+        { step: 2, password: "hunter2" },
       ])
       const lines = yield* Stream.runCollect(ndjsonEnvelope(events))
       const arr = Chunk.toReadonlyArray(lines)
@@ -73,7 +68,7 @@ describe("AC-041 — --ndjson streaming: per-event redaction + running-total tru
       expect(first.token).toBe("[redacted]")
       const second = JSON.parse(arr[1]!) as { step: number; password: string }
       expect(second.password).toBe("[redacted]")
-    })
+    }),
   )
 
   it.effect("the 40,000-char budget is a RUNNING TOTAL with one terminal marker", () =>
@@ -89,6 +84,6 @@ describe("AC-041 — --ndjson streaming: per-event redaction + running-total tru
       expect(markerCount).toBe(1) // EXACTLY one terminal overflow marker
       // First event fully admitted; once overflowed, later events are dropped.
       expect(arr[0]).toContain('"a"')
-    })
+    }),
   )
 })

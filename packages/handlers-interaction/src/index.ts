@@ -17,14 +17,7 @@
  */
 
 // ── Shared bounds + descriptor helper ──
-export {
-  clamp,
-  DEFAULT_METRO_PORT,
-  descriptor,
-  MAX_PORT,
-  MIN_PORT,
-  resolveMetroPort
-} from "./support.js"
+export { clamp, DEFAULT_METRO_PORT, descriptor, MAX_PORT, MIN_PORT, resolveMetroPort } from "./support.js"
 
 // ── D6 lifecycle (AC-005, AC-029, AC-056) ──
 export {
@@ -35,7 +28,7 @@ export {
   lifecyclePlan,
   type LifecycleResult,
   lifecycleSideEffect,
-  type LifecycleVerb
+  type LifecycleVerb,
 } from "./lifecycle.js"
 
 // ── Post-launch crash evidence (AC-029, AC-056) ──
@@ -51,7 +44,7 @@ export {
   isCrashReportPath,
   MAX_CRASH_GRACE_MS,
   MIN_CRASH_GRACE_MS,
-  resolveCrashGraceMs
+  resolveCrashGraceMs,
 } from "./crash.js"
 
 // ── D7 interaction handlers (AC-013, AC-036, AC-037, AC-054) ──
@@ -76,7 +69,7 @@ export {
   type ScreenshotResult,
   type TapArgs,
   tapCommand,
-  type TapResult
+  type TapResult,
 } from "./interaction.js"
 
 // ── Pure gesture / scroll geometry (AC-036, AC-037) ──
@@ -114,7 +107,7 @@ export {
   type ScrollArgs,
   type ScrollDirection,
   type ScrollPlan,
-  scrollDelta
+  scrollDelta,
 } from "./gesture-plan.js"
 
 // ── Pure full-screenshot stitch geometry (AC-054) ──
@@ -130,7 +123,7 @@ export {
   planFullScreenshot,
   resolveSegmentCount,
   type SegmentSwipe,
-  START_Y_FRACTION
+  START_Y_FRACTION,
 } from "./screenshot-geometry.js"
 
 // ── wait (AC-004 runtime-eval gate, AC-035 cadence) ──
@@ -151,5 +144,5 @@ export {
   type WaitMode,
   waitMode,
   type WaitResult,
-  waitSideEffect
+  waitSideEffect,
 } from "./wait.js"

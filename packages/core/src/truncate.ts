@@ -10,8 +10,7 @@
 export const OUTPUT_BUDGET = 40_000
 
 /** The one canonical overflow marker; `N` = number of chars dropped. */
-export const overflowMarker = (dropped: number): string =>
-  `[truncated ${dropped} characters]`
+export const overflowMarker = (dropped: number): string => `[truncated ${dropped} characters]`
 
 /**
  * Truncate a single string to `budget` chars, appending the marker when it

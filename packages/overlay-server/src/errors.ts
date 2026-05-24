@@ -56,8 +56,4 @@ export type EventsStoreError = EventsStoreFailure | CorruptEventsFile
  * `Response` value — but they are exported so callers (and tests) can name the
  * exact cause classes.
  */
-export type RequestRejection =
-  | TokenRejected
-  | OriginRejected
-  | BodyTooLarge
-  | MalformedBody
+export type RequestRejection = TokenRejected | OriginRejected | BodyTooLarge | MalformedBody

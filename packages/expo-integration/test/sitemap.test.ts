@@ -13,7 +13,7 @@ describe("AC-044 Expo Router sitemap normalization", () => {
     expect(normalizeRoutePath("app/about.tsx")).toEqual({
       source: "app/about.tsx",
       kind: "route",
-      route: "/app/about"
+      route: "/app/about",
     })
   })
 
@@ -32,7 +32,7 @@ describe("AC-044 Expo Router sitemap normalization", () => {
     expect(normalizeRoutePath("_layout.tsx")).toEqual({
       source: "_layout.tsx",
       kind: "layout",
-      route: null
+      route: null,
     })
     expect(normalizeRoutePath("(tabs)/_layout.tsx").kind).toBe("layout")
     expect(normalizeRoutePath("nested/deep/_layout.ts").kind).toBe("layout")
@@ -42,7 +42,7 @@ describe("AC-044 Expo Router sitemap normalization", () => {
     expect(normalizeRoutePath("+not-found.tsx")).toEqual({
       source: "+not-found.tsx",
       kind: "special",
-      route: null
+      route: null,
     })
     expect(normalizeRoutePath("+html.tsx").kind).toBe("special")
     expect(normalizeRoutePath("api/+native-intent.ts").kind).toBe("special")
@@ -60,9 +60,7 @@ describe("AC-044 Expo Router sitemap normalization", () => {
 
   it("AC-044 [param] → :param (dynamic)", () => {
     expect(formatSegment("[id]")).toBe(":id")
-    expect(normalizeRoutePath("users/[id]/posts/[postId].tsx").route).toBe(
-      "/users/:id/posts/:postId"
-    )
+    expect(normalizeRoutePath("users/[id]/posts/[postId].tsx").route).toBe("/users/:id/posts/:postId")
   })
 
   it("AC-044 literal segments pass through unchanged", () => {
@@ -79,14 +77,14 @@ describe("AC-044 Expo Router sitemap normalization", () => {
       "index.tsx",
       "(tabs)/profile.tsx",
       "blog/[...slug].tsx",
-      "+not-found.tsx"
+      "+not-found.tsx",
     ])
     expect(entries.map((e) => `${e.kind}:${e.route ?? ""}`)).toEqual([
       "layout:",
       "route:/",
       "route:/profile",
       "route:/blog/*slug",
-      "special:"
+      "special:",
     ])
   })
 

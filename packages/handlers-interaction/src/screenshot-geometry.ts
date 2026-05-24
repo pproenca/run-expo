@@ -50,20 +50,14 @@ export interface FullScreenshotPlan {
 
 /** AC-054: `segmentCount = clamp(args.fullSegments ?? args.segments ?? 3, 1, 12)`. */
 export const resolveSegmentCount = (args: FullScreenshotArgs): number =>
-  clamp(
-    args.fullSegments ?? args.segments ?? DEFAULT_SEGMENTS,
-    MIN_SEGMENTS,
-    MAX_SEGMENTS
-  )
+  clamp(args.fullSegments ?? args.segments ?? DEFAULT_SEGMENTS, MIN_SEGMENTS, MAX_SEGMENTS)
 
 /**
  * AC-054: compute the full-screenshot plan. `startX = round(width/2)`,
  * `startY = round(height*0.82)`, `endY = round(height*0.28)`; `endX = startX`
  * (a vertical swipe). Falls back to 390×844 when a dimension is missing.
  */
-export const planFullScreenshot = (
-  args: FullScreenshotArgs = {}
-): FullScreenshotPlan => {
+export const planFullScreenshot = (args: FullScreenshotArgs = {}): FullScreenshotPlan => {
   const width = args.width ?? FALLBACK_WIDTH
   const height = args.height ?? FALLBACK_HEIGHT
   const startX = Math.round(width / 2)
@@ -75,7 +69,7 @@ export const planFullScreenshot = (
       startX,
       startY: Math.round(height * START_Y_FRACTION),
       endX: startX,
-      endY: Math.round(height * END_Y_FRACTION)
-    }
+      endY: Math.round(height * END_Y_FRACTION),
+    },
   }
 }

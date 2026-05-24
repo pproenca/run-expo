@@ -13,26 +13,26 @@
  * NOTE: this is platform-coupled (`ws`), so it lives in `protocols` but is wired by the deferred
  * `packages/app` composition root, never by the pure spine. Tests use a fake factory instead.
  */
-import { Effect, Layer, Queue } from "effect";
-import WebSocket from "ws";
-import { CdpSocketFactory, type CdpSocket } from "./cdp-socket.js";
-import { CdpSocketError } from "./errors.js";
+import { Effect, Layer, Queue } from "effect"
+import WebSocket from "ws"
+import { CdpSocketFactory, type CdpSocket } from "./cdp-socket.js"
+import { CdpSocketError } from "./errors.js"
 
 const connect: CdpSocketFactory["connect"] = (options) =>
   Effect.async<CdpSocket, CdpSocketError>((resume) => {
-    let settled = false;
+    let settled = false
     // Connect-time Origin header (AC-030) — the reason we use `ws` over @effect/platform Socket.
-    const ws = new WebSocket(options.url, { headers: { Origin: options.origin } });
+    const ws = new WebSocket(options.url, { headers: { Origin: options.origin } })
 
     // Buffer inbound frames so a `receive` that runs after a frame arrived still gets it.
     // The Queue is created synchronously via runSync so the message handler can offer into it.
-    const inbound = Effect.runSync(Queue.unbounded<string | null>());
+    const inbound = Effect.runSync(Queue.unbounded<string | null>())
 
     const openTimer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+      if (settled) return
+      settled = true
       try {
-        ws.terminate();
+        ws.terminate()
       } catch {
         /* ignore */
       }
@@ -44,69 +44,63 @@ const connect: CdpSocketFactory["connect"] = (options) =>
             cause: `open exceeded ${options.openTimeoutMs}ms`,
           }),
         ),
-      );
-    }, options.openTimeoutMs);
+      )
+    }, options.openTimeoutMs)
 
     ws.on("message", (data: WebSocket.RawData) => {
-      Effect.runSync(Queue.offer(inbound, data.toString()));
-    });
+      Effect.runSync(Queue.offer(inbound, data.toString()))
+    })
     ws.on("close", () => {
       // Signal end-of-stream so a pending `receive` resolves to null.
-      Effect.runSync(Queue.offer(inbound, null));
-    });
+      Effect.runSync(Queue.offer(inbound, null))
+    })
     ws.on("error", (err: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(openTimer);
-      resume(
-        Effect.fail(new CdpSocketError({ url: options.url, reason: "Open", cause: err })),
-      );
-    });
+      if (settled) return
+      settled = true
+      clearTimeout(openTimer)
+      resume(Effect.fail(new CdpSocketError({ url: options.url, reason: "Open", cause: err })))
+    })
     ws.on("open", () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(openTimer);
+      if (settled) return
+      settled = true
+      clearTimeout(openTimer)
 
       const socket: CdpSocket = {
         send: (frame) =>
           Effect.async<void, CdpSocketError>((res) => {
             ws.send(frame, (err) => {
               if (err) {
-                res(
-                  Effect.fail(
-                    new CdpSocketError({ url: options.url, reason: "Write", cause: err }),
-                  ),
-                );
+                res(Effect.fail(new CdpSocketError({ url: options.url, reason: "Write", cause: err })))
               } else {
-                res(Effect.void);
+                res(Effect.void)
               }
-            });
+            })
           }),
         receive: Queue.take(inbound),
         close: Effect.sync(() => {
           try {
-            ws.close();
+            ws.close()
           } catch {
             /* ignore */
           }
         }),
-      };
-      resume(Effect.succeed(socket));
-    });
+      }
+      resume(Effect.succeed(socket))
+    })
 
     // Effect.async finalizer: ensure the socket is torn down if the fiber is interrupted.
     return Effect.sync(() => {
-      clearTimeout(openTimer);
+      clearTimeout(openTimer)
       try {
-        ws.terminate();
+        ws.terminate()
       } catch {
         /* ignore */
       }
-    });
-  });
+    })
+  })
 
 /**
  * Live `ws`-backed S9 socket factory (the SPIKE decision). Provide this in the Node composition
  * root; tests provide a fake `CdpSocketFactory` layer instead.
  */
-export const WsCdpSocketFactoryLayer = Layer.succeed(CdpSocketFactory, { connect });
+export const WsCdpSocketFactoryLayer = Layer.succeed(CdpSocketFactory, { connect })

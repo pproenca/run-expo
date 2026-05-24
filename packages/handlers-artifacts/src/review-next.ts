@@ -26,9 +26,7 @@ export interface ReviewNextResult {
 }
 
 /** Build a `review-next` read command from the review context flags. */
-export const reviewNextCommand = (
-  args: ReviewNextArgs = {}
-): Command<"read", ReviewNextResult> =>
+export const reviewNextCommand = (args: ReviewNextArgs = {}): Command<"read", ReviewNextResult> =>
   command(
     descriptor("review-next", "read"),
     Effect.sync<ReviewNextResult>(() => {
@@ -49,5 +47,5 @@ export const reviewNextCommand = (
         steps.push("Provide --surface, --stage, or --issue for targeted guidance.")
       }
       return { action: "review-next", surface, stage, issue, steps }
-    })
+    }),
   )

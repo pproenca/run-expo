@@ -7,7 +7,7 @@ import {
   SemanticBridgeSnapshot,
   SidecarRecord,
   SnapshotFilters,
-  SnapshotNode
+  SnapshotNode,
 } from "./value-objects.js"
 
 /**
@@ -45,7 +45,7 @@ export const SessionRecord = Schema.Struct({
   // Soft pointers (the 3 Session invariants live in S7 Persistence, AC-026).
   activeTargetId: Schema.NullOr(Schema.String),
   lastSnapshotId: Schema.NullOr(Schema.String),
-  sidecars: Schema.Array(SidecarRecord)
+  sidecars: Schema.Array(SidecarRecord),
 })
 export type SessionRecord = Schema.Schema.Type<typeof SessionRecord>
 
@@ -59,7 +59,7 @@ export type Platform = Schema.Schema.Type<typeof Platform>
 export const TargetApp = Schema.Struct({
   bundleId: Schema.NullOr(Schema.String),
   processName: Schema.NullOr(Schema.String),
-  running: Schema.Boolean
+  running: Schema.Boolean,
 })
 export type TargetApp = Schema.Schema.Type<typeof TargetApp>
 
@@ -69,7 +69,7 @@ export const TargetMetro = Schema.Struct({
   targetId: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   appId: Schema.NullOr(Schema.String),
-  debuggerUrl: Schema.NullOr(Schema.String)
+  debuggerUrl: Schema.NullOr(Schema.String),
 })
 export type TargetMetro = Schema.Schema.Type<typeof TargetMetro>
 
@@ -82,7 +82,7 @@ export const TargetRecord = Schema.Struct({
   metro: TargetMetro,
   selected: Schema.Boolean,
   // Recomputed on rediscovery (AC-018).
-  stale: Schema.Boolean
+  stale: Schema.Boolean,
 })
 export type TargetRecord = Schema.Schema.Type<typeof TargetRecord>
 
@@ -93,7 +93,7 @@ export type TargetRecord = Schema.Schema.Type<typeof TargetRecord>
 export const SnapshotArtifacts = Schema.Struct({
   json: Schema.NullOr(Schema.String),
   screenshot: Schema.NullOr(Schema.String),
-  annotatedScreenshot: Schema.NullOr(Schema.String)
+  annotatedScreenshot: Schema.NullOr(Schema.String),
 })
 export type SnapshotArtifacts = Schema.Schema.Type<typeof SnapshotArtifacts>
 
@@ -109,7 +109,7 @@ export const SnapshotResult = Schema.Struct({
   refs: Schema.Array(RefRecord),
   tree: Schema.Array(SnapshotNode),
   artifacts: SnapshotArtifacts,
-  limitations: Schema.Array(Schema.String)
+  limitations: Schema.Array(Schema.String),
 })
 export type SnapshotResult = Schema.Schema.Type<typeof SnapshotResult>
 
@@ -122,7 +122,7 @@ export const RefCache = Schema.Struct({
   targetId: TargetId,
   source: Schema.Array(Schema.String),
   semanticBridge: Schema.optional(SemanticBridgeSnapshot),
-  refs: Schema.Array(RefRecord)
+  refs: Schema.Array(RefRecord),
 })
 export type RefCache = Schema.Schema.Type<typeof RefCache>
 
@@ -135,7 +135,7 @@ export type RunStatus = Schema.Schema.Type<typeof RunStatus>
 
 export const RunCli = Schema.Struct({
   name: Schema.String,
-  version: Schema.String
+  version: Schema.String,
 })
 export type RunCli = Schema.Schema.Type<typeof RunCli>
 
@@ -157,7 +157,7 @@ const RunRecordFields = {
   status: RunStatus,
   exitCode: Schema.NullOr(Schema.Number),
   summary: Schema.NullOr(RunPayloadSummary),
-  error: Schema.NullOr(Schema.String)
+  error: Schema.NullOr(Schema.String),
 } as const
 
 /** A run record in any state (running | completed | failed). */
@@ -171,7 +171,7 @@ export const RunningRunRecord = Schema.Struct({
   finishedAt: Schema.Null,
   exitCode: Schema.Null,
   summary: Schema.Null,
-  error: Schema.Null
+  error: Schema.Null,
 })
 export type RunningRunRecord = Schema.Schema.Type<typeof RunningRunRecord>
 
@@ -179,7 +179,7 @@ export type RunningRunRecord = Schema.Schema.Type<typeof RunningRunRecord>
 export const FinishedRunRecord = Schema.Struct({
   ...RunRecordFields,
   status: Schema.Literal("completed", "failed"),
-  finishedAt: Schema.String
+  finishedAt: Schema.String,
 })
 export type FinishedRunRecord = Schema.Schema.Type<typeof FinishedRunRecord>
 
@@ -188,14 +188,7 @@ export type FinishedRunRecord = Schema.Schema.Type<typeof FinishedRunRecord>
 // ===========================================================================
 
 /** Domain element schema (was an untyped `string[]` in legacy). */
-export const BridgeDomain = Schema.Literal(
-  "navigation",
-  "network",
-  "storage",
-  "controls",
-  "performance",
-  "snapshot"
-)
+export const BridgeDomain = Schema.Literal("navigation", "network", "storage", "controls", "performance", "snapshot")
 export type BridgeDomain = Schema.Schema.Type<typeof BridgeDomain>
 
 export const BridgeMetadata = Schema.Struct({
@@ -203,7 +196,7 @@ export const BridgeMetadata = Schema.Struct({
   bridgeVersion: Schema.Literal(BRIDGE_VERSION),
   developmentOnly: Schema.Literal(true),
   generatedBy: Schema.Literal("expo98"),
-  domains: Schema.Array(BridgeDomain)
+  domains: Schema.Array(BridgeDomain),
 })
 export type BridgeMetadata = Schema.Schema.Type<typeof BridgeMetadata>
 
@@ -221,7 +214,7 @@ export const OverlayEvent = Schema.Struct({
   id: Schema.String,
   createdAt: Schema.String,
   kind: Schema.String,
-  payload: Schema.Record({ key: Schema.String, value: Schema.Unknown })
+  payload: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
 })
 export type OverlayEvent = Schema.Schema.Type<typeof OverlayEvent>
 
@@ -230,6 +223,6 @@ export const OverlayEventsFile = Schema.Struct({
   title: Schema.String,
   createdAt: Schema.String,
   updatedAt: Schema.optional(Schema.String),
-  events: Schema.Array(OverlayEvent)
+  events: Schema.Array(OverlayEvent),
 })
 export type OverlayEventsFile = Schema.Schema.Type<typeof OverlayEventsFile>

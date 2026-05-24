@@ -54,10 +54,7 @@ export interface AccessibilityAuditResult {
   readonly findings: ReadonlyArray<AccessibilityFinding>
 }
 
-export type AccessibilityResult =
-  | AccessibilityUnavailable
-  | AccessibilityTreeResult
-  | AccessibilityAuditResult
+export type AccessibilityResult = AccessibilityUnavailable | AccessibilityTreeResult | AccessibilityAuditResult
 
 const NO_CACHE_REASON = "No snapshot or ref cache available. Capture a snapshot first."
 
@@ -77,27 +74,22 @@ const buildTree = (cache: RefCache): ReadonlyArray<AccessibilityTreeRow> =>
     role: r.role,
     label: r.label,
     text: r.text,
-    actions: r.actions
+    actions: r.actions,
   }))
 
 /** Run the `interactive-name` audit over the cached refs (AC-023 `audit`). */
 const runAudit = (cache: RefCache): ReadonlyArray<AccessibilityFinding> =>
-  cache.refs
-    .filter(isInteractiveUnnamed)
-    .map((r) => ({
-      ref: r.ref,
-      rule: "interactive-name" as const,
-      message: INTERACTIVE_NAME_MESSAGE
-    }))
+  cache.refs.filter(isInteractiveUnnamed).map((r) => ({
+    ref: r.ref,
+    rule: "interactive-name" as const,
+    message: INTERACTIVE_NAME_MESSAGE,
+  }))
 
 /**
  * Compute the accessibility result for a verb against a (possibly null) cache.
  * No cache ⇒ unavailable (AC-023 edge). PURE.
  */
-export const accessibilityResult = (
-  verb: AccessibilityVerb,
-  cache: RefCache | null
-): AccessibilityResult => {
+export const accessibilityResult = (verb: AccessibilityVerb, cache: RefCache | null): AccessibilityResult => {
   if (cache === null) {
     return { available: false, action: `accessibility.${verb}`, reason: NO_CACHE_REASON }
   }
@@ -106,13 +98,13 @@ export const accessibilityResult = (
         available: true,
         action: "accessibility.tree",
         snapshotId: cache.snapshotId,
-        rows: buildTree(cache)
+        rows: buildTree(cache),
       }
     : {
         available: true,
         action: "accessibility.audit",
         snapshotId: cache.snapshotId,
-        findings: runAudit(cache)
+        findings: runAudit(cache),
       }
 }
 
@@ -123,9 +115,6 @@ export const accessibilityResult = (
  */
 export const accessibilityCommand = (
   verb: AccessibilityVerb,
-  cache: RefCache | null
+  cache: RefCache | null,
 ): Command<"read", AccessibilityResult> =>
-  command(
-    descriptor(`accessibility.${verb}`, "read"),
-    Effect.succeed(accessibilityResult(verb, cache))
-  )
+  command(descriptor(`accessibility.${verb}`, "read"), Effect.succeed(accessibilityResult(verb, cache)))

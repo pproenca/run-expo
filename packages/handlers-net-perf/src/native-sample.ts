@@ -95,32 +95,27 @@ export const parseNativeSample = (text: string | null): NativeSampleSummary => {
       estimatedMainThreadIdleSamples: 0,
       estimatedMainThreadBusySamples: null,
       buckets: { hermes: 0, yoga: 0, mounting: 0, coreAnimation: 0, uiKit: 0 },
-      topSymbols: []
+      topSymbols: [],
     }
   }
 
   const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/)
   const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/)
-  const mainThreadSamples = numberFromMatch(
-    text,
-    /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s
-  )
+  const mainThreadSamples = numberFromMatch(text, /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s)
   const idleSamples = countSampleBucket(text, [/mach_msg/i, /CFRunLoopServiceMachPort/i])
   const buckets: NativeSampleBuckets = {
     hermes: countSampleBucket(text, [/hermes/i]),
     yoga: countSampleBucket(text, [/yoga/i]),
     mounting: countSampleBucket(text, [/RCTMountingManager/i, /RCTPerformMountInstructions/i]),
     coreAnimation: countSampleBucket(text, [/QuartzCore/i, /CA::Layer/i, /CoreAnimation/i]),
-    uiKit: countSampleBucket(text, [/UIKitCore/i])
+    uiKit: countSampleBucket(text, [/UIKitCore/i]),
   }
-  const topSymbols: Array<NativeSampleSymbol> = [
-    ...text.matchAll(/^\s*([0-9]+)\s+(.+?)\s+\(in\s+(.+?)\)/gm)
-  ]
+  const topSymbols: Array<NativeSampleSymbol> = [...text.matchAll(/^\s*([0-9]+)\s+(.+?)\s+\(in\s+(.+?)\)/gm)]
     .slice(0, 30)
     .map((match) => ({
       samples: Number(match[1]),
       symbol: (match[2] ?? "").trim(),
-      library: (match[3] ?? "").trim()
+      library: (match[3] ?? "").trim(),
     }))
 
   return {
@@ -130,10 +125,9 @@ export const parseNativeSample = (text: string | null): NativeSampleSummary => {
     peakFootprintMb,
     mainThreadSamples,
     estimatedMainThreadIdleSamples: idleSamples,
-    estimatedMainThreadBusySamples:
-      mainThreadSamples === null ? null : Math.max(0, mainThreadSamples - idleSamples),
+    estimatedMainThreadBusySamples: mainThreadSamples === null ? null : Math.max(0, mainThreadSamples - idleSamples),
     buckets,
-    topSymbols
+    topSymbols,
   }
 }
 

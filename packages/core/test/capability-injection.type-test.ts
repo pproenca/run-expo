@@ -11,13 +11,7 @@
  * gate denies an un-allowed runtime-eval at execution time (defense in depth).
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  command,
-  DeviceCapability,
-  dispatch,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "@expo98/core"
+import { command, DeviceCapability, dispatch, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import { Effect, Layer } from "effect"
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -27,19 +21,13 @@ import { Effect, Layer } from "effect"
 // ──────────────────────────────────────────────────────────────────────────
 
 // Effects that REQUIRE each dangerous capability in their R channel.
-const evalEffect = RuntimeEvalCapability.pipe(
-  Effect.flatMap((e) => e.evaluate("danger()"))
-)
-const deviceEffect = DeviceCapability.pipe(
-  Effect.flatMap((d) => d.invoke("xcrun", ["boot"]))
-)
-const writeEffect = SourceWriteCapability.pipe(
-  Effect.flatMap((w) => w.writeFile("/x", "y"))
-)
+const evalEffect = RuntimeEvalCapability.pipe(Effect.flatMap((e) => e.evaluate("danger()")))
+const deviceEffect = DeviceCapability.pipe(Effect.flatMap((d) => d.invoke("xcrun", ["boot"])))
+const writeEffect = SourceWriteCapability.pipe(Effect.flatMap((w) => w.writeFile("/x", "y")))
 
 const readHandlerOk = command(
   { action: "doctor", sideEffect: "read" } as const,
-  Effect.succeed({ ok: true }) // R = never — fine
+  Effect.succeed({ ok: true }), // R = never — fine
 )
 void readHandlerOk
 
@@ -48,21 +36,21 @@ void readHandlerOk
 const readCannotEval = command(
   { action: "doctor", sideEffect: "read" } as const,
   // @ts-expect-error read-classed handler cannot require RuntimeEvalCapability
-  evalEffect
+  evalEffect,
 )
 void readCannotEval
 
 const readCannotDevice = command(
   { action: "doctor", sideEffect: "read" } as const,
   // @ts-expect-error read-classed handler cannot require DeviceCapability
-  deviceEffect
+  deviceEffect,
 )
 void readCannotDevice
 
 const readCannotWrite = command(
   { action: "doctor", sideEffect: "read" } as const,
   // @ts-expect-error read-classed handler cannot require SourceWriteCapability
-  writeEffect
+  writeEffect,
 )
 void readCannotWrite
 
@@ -73,7 +61,7 @@ void readCannotWrite
 
 const evalHandlerOk = command(
   { action: "trace", sideEffect: "runtime-eval" } as const,
-  RuntimeEvalCapability.pipe(Effect.flatMap((e) => e.evaluate("__trace__()")))
+  RuntimeEvalCapability.pipe(Effect.flatMap((e) => e.evaluate("__trace__()"))),
 )
 void evalHandlerOk
 
@@ -81,7 +69,7 @@ void evalHandlerOk
 const evalCannotDevice = command(
   { action: "trace", sideEffect: "runtime-eval" } as const,
   // @ts-expect-error runtime-eval-classed handler cannot require DeviceCapability
-  deviceEffect
+  deviceEffect,
 )
 void evalCannotDevice
 
@@ -91,14 +79,14 @@ void evalCannotDevice
 
 const deviceHandlerOk = command(
   { action: "launch-app", sideEffect: "device" } as const,
-  DeviceCapability.pipe(Effect.flatMap((d) => d.invoke("xcrun", ["launch"])))
+  DeviceCapability.pipe(Effect.flatMap((d) => d.invoke("xcrun", ["launch"]))),
 )
 void deviceHandlerOk
 
 const deviceCannotEval = command(
   { action: "launch-app", sideEffect: "device" } as const,
   // @ts-expect-error device-classed handler cannot require RuntimeEvalCapability
-  evalEffect
+  evalEffect,
 )
 void deviceCannotEval
 
@@ -109,21 +97,15 @@ void deviceCannotEval
 // ──────────────────────────────────────────────────────────────────────────
 
 const TestCaps = Layer.mergeAll(
-  Layer.succeed(
-    RuntimeEvalCapability,
-    RuntimeEvalCapability.of({ evaluate: () => Effect.succeed("eval-ran") })
-  ),
-  Layer.succeed(
-    DeviceCapability,
-    DeviceCapability.of({ invoke: () => Effect.succeed("ran") })
-  ),
+  Layer.succeed(RuntimeEvalCapability, RuntimeEvalCapability.of({ evaluate: () => Effect.succeed("eval-ran") })),
+  Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("ran") })),
   Layer.succeed(
     SourceWriteCapability,
     SourceWriteCapability.of({
       writeFile: () => Effect.void,
-      deleteFile: () => Effect.void
-    })
-  )
+      deleteFile: () => Effect.void,
+    }),
+  ),
 )
 
 describe("Capability injection — runtime gate (AC-010)", () => {
@@ -132,6 +114,6 @@ describe("Capability injection — runtime gate (AC-010)", () => {
       const result = yield* dispatch(evalHandlerOk, {})
       const payload = result.payload as { code?: string }
       expect(payload.code).toBe("policy-denied")
-    }).pipe(Effect.provide(TestCaps))
+    }).pipe(Effect.provide(TestCaps)),
   )
 })

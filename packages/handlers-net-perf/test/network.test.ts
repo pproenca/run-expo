@@ -8,7 +8,6 @@
  * fallback, inferred endedAt, the responseBytes fallback chain, retryCount ?? 0).
  */
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
 import {
   buildWaterfall,
   confineHarOutputPath,
@@ -20,8 +19,9 @@ import {
   normalizeRequests,
   parseUrlParts,
   SLOW_THRESHOLD_MS,
-  validateNetworkEvidence
+  validateNetworkEvidence,
 } from "@expo98/handlers-net-perf"
+import { Effect } from "effect"
 
 describe("AC-045 request normalization + `ok` derivation", () => {
   it("AC-045 derives origin/path from a valid URL", () => {
@@ -67,10 +67,7 @@ describe("AC-045 request normalization + `ok` derivation", () => {
     expect(normalizeRequest({ response: { encodedBodySize: 30 } }).responseBytes).toBe(30)
     expect(normalizeRequest({ response: { size: 40 } }).responseBytes).toBe(40)
     // precedence: responseBytes wins over the rest.
-    expect(
-      normalizeRequest({ responseBytes: 1, encodedResponseBytes: 2, response: { size: 3 } })
-        .responseBytes
-    ).toBe(1)
+    expect(normalizeRequest({ responseBytes: 1, encodedResponseBytes: 2, response: { size: 3 } }).responseBytes).toBe(1)
     expect(normalizeRequest({}).responseBytes).toBeNull()
   })
 
@@ -97,9 +94,7 @@ describe("AC-045 request normalization + `ok` derivation", () => {
     const r = normalizeRequest({ startedAt, durationMs: 1000, endedAt: "2026-01-01T00:00:05.000Z" })
     expect(r.endedAt).toBe("2026-01-01T00:00:05.000Z")
     // inferred when absent.
-    expect(normalizeRequest({ startedAt, durationMs: 250 }).endedAt).toBe(
-      "2026-01-01T00:00:00.250Z"
-    )
+    expect(normalizeRequest({ startedAt, durationMs: 250 }).endedAt).toBe("2026-01-01T00:00:00.250Z")
     // no startedAt or no duration → null.
     expect(inferEndedAt(null, 100)).toBeNull()
     expect(inferEndedAt(startedAt, null)).toBeNull()
@@ -113,7 +108,7 @@ describe("AC-045 waterfall", () => {
     { id: "b", url: "https://x.test/b", durationMs: 1200 },
     { id: "c", url: "https://x.test/c", durationMs: 50 },
     { id: "d", url: "https://x.test/d" }, // no duration → excluded from ranking
-    { id: "e", url: "https://x.test/e", durationMs: 500 } // exactly at threshold
+    { id: "e", url: "https://x.test/e", durationMs: 500 }, // exactly at threshold
   ])
 
   it("AC-045 ranks by durationMs DESC, drops rows without numeric durationMs", () => {
@@ -132,7 +127,7 @@ describe("AC-045 waterfall", () => {
 
   it("AC-045 ranks at most the top 50", () => {
     const many = normalizeRequests(
-      Array.from({ length: 120 }, (_, i) => ({ id: `r${i}`, url: `https://x.test/${i}`, durationMs: i }))
+      Array.from({ length: 120 }, (_, i) => ({ id: `r${i}`, url: `https://x.test/${i}`, durationMs: i })),
     )
     const w = buildWaterfall(many)
     expect(w.rankedRequests.length).toBe(50)
@@ -147,7 +142,7 @@ describe("AC-045 duplicates", () => {
       { id: "1", method: "GET", url: "https://x.test/dup", durationMs: 100 },
       { id: "2", method: "GET", url: "https://x.test/dup", durationMs: 200 },
       { id: "3", method: "POST", url: "https://x.test/dup", durationMs: 5 }, // different method
-      { id: "4", method: "GET", url: "https://x.test/unique", durationMs: 1 }
+      { id: "4", method: "GET", url: "https://x.test/unique", durationMs: 1 },
     ])
     const groups = duplicateGroups(rows)
     expect(groups.length).toBe(1)
@@ -161,7 +156,7 @@ describe("AC-045 duplicates", () => {
   it("AC-045 no duplicates → empty array", () => {
     const rows = normalizeRequests([
       { id: "1", url: "https://x.test/a", durationMs: 1 },
-      { id: "2", url: "https://x.test/b", durationMs: 2 }
+      { id: "2", url: "https://x.test/b", durationMs: 2 },
     ])
     expect(duplicateGroups(rows)).toEqual([])
   })
@@ -179,8 +174,8 @@ describe("AC-045 HAR", () => {
         startedAt: "2026-01-01T00:00:00.000Z",
         durationMs: 123,
         status: 200,
-        responseBytes: 42
-      }
+        responseBytes: 42,
+      },
     ])
     const har = harFromRequests(rows, creator, now)
     expect(har.log.version).toBe(HAR_VERSION)
@@ -211,30 +206,28 @@ describe("AC-013 HAR --output-path confinement (FIX)", () => {
     Effect.gen(function* () {
       const resolved = yield* confineHarOutputPath(root, "network-2026.har")
       expect(resolved).toBe("/workspace/.scratch/expo98/artifacts/network-2026.har")
-    })
+    }),
   )
 
   it.effect("AC-013 a `../` traversal escape is REJECTED with PathEscape", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(confineHarOutputPath(root, "../../../etc/evil.har"))
       expect(exit._tag).toBe("Failure")
-    })
+    }),
   )
 
   it.effect("AC-013 an absolute escape outside the root is REJECTED", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(confineHarOutputPath(root, "/etc/passwd"))
       expect(exit._tag).toBe("Failure")
-    })
+    }),
   )
 
   it.effect("AC-013 a sibling-prefix path is REJECTED (no false-positive containment)", () =>
     Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        confineHarOutputPath("/workspace/artifacts", "/workspace/artifacts-evil/x.har")
-      )
+      const exit = yield* Effect.exit(confineHarOutputPath("/workspace/artifacts", "/workspace/artifacts-evil/x.har"))
       expect(exit._tag).toBe("Failure")
-    })
+    }),
   )
 })
 
@@ -254,7 +247,7 @@ describe("AC-022 reuse protocols' network shape validation for input", () => {
   it("AC-022 valid shape passes through and feeds normalization", () => {
     const r = validateNetworkEvidence({
       hasRuntimeTarget: true,
-      payload: { requests: [{ id: "1", url: "https://x.test/a", durationMs: 700 }] }
+      payload: { requests: [{ id: "1", url: "https://x.test/a", durationMs: 700 }] },
     })
     expect(r.available).toBe(true)
     if (r.available) {

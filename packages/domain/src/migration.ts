@@ -1,11 +1,5 @@
 import { Effect, Schema } from "effect"
-import {
-  RefCache,
-  SCHEMA_VERSION,
-  SessionRecord,
-  SnapshotResult,
-  TargetRecord
-} from "./entities.js"
+import { RefCache, SCHEMA_VERSION, SessionRecord, SnapshotResult, TargetRecord } from "./entities.js"
 import { CorruptRecord } from "./errors.js"
 import { SemanticBridgeSnapshot, SidecarRecord } from "./value-objects.js"
 
@@ -39,7 +33,7 @@ const LooseSessionInput = Schema.Struct({
   activeTargetId: Schema.optional(Schema.NullOr(Schema.String)),
   lastSnapshotId: Schema.optional(Schema.NullOr(Schema.String)),
   // The looser copies typed this `unknown[]`; accept anything.
-  sidecars: Schema.optional(Schema.Array(Schema.Unknown))
+  sidecars: Schema.optional(Schema.Array(Schema.Unknown)),
 })
 
 const decodeLooseSession = Schema.decodeUnknown(LooseSessionInput)
@@ -50,14 +44,12 @@ const normalizeSidecar = (raw: unknown): Schema.Schema.Type<typeof SidecarRecord
   if (typeof r["name"] !== "string") return null
   const status = r["status"]
   const validStatus =
-    status === "running" || status === "stale" || status === "stopped" || status === "unknown"
-      ? status
-      : "unknown"
+    status === "running" || status === "stale" || status === "stopped" || status === "unknown" ? status : "unknown"
   return {
     name: r["name"],
     pid: typeof r["pid"] === "number" ? r["pid"] : null,
     port: typeof r["port"] === "number" ? r["port"] : null,
-    status: validStatus
+    status: validStatus,
   }
 }
 
@@ -67,12 +59,10 @@ const normalizeSidecar = (raw: unknown): Schema.Schema.Type<typeof SidecarRecord
  */
 export const readSessionLenient = (
   input: unknown,
-  path: string
+  path: string,
 ): Effect.Effect<Schema.Schema.Type<typeof SessionRecord>, CorruptRecord> =>
   decodeLooseSession(input).pipe(
-    Effect.mapError(
-      (e) => new CorruptRecord({ path, reason: `session: ${String(e)}` })
-    ),
+    Effect.mapError((e) => new CorruptRecord({ path, reason: `session: ${String(e)}` })),
     Effect.map((loose) => ({
       schemaVersion: SCHEMA_VERSION,
       sessionId: loose.sessionId as Schema.Schema.Type<typeof SessionRecord>["sessionId"],
@@ -86,8 +76,8 @@ export const readSessionLenient = (
       lastSnapshotId: loose.lastSnapshotId ?? null,
       sidecars: (loose.sidecars ?? [])
         .map(normalizeSidecar)
-        .filter((s): s is Schema.Schema.Type<typeof SidecarRecord> => s !== null)
-    }))
+        .filter((s): s is Schema.Schema.Type<typeof SidecarRecord> => s !== null),
+    })),
   )
 
 // ---------------------------------------------------------------------------
@@ -98,7 +88,7 @@ export const readSessionLenient = (
 const decodeBridge = Schema.decodeUnknown(SemanticBridgeSnapshot)
 
 const coerceSemanticBridge = (
-  raw: unknown
+  raw: unknown,
 ): Effect.Effect<Schema.Schema.Type<typeof SemanticBridgeSnapshot> | undefined> =>
   raw === undefined || raw === null
     ? Effect.succeed(undefined)
@@ -111,34 +101,28 @@ const coerceSemanticBridge = (
  */
 export const readSnapshotLenient = (
   input: unknown,
-  path: string
+  path: string,
 ): Effect.Effect<Schema.Schema.Type<typeof SnapshotResult>, CorruptRecord> =>
   Effect.gen(function* () {
-    const obj =
-      typeof input === "object" && input !== null
-        ? (input as Record<string, unknown>)
-        : {}
+    const obj = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}
     const { semanticBridge: rawBridge, ...rest } = obj
     const bridge = yield* coerceSemanticBridge(rawBridge)
     const body = yield* Schema.decodeUnknown(SnapshotResult.omit("semanticBridge"))(rest).pipe(
-      Effect.mapError((e) => new CorruptRecord({ path, reason: `snapshot: ${String(e)}` }))
+      Effect.mapError((e) => new CorruptRecord({ path, reason: `snapshot: ${String(e)}` })),
     )
     return bridge === undefined ? body : { ...body, semanticBridge: bridge }
   })
 
 export const readRefCacheLenient = (
   input: unknown,
-  path: string
+  path: string,
 ): Effect.Effect<Schema.Schema.Type<typeof RefCache>, CorruptRecord> =>
   Effect.gen(function* () {
-    const obj =
-      typeof input === "object" && input !== null
-        ? (input as Record<string, unknown>)
-        : {}
+    const obj = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}
     const { semanticBridge: rawBridge, ...rest } = obj
     const bridge = yield* coerceSemanticBridge(rawBridge)
     const body = yield* Schema.decodeUnknown(RefCache.omit("semanticBridge"))(rest).pipe(
-      Effect.mapError((e) => new CorruptRecord({ path, reason: `refcache: ${String(e)}` }))
+      Effect.mapError((e) => new CorruptRecord({ path, reason: `refcache: ${String(e)}` })),
     )
     return bridge === undefined ? body : { ...body, semanticBridge: bridge }
   })
@@ -151,8 +135,8 @@ export const readRefCacheLenient = (
  */
 export const readTargetLenient = (
   input: unknown,
-  path: string
+  path: string,
 ): Effect.Effect<Schema.Schema.Type<typeof TargetRecord>, CorruptRecord> =>
   Schema.decodeUnknown(TargetRecord)(input).pipe(
-    Effect.mapError((e) => new CorruptRecord({ path, reason: `target: ${String(e)}` }))
+    Effect.mapError((e) => new CorruptRecord({ path, reason: `target: ${String(e)}` })),
   )

@@ -22,7 +22,7 @@ import {
   RENDER_HIGH_MS,
   reportFindings,
   round1,
-  STATS_WINDOW
+  STATS_WINDOW,
 } from "@expo98/handlers-net-perf"
 
 describe("AC-046 fixed thresholds", () => {
@@ -35,9 +35,7 @@ describe("AC-046 fixed thresholds", () => {
   })
 
   it("AC-046 network: slow ≥ 500 (medium), high ≥ 1000", () => {
-    expect(reportFindings({ requests: [{ durationMs: 499 }] })[0]?.type).toBe(
-      "insufficient-evidence"
-    )
+    expect(reportFindings({ requests: [{ durationMs: 499 }] })[0]?.type).toBe("insufficient-evidence")
     const medium = reportFindings({ requests: [{ durationMs: 500 }] })
     expect(medium[0]?.type).toBe("network-latency")
     expect(medium[0]?.severity).toBe("medium")
@@ -46,9 +44,7 @@ describe("AC-046 fixed thresholds", () => {
   })
 
   it("AC-046 render: worst commit ≥ 16.7 flagged (high ≥ 50), uses actualDuration fallback", () => {
-    expect(reportFindings({ renderCommits: [{ durationMs: 16 }] })[0]?.type).toBe(
-      "insufficient-evidence"
-    )
+    expect(reportFindings({ renderCommits: [{ durationMs: 16 }] })[0]?.type).toBe("insufficient-evidence")
     const flagged = reportFindings({ renderCommits: [{ durationMs: 16.7 }] })
     expect(flagged[0]?.type).toBe("render-cost")
     expect(flagged[0]?.severity).toBe("medium")
@@ -80,7 +76,7 @@ describe("AC-046 fixed thresholds", () => {
     const findings = reportFindings({
       requests: [{ durationMs: 1200 }],
       renderCommits: [{ durationMs: 80 }],
-      frames: [{ deltaMs: 34 }, { deltaMs: 34 }, { deltaMs: 34 }, { deltaMs: 34 }, { deltaMs: 34 }]
+      frames: [{ deltaMs: 34 }, { deltaMs: 34 }, { deltaMs: 34 }, { deltaMs: 34 }, { deltaMs: 34 }],
     })
     expect(findings.map((f) => f.type)).toEqual(["network-latency", "render-cost", "frame-jank"])
     expect(findings[2]?.severity).toBe("high") // 5 dropped → high
@@ -104,15 +100,15 @@ describe("AC-047 frame / FPS calc at EXACT budgets (Q#18)", () => {
     // mean = 16.67 → 1000/16.67 = 59.988 → round1 = 60.0
     const stats = frameStats([
       { t: 0, deltaMs: 16.67 },
-      { t: 16.67, deltaMs: 16.67 }
+      { t: 16.67, deltaMs: 16.67 },
     ])
     expect(stats.avgFps).toBe(60)
     // mean of [10,20] = 15 → 1000/15 = 66.666… → 66.7
     expect(
       frameStats([
         { t: 0, deltaMs: 10 },
-        { t: 10, deltaMs: 20 }
-      ]).avgFps
+        { t: 10, deltaMs: 20 },
+      ]).avgFps,
     ).toBe(66.7)
   })
 
@@ -121,7 +117,7 @@ describe("AC-047 frame / FPS calc at EXACT budgets (Q#18)", () => {
     const stats = frameStats([
       { t: 0, deltaMs: 33.33 },
       { t: 1, deltaMs: 33.34 },
-      { t: 2, deltaMs: 50 }
+      { t: 2, deltaMs: 50 },
     ])
     expect(stats.droppedFrameCount).toBe(2) // 33.34 and 50
   })
@@ -130,7 +126,7 @@ describe("AC-047 frame / FPS calc at EXACT budgets (Q#18)", () => {
     const stats = frameStats([
       { t: 0, deltaMs: 16.67 }, // not > 16.67 → not long
       { t: 1, deltaMs: 16.68 }, // long
-      { t: 2, deltaMs: 40 } // long (and dropped)
+      { t: 2, deltaMs: 40 }, // long (and dropped)
     ])
     expect(stats.longFrameCount).toBe(2)
   })
@@ -140,8 +136,8 @@ describe("AC-047 frame / FPS calc at EXACT budgets (Q#18)", () => {
       frameStats([
         { t: 0, deltaMs: 12 },
         { t: 1, deltaMs: 99 },
-        { t: 2, deltaMs: 33 }
-      ]).worstFrameMs
+        { t: 2, deltaMs: 33 },
+      ]).worstFrameMs,
     ).toBe(99)
   })
 

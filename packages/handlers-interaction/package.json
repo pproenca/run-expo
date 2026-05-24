@@ -2,10 +2,17 @@
   "name": "@expo98/handlers-interaction",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "expo98 reimagined — D6/D7 handlers: app/sim lifecycle (boot/launch/terminate/reload/install/uninstall/open) + interaction (tap/gesture/ref-actions/keyboard/clipboard/screenshot) + wait. All device/runtime-eval gated via core's capability injection.",
-  "exports": { ".": { "types": "./src/index.ts", "import": "./src/index.ts" } },
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@expo98/core": "workspace:*",
     "@expo98/domain": "workspace:*",

@@ -28,7 +28,7 @@ export const BRIDGE_DOMAINS: ReadonlyArray<BridgeDomain> = [
   "storage",
   "controls",
   "performance",
-  "snapshot"
+  "snapshot",
 ]
 
 /** Canonical metadata object the installer writes. */
@@ -37,7 +37,7 @@ export const bridgeMetadata = (): BridgeMetadata => ({
   bridgeVersion: EXPO98_BRIDGE_VERSION,
   developmentOnly: true,
   generatedBy: "expo98",
-  domains: BRIDGE_DOMAINS
+  domains: BRIDGE_DOMAINS,
 })
 
 /** On-disk layout, relative to a project root. */
@@ -50,18 +50,16 @@ export interface BridgeFilePaths {
   readonly legacyMetadata: string
 }
 
-const joinPath = (root: string, rel: string): string =>
-  `${root.replace(/\/+$/, "")}/${rel}`
+const joinPath = (root: string, rel: string): string => `${root.replace(/\/+$/, "")}/${rel}`
 
 export const bridgeFilePaths = (root: string): BridgeFilePaths => ({
   metadata: joinPath(root, ".expo98/bridge.json"),
   source: joinPath(root, "src/expo98-devtools-bridge.ts"),
-  legacyMetadata: joinPath(root, ".expo-ios/bridge.json")
+  legacyMetadata: joinPath(root, ".expo-ios/bridge.json"),
 })
 
 /** The metadata file contents (pretty JSON). */
-export const bridgeMetadataContents = (): string =>
-  JSON.stringify(bridgeMetadata(), null, 2) + "\n"
+export const bridgeMetadataContents = (): string => JSON.stringify(bridgeMetadata(), null, 2) + "\n"
 
 /**
  * The generated registration source (AC-009 dev-only). It refuses to register

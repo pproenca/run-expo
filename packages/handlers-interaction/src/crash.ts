@@ -91,10 +91,7 @@ export interface EvaluateCrashInput {
  */
 export const evaluateCrash = (input: EvaluateCrashInput): CrashEvaluation => {
   const matched: ReadonlyArray<CrashReport> = input.candidates
-    .filter(
-      (candidate) =>
-        isCrashReportPath(candidate.path) && candidate.mtimeMs > input.startedAt
-    )
+    .filter((candidate) => isCrashReportPath(candidate.path) && candidate.mtimeMs > input.startedAt)
     .map((candidate) => ({ path: candidate.path, mtimeMs: candidate.mtimeMs }))
 
   const crashCheck: CrashCheck = {
@@ -103,7 +100,7 @@ export const evaluateCrash = (input: EvaluateCrashInput): CrashEvaluation => {
     processName: input.processName,
     since: input.startedAt,
     waitedMs: input.waitedMs,
-    reportCount: matched.length
+    reportCount: matched.length,
   }
 
   if (matched.length > 0) {
@@ -111,7 +108,7 @@ export const evaluateCrash = (input: EvaluateCrashInput): CrashEvaluation => {
       available: false,
       reason: `The app generated ${matched.length} matching iOS crash report(s) after ${input.action}.`,
       crashCheck,
-      crashReports: matched
+      crashReports: matched,
     }
   }
 

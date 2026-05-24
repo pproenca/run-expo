@@ -1,10 +1,6 @@
 import { CliRuntimeError, command, gate, redact } from "@expo98/core"
 import { Effect } from "effect"
-import {
-  type CommandContext,
-  type CommandRegistration,
-  registration
-} from "./registry.js"
+import { type CommandContext, type CommandRegistration, registration } from "./registry.js"
 
 /**
  * The proof READ commands wired end-to-end THROUGH core's dispatch (S12).
@@ -42,10 +38,10 @@ const policyShow = registration({
           policy: ctx.policy,
           decision: decision._tag,
           denied: decision._tag === "deny",
-          reason: decision._tag === "deny" ? decision.payload.reason : null
+          reason: decision._tag === "deny" ? decision.payload.reason : null,
         }
-      })
-    )
+      }),
+    ),
 })
 
 // ── redact <file> — read a file and emit its redacted contents (AC-003/012). ─
@@ -59,27 +55,23 @@ const redactFile = registration({
       Effect.gen(function* () {
         const file = ctx.positionals[0]
         if (file === undefined) {
-          return yield* Effect.fail(
-            new CliRuntimeError({ message: "redact requires a <file> argument." })
-          )
+          return yield* Effect.fail(new CliRuntimeError({ message: "redact requires a <file> argument." }))
         }
         // `redact` is a `read` command, so its `R` stays `never` (cannot name a
         // dangerous capability). It uses the benign `Fs` port via the context —
         // not the capability `R` channel — so the withholding contract holds.
-        const raw = yield* ctx.fs.readFile(file).pipe(
-          Effect.mapError(
-            (e) => new CliRuntimeError({ message: `Cannot read ${file}: ${e.reason}` })
-          )
-        )
+        const raw = yield* ctx.fs
+          .readFile(file)
+          .pipe(Effect.mapError((e) => new CliRuntimeError({ message: `Cannot read ${file}: ${e.reason}` })))
         // Redact at the value boundary; dispatch redacts again (idempotent).
         const parsed = tryParseJson(raw)
         return {
           available: true,
           file,
-          redacted: redact(parsed)
+          redacted: redact(parsed),
         }
-      })
-    )
+      }),
+    ),
 })
 
 // ── doctor — capability/environment readiness summary (read). ────────────────
@@ -101,10 +93,10 @@ const doctor = registration({
           xcrun: "unknown",
           simctl: "unknown",
           axe: "unknown",
-          idb: "unknown"
-        }
-      })
-    )
+          idb: "unknown",
+        },
+      }),
+    ),
 })
 
 // ── skills list — list bundled skill ids (static read). ──────────────────────
@@ -119,9 +111,9 @@ const skillsList = registration({
         available: true,
         // INTEGRATION SEAM: the bundled skill catalog is owned by the deferred
         // discovery handler package; the shell proves the read envelope.
-        skills: [] as ReadonlyArray<string>
-      })
-    )
+        skills: [] as ReadonlyArray<string>,
+      }),
+    ),
 })
 
 // ── version — report the CLI version (read). ─────────────────────────────────
@@ -132,8 +124,8 @@ const version = registration({
   build: () =>
     command(
       { action: "version", sideEffect: "read" } as const,
-      Effect.succeed({ available: true, version: CLI_VERSION })
-    )
+      Effect.succeed({ available: true, version: CLI_VERSION }),
+    ),
 })
 
 /** The core READ proof-commands, in a stable order. */
@@ -142,7 +134,7 @@ export const coreReadCommands: ReadonlyArray<CommandRegistration> = [
   policyShow,
   redactFile,
   skillsList,
-  version
+  version,
 ]
 
 /** Best-effort JSON parse; falls back to the raw string for non-JSON files. */

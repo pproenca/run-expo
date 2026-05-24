@@ -3,5 +3,5 @@ packages:
 # vitest's optional native deps — not needed for `vitest run`, so don't run their
 # install scripts. (pnpm 11 added this block as placeholders; resolved to false.)
 allowBuilds:
-  '@parcel/watcher': false
+  "@parcel/watcher": false
   msgpackr-extract: false

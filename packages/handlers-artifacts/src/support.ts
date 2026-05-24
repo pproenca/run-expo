@@ -28,5 +28,5 @@ export const RUN_RECORD_SUMMARY_KEY_CAP = 40 as const
  */
 export const descriptor = <S extends SideEffect>(
   action: string,
-  sideEffect: S
+  sideEffect: S,
 ): CommandDescriptor & { readonly sideEffect: S } => ({ action, sideEffect })

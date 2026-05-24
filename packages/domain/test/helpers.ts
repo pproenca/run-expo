@@ -37,7 +37,7 @@ export class TestClock implements PersistenceClock {
  */
 export const withPersistence = <A, E>(
   clock: TestClock,
-  use: (p: Persistence) => Effect.Effect<A, E>
+  use: (p: Persistence) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E> => {
   const fsLayer = Layer.effect(Fs, makeMemoryFs())
   const layer = persistenceLayer(clock).pipe(Layer.provide(fsLayer))

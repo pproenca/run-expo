@@ -62,10 +62,7 @@ export const frameDeltaMs = (ts: number, lastTs: number): number => round1(ts - 
  * retained sample, and truncate to the newest `RETAIN_WINDOW` (AC-047). PURE —
  * returns a NEW array. The very first sample has no predecessor; its delta is 0.
  */
-export const pushFrame = (
-  frames: ReadonlyArray<FrameSample>,
-  ts: number
-): ReadonlyArray<FrameSample> => {
+export const pushFrame = (frames: ReadonlyArray<FrameSample>, ts: number): ReadonlyArray<FrameSample> => {
   const last = frames[frames.length - 1]
   const deltaMs = last === undefined ? 0 : frameDeltaMs(ts, last.t)
   const next = [...frames, { t: ts, deltaMs }]
@@ -95,7 +92,7 @@ export const frameStats = (frames: ReadonlyArray<FrameSample>): FrameStats => {
       worstFrameMs: null,
       droppedFrameCount: 0,
       longFrameCount: 0,
-      sampleCount: 0
+      sampleCount: 0,
     }
   }
   const mean = deltas.reduce((sum, value) => sum + value, 0) / deltas.length
@@ -104,6 +101,6 @@ export const frameStats = (frames: ReadonlyArray<FrameSample>): FrameStats => {
     worstFrameMs: Math.max(...deltas),
     droppedFrameCount: deltas.filter((delta) => delta > FRAME_2).length,
     longFrameCount: deltas.filter((delta) => delta > FRAME_1).length,
-    sampleCount: deltas.length
+    sampleCount: deltas.length,
   }
 }

@@ -95,9 +95,7 @@ export interface NetworkWaterfall {
 // ──────────────────────────────────────────────────────────────────────────
 
 /** Parse origin/path from a URL; an invalid URL yields `origin:null, path:url`. PURE. */
-export const parseUrlParts = (
-  url: string
-): { readonly origin: string | null; readonly path: string | null } => {
+export const parseUrlParts = (url: string): { readonly origin: string | null; readonly path: string | null } => {
   if (!url) {
     return { origin: null, path: null }
   }
@@ -111,10 +109,7 @@ export const parseUrlParts = (
 }
 
 /** Infer `endedAt = Date.parse(startedAt) + durationMs` when absent (AC-045). PURE. */
-export const inferEndedAt = (
-  startedAt: string | null,
-  durationMs: number | null
-): string | null => {
+export const inferEndedAt = (startedAt: string | null, durationMs: number | null): string | null => {
   if (startedAt === null || durationMs === null) {
     return null
   }
@@ -147,9 +142,7 @@ export const normalizeRequest = (raw: unknown): NormalizedNetworkRequest => {
   const parsed = parseUrlParts(url)
   const startedAt = optionalString(request["startedAt"])
   const durationMs = numberOrNull(request["durationMs"])
-  const endedAt =
-    optionalString(request["endedAt"] ?? request["completedAt"]) ??
-    inferEndedAt(startedAt, durationMs)
+  const endedAt = optionalString(request["endedAt"] ?? request["completedAt"]) ?? inferEndedAt(startedAt, durationMs)
 
   const status = numberOrNull(request["status"]) ?? numberOrNull(response["status"])
   const ok =
@@ -162,8 +155,7 @@ export const normalizeRequest = (raw: unknown): NormalizedNetworkRequest => {
   return {
     id: optionalString(request["id"]) ?? optionalString(request["requestId"]),
     requestId: optionalString(request["requestId"]) ?? optionalString(request["id"]),
-    method:
-      optionalString(request["method"]) ?? optionalString(inner["method"]) ?? "GET",
+    method: optionalString(request["method"]) ?? optionalString(inner["method"]) ?? "GET",
     url,
     origin: parsed.origin,
     path: parsed.path,
@@ -174,21 +166,17 @@ export const normalizeRequest = (raw: unknown): NormalizedNetworkRequest => {
     ok,
     requestBytes: numberOrNull(request["requestBytes"] ?? request["encodedRequestBytes"]),
     responseBytes: numberOrNull(
-      request["responseBytes"] ??
-        request["encodedResponseBytes"] ??
-        response["encodedBodySize"] ??
-        response["size"]
+      request["responseBytes"] ?? request["encodedResponseBytes"] ?? response["encodedBodySize"] ?? response["size"],
     ),
     retryCount: numberOrNull(request["retryCount"]) ?? 0,
     aborted: request["aborted"] === true,
-    error: optionalString(request["error"])
+    error: optionalString(request["error"]),
   }
 }
 
 /** Normalize a list of raw request rows (AC-045). PURE. */
-export const normalizeRequests = (
-  rows: ReadonlyArray<unknown>
-): ReadonlyArray<NormalizedNetworkRequest> => rows.map(normalizeRequest)
+export const normalizeRequests = (rows: ReadonlyArray<unknown>): ReadonlyArray<NormalizedNetworkRequest> =>
+  rows.map(normalizeRequest)
 
 // ──────────────────────────────────────────────────────────────────────────
 // Duplicates (AC-045)
@@ -198,9 +186,7 @@ export const normalizeRequests = (
  * Group by `<method> <origin><path|url>`, keep groups with > 1 row, and report
  * `count` / `requestIds` (non-null) / `totalDurationMs` (Σ durationMs). PURE.
  */
-export const duplicateGroups = (
-  requests: ReadonlyArray<NormalizedNetworkRequest>
-): ReadonlyArray<DuplicateGroup> => {
+export const duplicateGroups = (requests: ReadonlyArray<NormalizedNetworkRequest>): ReadonlyArray<DuplicateGroup> => {
   const groups = new Map<string, Array<NormalizedNetworkRequest>>()
   for (const request of requests) {
     const key = `${request.method} ${request.origin ?? ""}${request.path ?? request.url ?? ""}`
@@ -238,9 +224,7 @@ export const duplicateGroups = (
  *   - `duplicateGroups` over ALL requests.
  * PURE.
  */
-export const buildWaterfall = (
-  requests: ReadonlyArray<NormalizedNetworkRequest>
-): NetworkWaterfall => {
+export const buildWaterfall = (requests: ReadonlyArray<NormalizedNetworkRequest>): NetworkWaterfall => {
   const ranked = requests
     .filter((request) => typeof request.durationMs === "number")
     .slice()
@@ -249,10 +233,9 @@ export const buildWaterfall = (
   return {
     requestCount: requests.length,
     slowThresholdMs: SLOW_THRESHOLD_MS,
-    slowRequestCount: ranked.filter((request) => (request.durationMs ?? 0) >= SLOW_THRESHOLD_MS)
-      .length,
+    slowRequestCount: ranked.filter((request) => (request.durationMs ?? 0) >= SLOW_THRESHOLD_MS).length,
     rankedRequests: ranked,
-    duplicateGroups: duplicateGroups(requests)
+    duplicateGroups: duplicateGroups(requests),
   }
 }
 
@@ -302,7 +285,7 @@ export interface HarCreator {
 export const harFromRequests = (
   requests: ReadonlyArray<NormalizedNetworkRequest>,
   creator: HarCreator,
-  nowIso: string
+  nowIso: string,
 ): HarDocument => ({
   log: {
     version: HAR_VERSION,
@@ -316,18 +299,18 @@ export const harFromRequests = (
           url: request.url,
           headers: {},
           queryString: [],
-          cookies: []
+          cookies: [],
         },
         response: {
           status: request.status ?? 0,
           statusText: "",
           headers: {},
           cookies: [],
-          content: { size: request.responseBytes ?? 0, mimeType: "" }
-        }
-      })
-    )
-  }
+          content: { size: request.responseBytes ?? 0, mimeType: "" },
+        },
+      }),
+    ),
+  },
 })
 
 /**
@@ -339,7 +322,5 @@ export const harFromRequests = (
  * The legacy `network-evidence` did a bare `path.resolve(args.outputPath ?? …)`
  * with no confinement (CWE-22) — this is exactly that hole, closed.
  */
-export const confineHarOutputPath = (
-  artifactsRoot: string,
-  outputPath: string
-): Effect.Effect<string, PathEscape> => confinePath(artifactsRoot, outputPath)
+export const confineHarOutputPath = (artifactsRoot: string, outputPath: string): Effect.Effect<string, PathEscape> =>
+  confinePath(artifactsRoot, outputPath)

@@ -1,9 +1,5 @@
 import { Effect, Stream } from "effect"
-import {
-  DeviceCapability,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "./capabilities.js"
+import { DeviceCapability, RuntimeEvalCapability, SourceWriteCapability } from "./capabilities.js"
 import { CliRuntimeError, type DomainError, EXIT_SUCCESS, type ExitCode } from "./errors.js"
 import {
   type CommandDescriptor,
@@ -11,7 +7,7 @@ import {
   gate,
   type PolicyDeniedPayload,
   type PolicyDocument,
-  type SideEffect
+  type SideEffect,
 } from "./policy.js"
 import { redact } from "./redaction.js"
 import { RunningTruncator } from "./truncate.js"
@@ -58,14 +54,11 @@ export interface Command<S extends SideEffect, A> {
 /** Helper that infers `S` and pins the handler's `R` to `CapabilityFor<S>`. */
 export const command = <S extends SideEffect, A>(
   descriptor: CommandDescriptor & { readonly sideEffect: S },
-  handler: Effect.Effect<A, DomainError, CapabilityFor<S>>
+  handler: Effect.Effect<A, DomainError, CapabilityFor<S>>,
 ): Command<S, A> => ({ descriptor, handler })
 
 /** The capabilities the dispatcher needs available to *provide* on gate-pass. */
-export type CapabilityEnv =
-  | RuntimeEvalCapability
-  | DeviceCapability
-  | SourceWriteCapability
+export type CapabilityEnv = RuntimeEvalCapability | DeviceCapability | SourceWriteCapability
 
 /** A boundary-finalised result, ready for the CLI shell to serialise. */
 export interface DispatchResult<A> {
@@ -88,7 +81,7 @@ export interface RunRecorder {
 /** A no-op recorder (used when neither `--record` nor `--state-dir` is set). */
 export const NoopRecorder: RunRecorder = {
   start: () => Effect.void,
-  finish: () => Effect.void
+  finish: () => Effect.void,
 }
 
 /**
@@ -114,7 +107,7 @@ const finaliseBoundary = (payload: unknown): unknown => redact(payload)
 export const dispatch = <S extends SideEffect, A>(
   cmd: Command<S, A>,
   policy: PolicyDocument,
-  recorder: RunRecorder = NoopRecorder
+  recorder: RunRecorder = NoopRecorder,
 ): Effect.Effect<DispatchResult<A>, never, CapabilityEnv> =>
   Effect.gen(function* () {
     const sideEffect = classify(cmd.descriptor)
@@ -128,12 +121,10 @@ export const dispatch = <S extends SideEffect, A>(
       const result: DispatchResult<A> = {
         exitCode: EXIT_SUCCESS, // designed-unavailable: exit 0 (AC-001/§3.2)
         payload: finaliseBoundary(denial),
-        sideEffect
+        sideEffect,
       }
       // AC-025: finish-record failure must NOT change the exit code.
-      yield* recorder
-        .finish({ status: "completed", exitCode: result.exitCode, summary: denial })
-        .pipe(Effect.ignore)
+      yield* recorder.finish({ status: "completed", exitCode: result.exitCode, summary: denial }).pipe(Effect.ignore)
       return result
     }
 
@@ -146,11 +137,9 @@ export const dispatch = <S extends SideEffect, A>(
       const result: DispatchResult<A> = {
         exitCode: EXIT_SUCCESS,
         payload,
-        sideEffect
+        sideEffect,
       }
-      yield* recorder
-        .finish({ status: "completed", exitCode: result.exitCode, summary: payload })
-        .pipe(Effect.ignore)
+      yield* recorder.finish({ status: "completed", exitCode: result.exitCode, summary: payload }).pipe(Effect.ignore)
       return result
     }
 
@@ -162,11 +151,9 @@ export const dispatch = <S extends SideEffect, A>(
     const result: DispatchResult<A> = {
       exitCode,
       payload: finaliseBoundary({ ok: false, error: errorMessage(error) }),
-      sideEffect
+      sideEffect,
     }
-    yield* recorder
-      .finish({ status: "failed", exitCode, summary: result.payload })
-      .pipe(Effect.ignore)
+    yield* recorder.finish({ status: "failed", exitCode, summary: result.payload }).pipe(Effect.ignore)
     return result
   })
 
@@ -187,38 +174,25 @@ export const dispatch = <S extends SideEffect, A>(
  */
 const provideCapabilityFor = <S extends SideEffect, A>(
   sideEffect: SideEffect,
-  handler: Effect.Effect<A, DomainError, CapabilityFor<S>>
+  handler: Effect.Effect<A, DomainError, CapabilityFor<S>>,
 ): Effect.Effect<A, DomainError, CapabilityEnv> => {
   const h = handler as Effect.Effect<A, DomainError, CapabilityEnv>
   switch (sideEffect) {
     case "read":
       return h
     case "device":
-      return DeviceCapability.pipe(
-        Effect.flatMap((cap) => Effect.provideService(h, DeviceCapability, cap))
-      )
+      return DeviceCapability.pipe(Effect.flatMap((cap) => Effect.provideService(h, DeviceCapability, cap)))
     case "runtime-eval":
-      return RuntimeEvalCapability.pipe(
-        Effect.flatMap((cap) =>
-          Effect.provideService(h, RuntimeEvalCapability, cap)
-        )
-      )
+      return RuntimeEvalCapability.pipe(Effect.flatMap((cap) => Effect.provideService(h, RuntimeEvalCapability, cap)))
     case "source-write":
-      return SourceWriteCapability.pipe(
-        Effect.flatMap((cap) =>
-          Effect.provideService(h, SourceWriteCapability, cap)
-        )
-      )
+      return SourceWriteCapability.pipe(Effect.flatMap((cap) => Effect.provideService(h, SourceWriteCapability, cap)))
   }
 }
 
-const exitCodeForDomainError = (error: DomainError): ExitCode =>
-  error._tag === "CliUsageError" ? 2 : 1
+const exitCodeForDomainError = (error: DomainError): ExitCode => (error._tag === "CliUsageError" ? 2 : 1)
 
 const errorMessage = (error: DomainError): string =>
-  "message" in error && typeof error.message === "string"
-    ? error.message
-    : error._tag
+  "message" in error && typeof error.message === "string" ? error.message : error._tag
 
 /** Pull the first failure out of a Cause without throwing. */
 const extractError = (cause: unknown): DomainError => {
@@ -261,7 +235,7 @@ export interface BatchStep {
 
 export const runBatch = (
   steps: ReadonlyArray<BatchStep>,
-  bail: boolean
+  bail: boolean,
 ): Effect.Effect<BatchResult, never, CapabilityEnv> =>
   Effect.gen(function* () {
     const results: Array<BatchStepResult> = []
@@ -277,7 +251,7 @@ export const runBatch = (
       results.push({
         exitCode: result.exitCode,
         payload: result.payload,
-        sideEffect: result.sideEffect
+        sideEffect: result.sideEffect,
       })
       if (result.exitCode !== EXIT_SUCCESS && failureIndex === null) {
         failureIndex = i
@@ -291,7 +265,7 @@ export const runBatch = (
       ok: failureIndex === null,
       bail,
       failureIndex,
-      steps: results
+      steps: results,
     }
   })
 
@@ -301,9 +275,7 @@ export const runBatch = (
 // serialisation (finding M2), so a secret cannot split across events.
 // ──────────────────────────────────────────────────────────────────────────
 
-export const ndjsonStream = <E, R>(
-  events: Stream.Stream<unknown, E, R>
-): Stream.Stream<string, E, R> =>
+export const ndjsonStream = <E, R>(events: Stream.Stream<unknown, E, R>): Stream.Stream<string, E, R> =>
   Stream.suspend(() => {
     const budget = new RunningTruncator()
     return events.pipe(
@@ -312,7 +284,7 @@ export const ndjsonStream = <E, R>(
         const line = JSON.stringify(redact(event)) + "\n"
         return budget.push(line)
       }),
-      Stream.filter((emitted) => emitted.length > 0)
+      Stream.filter((emitted) => emitted.length > 0),
     )
   })
 

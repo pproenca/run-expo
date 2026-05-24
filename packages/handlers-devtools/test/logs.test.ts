@@ -6,43 +6,27 @@
  * construction and END-TO-END through dispatch (the read path runs ungated).
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  DeviceCapability,
-  dispatch,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "@expo98/core"
-import {
-  type LogEntry,
-  logsCommand,
-  type LogStream,
-  resolveLimit
-} from "@expo98/handlers-devtools"
+import { DeviceCapability, dispatch, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
+import { type LogEntry, logsCommand, type LogStream, resolveLimit } from "@expo98/handlers-devtools"
 import { Effect, Layer } from "effect"
 
 const Caps = Layer.mergeAll(
-  Layer.succeed(
-    RuntimeEvalCapability,
-    RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })
-  ),
-  Layer.succeed(
-    DeviceCapability,
-    DeviceCapability.of({ invoke: () => Effect.succeed("ok") })
-  ),
+  Layer.succeed(RuntimeEvalCapability, RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })),
+  Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("ok") })),
   Layer.succeed(
     SourceWriteCapability,
     SourceWriteCapability.of({
       writeFile: () => Effect.void,
-      deleteFile: () => Effect.void
-    })
-  )
+      deleteFile: () => Effect.void,
+    }),
+  ),
 )
 
 const entries = (n: number): ReadonlyArray<LogEntry> =>
   Array.from({ length: n }, (_, i) => ({
     level: "log",
     message: `m${i}`,
-    timestamp: i
+    timestamp: i,
   }))
 
 const STREAMS: ReadonlyArray<LogStream> = ["console", "errors"]
@@ -73,7 +57,7 @@ describe("AC-039 console/errors limit clamp + last-N", () => {
         // last-N: the final entry is the newest (m249), the first kept is m150.
         expect(payload.entries[0]?.message).toBe("m150")
         expect(payload.entries[payload.entries.length - 1]?.message).toBe("m249")
-      })
+      }),
     )
   }
 
@@ -88,7 +72,7 @@ describe("AC-039 console/errors limit clamp + last-N", () => {
       expect(payload.limit).toBe(1_000)
       expect(payload.entries.length).toBe(1_000)
       expect(payload.entries[payload.entries.length - 1]?.message).toBe("m2499")
-    })
+    }),
   )
 
   it.effect("AC-039 fewer entries than the limit returns all of them", () =>
@@ -97,6 +81,6 @@ describe("AC-039 console/errors limit clamp + last-N", () => {
       const result = yield* dispatch(cmd, {}).pipe(Effect.provide(Caps))
       const payload = result.payload as { entries: ReadonlyArray<LogEntry> }
       expect(payload.entries.length).toBe(7)
-    })
+    }),
   )
 })

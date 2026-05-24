@@ -34,5 +34,5 @@ export const resolveMetroPort = (metroPort: number | undefined): number =>
  */
 export const descriptor = <S extends SideEffect>(
   action: string,
-  sideEffect: S
+  sideEffect: S,
 ): CommandDescriptor & { readonly sideEffect: S } => ({ action, sideEffect })

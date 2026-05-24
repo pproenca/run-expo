@@ -15,10 +15,7 @@
  * the persisted shape, this is the calculation.)
  */
 import type { RunPayloadSummary } from "@expo98/domain"
-import {
-  BACKLOG_SUMMARY_KEY_CAP,
-  RUN_RECORD_SUMMARY_KEY_CAP
-} from "./support.js"
+import { BACKLOG_SUMMARY_KEY_CAP, RUN_RECORD_SUMMARY_KEY_CAP } from "./support.js"
 
 /** Top-level keys of a payload, in insertion order. Non-objects ⇒ no keys. */
 const topLevelKeys = (payload: unknown): ReadonlyArray<string> =>
@@ -27,10 +24,7 @@ const topLevelKeys = (payload: unknown): ReadonlyArray<string> =>
     : []
 
 /** Read an optional numeric rollup field off a payload (else undefined). */
-const numberField = (
-  payload: unknown,
-  field: string
-): number | undefined => {
+const numberField = (payload: unknown, field: string): number | undefined => {
   if (payload === null || typeof payload !== "object") {
     return undefined
   }
@@ -64,7 +58,7 @@ export const summarizeRunRecordPayload = (payload: unknown): RunPayloadSummary =
     keys,
     ...(available === undefined ? {} : { available }),
     ...(routeCount === undefined ? {} : { routeCount }),
-    ...(eventCount === undefined ? {} : { eventCount })
+    ...(eventCount === undefined ? {} : { eventCount }),
   }
 }
 

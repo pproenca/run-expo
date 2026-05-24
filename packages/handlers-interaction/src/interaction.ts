@@ -28,13 +28,9 @@ import {
   type ScreenPoint,
   type ScrollArgs,
   type ScrollDirection,
-  type ScrollPlan
+  type ScrollPlan,
 } from "./gesture-plan.js"
-import {
-  type FullScreenshotArgs,
-  type FullScreenshotPlan,
-  planFullScreenshot
-} from "./screenshot-geometry.js"
+import { type FullScreenshotArgs, type FullScreenshotPlan, planFullScreenshot } from "./screenshot-geometry.js"
 import { descriptor } from "./support.js"
 
 const DEFAULT_DEVICE = "booted" as const
@@ -59,11 +55,9 @@ export const tapCommand = (args: TapArgs = {}): Command<"device", TapResult> => 
   return command(
     descriptor("tap", "device"),
     DeviceCapability.pipe(
-      Effect.flatMap((cap) =>
-        cap.invoke("idb", ["ui", "tap", "--udid", device, String(point.x), String(point.y)])
-      ),
-      Effect.map((value): TapResult => ({ action: "tap", point, value }))
-    )
+      Effect.flatMap((cap) => cap.invoke("idb", ["ui", "tap", "--udid", device, String(point.x), String(point.y)])),
+      Effect.map((value): TapResult => ({ action: "tap", point, value })),
+    ),
   )
 }
 
@@ -76,10 +70,7 @@ export interface GestureResult {
   readonly value: unknown
 }
 
-export const gestureCommand = (
-  kind: GestureKind,
-  args: GestureArgs = {}
-): Command<"device", GestureResult> => {
+export const gestureCommand = (kind: GestureKind, args: GestureArgs = {}): Command<"device", GestureResult> => {
   const plan = planGesture(kind, args)
   return command(
     descriptor("gesture", "device"),
@@ -94,11 +85,11 @@ export const gestureCommand = (
           String(plan.to.x),
           String(plan.to.y),
           "--duration",
-          String(plan.durationMs)
-        ])
+          String(plan.durationMs),
+        ]),
       ),
-      Effect.map((value): GestureResult => ({ action: "gesture", kind, plan, value }))
-    )
+      Effect.map((value): GestureResult => ({ action: "gesture", kind, plan, value })),
+    ),
   )
 }
 
@@ -127,11 +118,10 @@ const POINT_ACTIONS: ReadonlyArray<RefActionVerb> = [
   "uncheck",
   "drag",
   "scroll",
-  "scroll-into-view"
+  "scroll-into-view",
 ]
 
-export const refActionIsPointAction = (verb: RefActionVerb): boolean =>
-  POINT_ACTIONS.includes(verb)
+export const refActionIsPointAction = (verb: RefActionVerb): boolean => POINT_ACTIONS.includes(verb)
 
 export interface RefActionArgs {
   readonly box?: ScreenBox | null
@@ -158,26 +148,16 @@ export interface RefActionResult {
 export const refActionCommand = (
   verb: RefActionVerb,
   ref: string,
-  args: RefActionArgs = {}
+  args: RefActionArgs = {},
 ): Command<"device", RefActionResult> => {
   const point = pointForBox(args.box ?? null)
-  const scroll =
-    verb === "scroll" || verb === "scroll-into-view"
-      ? planScroll(args.direction ?? "down", {})
-      : null
+  const scroll = verb === "scroll" || verb === "scroll-into-view" ? planScroll(args.direction ?? "down", {}) : null
   const device = args.device ?? DEFAULT_DEVICE
   return command(
     descriptor(`ref.${verb}`, "device"),
     DeviceCapability.pipe(
       Effect.flatMap((cap) =>
-        cap.invoke("idb", [
-          "ui",
-          verb,
-          "--udid",
-          device,
-          ref,
-          ...(args.value !== undefined ? [args.value] : [])
-        ])
+        cap.invoke("idb", ["ui", verb, "--udid", device, ref, ...(args.value !== undefined ? [args.value] : [])]),
       ),
       Effect.map(
         (value): RefActionResult => ({
@@ -186,10 +166,10 @@ export const refActionCommand = (
           ref,
           point,
           scroll,
-          value
-        })
-      )
-    )
+          value,
+        }),
+      ),
+    ),
   )
 }
 
@@ -209,23 +189,20 @@ export interface KeyboardResult {
   readonly value: unknown
 }
 
-export const keyboardCommand = (
-  verb: KeyboardVerb,
-  args: KeyboardArgs = {}
-): Command<"device", KeyboardResult> => {
+export const keyboardCommand = (verb: KeyboardVerb, args: KeyboardArgs = {}): Command<"device", KeyboardResult> => {
   const device = args.device ?? DEFAULT_DEVICE
   const argv = Match.value(verb).pipe(
     Match.when("type", () => ["ui", "text", "--udid", device, args.text ?? ""]),
     Match.when("press", () => ["ui", "key", "--udid", device, args.key ?? ""]),
     Match.when("keyboard", () => ["ui", "key", "--udid", device, args.key ?? ""]),
-    Match.exhaustive
+    Match.exhaustive,
   )
   return command(
     descriptor(verb, "device"),
     DeviceCapability.pipe(
       Effect.flatMap((cap) => cap.invoke("idb", argv)),
-      Effect.map((value): KeyboardResult => ({ action: verb, verb, value }))
-    )
+      Effect.map((value): KeyboardResult => ({ action: verb, verb, value })),
+    ),
   )
 }
 
@@ -244,23 +221,20 @@ export interface ClipboardResult {
   readonly value: unknown
 }
 
-export const clipboardCommand = (
-  verb: ClipboardVerb,
-  args: ClipboardArgs = {}
-): Command<"device", ClipboardResult> => {
+export const clipboardCommand = (verb: ClipboardVerb, args: ClipboardArgs = {}): Command<"device", ClipboardResult> => {
   const device = args.device ?? DEFAULT_DEVICE
   const argv = Match.value(verb).pipe(
     Match.when("read", () => ["simctl", "pbpaste", device]),
     Match.when("write", () => ["simctl", "pbcopy", device]),
     Match.when("paste", () => ["simctl", "pbpaste", device]),
-    Match.exhaustive
+    Match.exhaustive,
   )
   return command(
     descriptor("clipboard", "device"),
     DeviceCapability.pipe(
       Effect.flatMap((cap) => cap.invoke("xcrun", argv)),
-      Effect.map((value): ClipboardResult => ({ action: "clipboard", verb, value }))
-    )
+      Effect.map((value): ClipboardResult => ({ action: "clipboard", verb, value })),
+    ),
   )
 }
 
@@ -292,7 +266,7 @@ export interface ScreenshotResult {
  */
 export const screenshotCommand = (
   artifactsRoot: string,
-  args: ScreenshotArgs = {}
+  args: ScreenshotArgs = {},
 ): Command<"device", ScreenshotResult> => {
   const full = args.full === true
   const plan = full ? planFullScreenshot(args) : null
@@ -304,19 +278,17 @@ export const screenshotCommand = (
       // AC-013: confine BEFORE any device work / write. Escape → PathEscape fail.
       const outputPath = yield* confinePath(artifactsRoot, requestedPath)
       const value = yield* DeviceCapability.pipe(
-        Effect.flatMap((cap) =>
-          cap.invoke("xcrun", ["simctl", "io", device, "screenshot", outputPath])
-        )
+        Effect.flatMap((cap) => cap.invoke("xcrun", ["simctl", "io", device, "screenshot", outputPath])),
       )
       const result: ScreenshotResult = {
         action: "screenshot",
         full,
         outputPath,
         plan,
-        value
+        value,
       }
       return result
-    })
+    }),
   )
 }
 

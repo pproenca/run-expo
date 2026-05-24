@@ -2,8 +2,8 @@
   "name": "@expo98/protocols",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "expo98 reimagined — device-protocol services: loopback-only Metro probe + Hermes CDP client (loopback + connect-time Origin + bounded open).",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./src/index.ts",

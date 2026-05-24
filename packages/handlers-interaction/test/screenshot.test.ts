@@ -15,13 +15,13 @@ import {
   EXIT_SUCCESS,
   RuntimeEvalCapability,
   type SideEffect,
-  SourceWriteCapability
+  SourceWriteCapability,
 } from "@expo98/core"
 import {
   planFullScreenshot,
   resolveSegmentCount,
   type ScreenshotResult,
-  screenshotCommand
+  screenshotCommand,
 } from "@expo98/handlers-interaction"
 import { Effect, Layer, Ref } from "effect"
 
@@ -64,39 +64,32 @@ const makeCaps = (calls: Ref.Ref<number>) =>
     Layer.succeed(
       DeviceCapability,
       DeviceCapability.of({
-        invoke: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as("captured"))
-      })
+        invoke: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as("captured")),
+      }),
     ),
-    Layer.succeed(
-      RuntimeEvalCapability,
-      RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })
-    ),
+    Layer.succeed(RuntimeEvalCapability, RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })),
     Layer.succeed(
       SourceWriteCapability,
       SourceWriteCapability.of({
         writeFile: () => Effect.void,
-        deleteFile: () => Effect.void
-      })
-    )
+        deleteFile: () => Effect.void,
+      }),
+    ),
   )
 
 const run = (
   cmd: Command<"device", ScreenshotResult>,
   policy: Parameters<typeof dispatch>[1],
-  caps: Layer.Layer<
-    DeviceCapability | RuntimeEvalCapability | SourceWriteCapability
-  >
+  caps: Layer.Layer<DeviceCapability | RuntimeEvalCapability | SourceWriteCapability>,
 ): Effect.Effect<DispatchResult<ScreenshotResult>> =>
-  dispatch(cmd as Command<SideEffect, ScreenshotResult>, policy).pipe(
-    Effect.provide(caps)
-  )
+  dispatch(cmd as Command<SideEffect, ScreenshotResult>, policy).pipe(Effect.provide(caps))
 
 describe("AC-013 screenshot --output-path confinement", () => {
   it.effect("AC-013 an in-root output path is accepted and resolved under the artifacts root", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
       const cmd = screenshotCommand(ARTIFACTS_ROOT, {
-        outputPath: "shots/home.png"
+        outputPath: "shots/home.png",
       })
       const result = yield* run(cmd, { allow: ["screenshot"] }, makeCaps(calls))
       const payload = result.payload as { outputPath?: string; action?: string }
@@ -105,14 +98,14 @@ describe("AC-013 screenshot --output-path confinement", () => {
       expect(payload.outputPath).toBe("/state/artifacts/shots/home.png")
       // device capture ran once.
       expect(yield* Ref.get(calls)).toBe(1)
-    })
+    }),
   )
 
   it.effect("AC-013 a `../` escape is REJECTED before any device work (PathEscape → exit 1)", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
       const cmd = screenshotCommand(ARTIFACTS_ROOT, {
-        outputPath: "../../etc/passwd"
+        outputPath: "../../etc/passwd",
       })
       const result = yield* run(cmd, { allow: ["screenshot"] }, makeCaps(calls))
       // The handler failed with PathEscape → runtime failure envelope, exit 1.
@@ -121,19 +114,19 @@ describe("AC-013 screenshot --output-path confinement", () => {
       expect(payload.ok).toBe(false)
       // Zero device work — confinement is checked BEFORE the capture.
       expect(yield* Ref.get(calls)).toBe(0)
-    })
+    }),
   )
 
   it.effect("AC-013 an absolute escape outside the root is REJECTED before any device work", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
       const cmd = screenshotCommand(ARTIFACTS_ROOT, {
-        outputPath: "/tmp/evil.png"
+        outputPath: "/tmp/evil.png",
       })
       const result = yield* run(cmd, { allow: ["screenshot"] }, makeCaps(calls))
       expect(result.exitCode).toBe(EXIT_RUNTIME_FAILURE)
       expect(yield* Ref.get(calls)).toBe(0)
-    })
+    }),
   )
 
   it.effect("AC-013/AC-005 screenshot is device-gated: denied without policy, zero device work", () =>
@@ -144,7 +137,7 @@ describe("AC-013 screenshot --output-path confinement", () => {
       const payload = result.payload as { code?: string }
       expect(payload.code).toBe("policy-denied")
       expect(yield* Ref.get(calls)).toBe(0)
-    })
+    }),
   )
 
   it.skip("AC-054 live stitch: scroll + capture + stitch on a real simulator", () => {

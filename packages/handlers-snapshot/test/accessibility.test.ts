@@ -9,12 +9,7 @@
  * runs ungated).
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  DeviceCapability,
-  dispatch,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "@expo98/core"
+import { DeviceCapability, dispatch, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import type { RefCache, RefRecord } from "@expo98/domain"
 import {
   accessibilityCommand,
@@ -22,28 +17,20 @@ import {
   accessibilityResult,
   type AccessibilityUnavailable,
   INTERACTIVE_NAME_MESSAGE,
-  isInteractiveUnnamed
+  isInteractiveUnnamed,
 } from "@expo98/handlers-snapshot"
 import { Effect, Layer } from "effect"
 
 const Caps = Layer.mergeAll(
-  Layer.succeed(
-    RuntimeEvalCapability,
-    RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })
-  ),
-  Layer.succeed(
-    DeviceCapability,
-    DeviceCapability.of({ invoke: () => Effect.succeed("ok") })
-  ),
+  Layer.succeed(RuntimeEvalCapability, RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })),
+  Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("ok") })),
   Layer.succeed(
     SourceWriteCapability,
-    SourceWriteCapability.of({ writeFile: () => Effect.void, deleteFile: () => Effect.void })
-  )
+    SourceWriteCapability.of({ writeFile: () => Effect.void, deleteFile: () => Effect.void }),
+  ),
 )
 
-const ref = (
-  over: Omit<Partial<RefRecord>, "ref"> & { ref: string }
-): RefRecord => ({
+const ref = (over: Omit<Partial<RefRecord>, "ref"> & { ref: string }): RefRecord => ({
   snapshotId: "snapshot-1" as RefRecord["snapshotId"],
   targetId: "ios:dev:app:8081" as RefRecord["targetId"],
   stale: false,
@@ -57,14 +44,14 @@ const ref = (
   box: null,
   actions: [],
   ...over,
-  ref: over.ref as RefRecord["ref"]
+  ref: over.ref as RefRecord["ref"],
 })
 
 const cache = (refs: ReadonlyArray<RefRecord>): RefCache => ({
   snapshotId: "snapshot-1" as RefCache["snapshotId"],
   targetId: "ios:dev:app:8081" as RefCache["targetId"],
   source: ["semantic-bridge"],
-  refs
+  refs,
 })
 
 describe("AC-023 interactive-name rule (pure)", () => {
@@ -73,15 +60,11 @@ describe("AC-023 interactive-name rule (pure)", () => {
   })
 
   it("AC-023 does NOT flag a named interactive ref (has a label)", () => {
-    expect(
-      isInteractiveUnnamed(ref({ ref: "@e1", actions: ["press"], label: "Submit" }))
-    ).toBe(false)
+    expect(isInteractiveUnnamed(ref({ ref: "@e1", actions: ["press"], label: "Submit" }))).toBe(false)
   })
 
   it("AC-023 does NOT flag a named interactive ref (has text)", () => {
-    expect(
-      isInteractiveUnnamed(ref({ ref: "@e1", actions: ["press"], text: "OK" }))
-    ).toBe(false)
+    expect(isInteractiveUnnamed(ref({ ref: "@e1", actions: ["press"], text: "OK" }))).toBe(false)
   })
 
   it("AC-023 does NOT flag a non-interactive unnamed ref (no actions)", () => {
@@ -89,9 +72,7 @@ describe("AC-023 interactive-name rule (pure)", () => {
   })
 
   it("AC-023 treats an empty-string label/text as unnamed (still flagged)", () => {
-    expect(
-      isInteractiveUnnamed(ref({ ref: "@e1", actions: ["press"], label: "", text: "" }))
-    ).toBe(true)
+    expect(isInteractiveUnnamed(ref({ ref: "@e1", actions: ["press"], label: "", text: "" }))).toBe(true)
   })
 })
 
@@ -103,13 +84,13 @@ describe("AC-023 audit projection", () => {
         ref({ ref: "@e1", actions: ["press"] }), // flagged
         ref({ ref: "@e2", actions: ["press"], label: "Named" }), // ok
         ref({ ref: "@e3", actions: [] }), // ok (no actions)
-        ref({ ref: "@e4", actions: ["scroll"] }) // flagged
-      ])
+        ref({ ref: "@e4", actions: ["scroll"] }), // flagged
+      ]),
     ) as AccessibilityAuditResult
     expect(result.available).toBe(true)
     expect(result.findings).toEqual([
       { ref: "@e1", rule: "interactive-name", message: INTERACTIVE_NAME_MESSAGE },
-      { ref: "@e4", rule: "interactive-name", message: INTERACTIVE_NAME_MESSAGE }
+      { ref: "@e4", rule: "interactive-name", message: INTERACTIVE_NAME_MESSAGE },
     ])
   })
 
@@ -124,16 +105,13 @@ describe("AC-023 audit projection", () => {
 describe("AC-023 audit through dispatch (read path, ungated)", () => {
   it.effect("AC-023 audit flags unnamed interactive refs end-to-end", () =>
     Effect.gen(function* () {
-      const cmd = accessibilityCommand(
-        "audit",
-        cache([ref({ ref: "@e1", actions: ["press"] })])
-      )
+      const cmd = accessibilityCommand("audit", cache([ref({ ref: "@e1", actions: ["press"] })]))
       const result = yield* dispatch(cmd, {}).pipe(Effect.provide(Caps))
       const payload = result.payload as AccessibilityAuditResult
       expect(payload.available).toBe(true)
       expect(payload.findings[0]?.rule).toBe("interactive-name")
       expect(payload.findings[0]?.message).toBe(INTERACTIVE_NAME_MESSAGE)
-    })
+    }),
   )
 
   it.effect("AC-023 audit with no cache → available:false end-to-end", () =>
@@ -142,6 +120,6 @@ describe("AC-023 audit through dispatch (read path, ungated)", () => {
       const result = yield* dispatch(cmd, {}).pipe(Effect.provide(Caps))
       const payload = result.payload as AccessibilityUnavailable
       expect(payload.available).toBe(false)
-    })
+    }),
   )
 })

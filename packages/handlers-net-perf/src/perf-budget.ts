@@ -32,9 +32,7 @@ export interface BudgetResult {
 }
 
 /** Build a name→metric map (last-wins). PURE. */
-const metricMap = (
-  metrics: ReadonlyArray<PerfMetricLike>
-): ReadonlyMap<string, PerfMetricLike> => {
+const metricMap = (metrics: ReadonlyArray<PerfMetricLike>): ReadonlyMap<string, PerfMetricLike> => {
   const map = new Map<string, PerfMetricLike>()
   for (const metric of metrics) {
     map.set(metric.name, metric)
@@ -48,7 +46,7 @@ const metricMap = (
  */
 export const evaluateBudget = (
   rules: ReadonlyArray<BudgetRule>,
-  candidate: ReadonlyArray<PerfMetricLike>
+  candidate: ReadonlyArray<PerfMetricLike>,
 ): BudgetResult => {
   const metrics = metricMap(candidate)
   const checks: Array<BudgetCheck> = rules.map((rule) => {
@@ -64,7 +62,7 @@ export const evaluateBudget = (
       min: rule.min ?? null,
       max: rule.max ?? null,
       passed,
-      unit: metric?.unit ?? null
+      unit: metric?.unit ?? null,
     }
   })
   return { passed: checks.every((check) => check.passed), checks }

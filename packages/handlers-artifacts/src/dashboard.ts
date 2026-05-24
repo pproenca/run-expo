@@ -52,10 +52,7 @@ export interface DashboardResult {
  * `networkListener` is hard-`false` in every branch — the type literal makes any
  * future "open a server here" change a compile error.
  */
-export const dashboardCommand = (
-  verb: DashboardVerb,
-  args: DashboardArgs = {}
-): Command<"read", DashboardResult> =>
+export const dashboardCommand = (verb: DashboardVerb, args: DashboardArgs = {}): Command<"read", DashboardResult> =>
   command(
     descriptor(`dashboard.${verb}`, "read"),
     Effect.sync<DashboardResult>(() => {
@@ -65,14 +62,14 @@ export const dashboardCommand = (
             action: "dashboard",
             verb,
             status: "running",
-            networkListener: false
+            networkListener: false,
           }
         case "stop":
           return {
             action: "dashboard",
             verb,
             status: "stopped",
-            networkListener: false
+            networkListener: false,
           }
         case "report":
           return {
@@ -80,8 +77,8 @@ export const dashboardCommand = (
             verb,
             status: args.priorStatus ?? "unknown",
             networkListener: false,
-            metrics: args.metrics ?? {}
+            metrics: args.metrics ?? {},
           }
       }
-    })
+    }),
   )

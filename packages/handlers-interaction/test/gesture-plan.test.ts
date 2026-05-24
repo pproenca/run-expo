@@ -17,18 +17,18 @@ import {
   resolveMaxEvents,
   resolveRepeat,
   resolveScrollAmount,
-  scrollDelta
+  scrollDelta,
 } from "@expo98/handlers-interaction"
 
 describe("AC-036 ref point actions target the element centre", () => {
   it("AC-036 point = { x: box.x + box.width/2, y: box.y + box.height/2 }", () => {
     expect(centerOf({ x: 10, y: 20, width: 100, height: 40 })).toEqual({
       x: 60,
-      y: 40
+      y: 40,
     })
     expect(pointForBox({ x: 0, y: 0, width: 20, height: 20 })).toEqual({
       x: 10,
-      y: 10
+      y: 10,
     })
   })
 

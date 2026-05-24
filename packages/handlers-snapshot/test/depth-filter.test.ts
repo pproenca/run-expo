@@ -6,14 +6,8 @@
  * rule) and `filterByDepth` (prune nodes with depth > limit, root at depth 0).
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  type DepthedNode,
-  filterByDepth,
-  MAX_DEPTH,
-  MIN_DEPTH,
-  resolveDepth
-} from "@expo98/handlers-snapshot"
 import type { SnapshotNode } from "@expo98/domain"
+import { type DepthedNode, filterByDepth, MAX_DEPTH, MIN_DEPTH, resolveDepth } from "@expo98/handlers-snapshot"
 
 const node = (ref: string): SnapshotNode => ({
   ref: ref as SnapshotNode["ref"],
@@ -23,7 +17,7 @@ const node = (ref: string): SnapshotNode => ({
   testID: null,
   source: "semantic-bridge",
   box: null,
-  actions: []
+  actions: [],
 })
 
 const depthed = (refs: ReadonlyArray<[string, number]>): ReadonlyArray<DepthedNode> =>
@@ -49,7 +43,7 @@ describe("AC-040 depth pruning (root depth 0)", () => {
     ["@e2", 1],
     ["@e3", 1],
     ["@e4", 2],
-    ["@e5", 3]
+    ["@e5", 3],
   ])
 
   it("AC-040 null keeps every node (unbounded)", () => {

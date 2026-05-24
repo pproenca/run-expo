@@ -19,7 +19,7 @@ import {
   type PersistenceClock,
   PersistenceService,
   persistenceLayer,
-  type TargetRecord
+  type TargetRecord,
 } from "@expo98/domain"
 import {
   captureSnapshot,
@@ -27,7 +27,7 @@ import {
   type NativeAxeResult,
   type SnapshotCaptured,
   SemanticCapture,
-  type SemanticCapturePayload
+  type SemanticCapturePayload,
 } from "@expo98/handlers-snapshot"
 import { Effect, Layer } from "effect"
 
@@ -40,7 +40,7 @@ const makeClock = (): PersistenceClock => {
     suffix: () => {
       tick += 1
       return `s${tick.toString().padStart(4, "0")}`
-    }
+    },
   }
 }
 
@@ -50,15 +50,10 @@ const makeClock = (): PersistenceClock => {
 // `Fs` in the output context alongside `PersistenceService` so both come from the
 // same filesystem instance.
 const persistence = (clock: PersistenceClock) =>
-  persistenceLayer(clock).pipe(
-    Layer.provideMerge(Layer.effect(Fs, makeMemoryFs()))
-  )
+  persistenceLayer(clock).pipe(Layer.provideMerge(Layer.effect(Fs, makeMemoryFs())))
 
 const semanticLayer = (payload: SemanticCapturePayload | null) =>
-  Layer.succeed(
-    SemanticCapture,
-    SemanticCapture.of({ capture: () => Effect.succeed(payload) })
-  )
+  Layer.succeed(SemanticCapture, SemanticCapture.of({ capture: () => Effect.succeed(payload) }))
 
 const nativeLayer = (result: NativeAxeResult) =>
   Layer.succeed(NativeAxe, NativeAxe.of({ describeUi: () => Effect.succeed(result) }))
@@ -77,10 +72,10 @@ const target = (deviceId: string): TargetRecord => ({
     targetId: null,
     title: null,
     appId: null,
-    debuggerUrl: null
+    debuggerUrl: null,
   },
   selected: true,
-  stale: false
+  stale: false,
 })
 
 const semanticPayload: SemanticCapturePayload = {
@@ -92,7 +87,7 @@ const semanticPayload: SemanticCapturePayload = {
       text: null,
       testID: "submit",
       box: { x: 10, y: 20, width: 100, height: 40 },
-      actions: ["press"]
+      actions: ["press"],
     },
     {
       role: "text",
@@ -100,10 +95,10 @@ const semanticPayload: SemanticCapturePayload = {
       text: "Welcome",
       testID: null,
       box: { x: 0, y: 0, width: 200, height: 30 },
-      actions: []
-    }
+      actions: [],
+    },
   ],
-  limitations: ["bridge-partial"]
+  limitations: ["bridge-partial"],
 }
 
 const nativeOk: NativeAxeResult = {
@@ -115,9 +110,9 @@ const nativeOk: NativeAxeResult = {
       text: null,
       testID: "n1",
       box: { x: 1, y: 2, width: 3, height: 4 },
-      actions: ["press", "long-press"]
-    }
-  ]
+      actions: ["press", "long-press"],
+    },
+  ],
 }
 
 // A session created on the in-memory fs so persistence can move its pointers.
@@ -134,46 +129,38 @@ describe("AC-019 snapshot capture prerequisites", () => {
       name: "no active target",
       hasSession: true,
       activeTarget: null,
-      code: "no-active-target"
+      code: "no-active-target",
     },
     {
       name: "missing device.id",
       hasSession: true,
       activeTarget: target(""),
-      code: "missing-device-id"
-    }
+      code: "missing-device-id",
+    },
   ] as const) {
-    it.effect(
-      `AC-019 ${miss.name} → unavailable with the matching reason and NO artifacts written`,
-      () =>
-        Effect.gen(function* () {
-          const clock = makeClock()
-          const result = yield* captureSnapshot({
-            stateRoot: STATE_ROOT,
-            sessionId: "review-x",
-            hasSession: miss.hasSession,
-            activeTarget: miss.activeTarget,
-            clock
-          })
-          expect(result.available).toBe(false)
-          if (result.available === false) {
-            expect(result.code).toBe(miss.code)
-          }
-          // NO artifacts: the memory fs has no snapshots/refs for this session.
-          const fs = yield* Fs
-          const snapDir = yield* fs.exists(`${STATE_ROOT}/sessions/review-x/snapshots`)
-          const refs = yield* fs.exists(`${STATE_ROOT}/sessions/review-x/refs.json`)
-          expect(snapDir).toBe(false)
-          expect(refs).toBe(false)
-        }).pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              persistence(makeClock()),
-              semanticLayer(semanticPayload),
-              nativeLayer(nativeOk)
-            )
-          )
-        )
+    it.effect(`AC-019 ${miss.name} → unavailable with the matching reason and NO artifacts written`, () =>
+      Effect.gen(function* () {
+        const clock = makeClock()
+        const result = yield* captureSnapshot({
+          stateRoot: STATE_ROOT,
+          sessionId: "review-x",
+          hasSession: miss.hasSession,
+          activeTarget: miss.activeTarget,
+          clock,
+        })
+        expect(result.available).toBe(false)
+        if (result.available === false) {
+          expect(result.code).toBe(miss.code)
+        }
+        // NO artifacts: the memory fs has no snapshots/refs for this session.
+        const fs = yield* Fs
+        const snapDir = yield* fs.exists(`${STATE_ROOT}/sessions/review-x/snapshots`)
+        const refs = yield* fs.exists(`${STATE_ROOT}/sessions/review-x/refs.json`)
+        expect(snapDir).toBe(false)
+        expect(refs).toBe(false)
+      }).pipe(
+        Effect.provide(Layer.mergeAll(persistence(makeClock()), semanticLayer(semanticPayload), nativeLayer(nativeOk))),
+      ),
     )
   }
 })
@@ -195,7 +182,7 @@ describe("AC-019 / AC-026 semantic-bridge capture path", () => {
           hasSession: true,
           activeTarget: target("dev-1"),
           depth: null,
-          clock
+          clock,
         })
 
         expect(result.available).toBe(true)
@@ -229,16 +216,8 @@ describe("AC-019 / AC-026 semantic-bridge capture path", () => {
         const reloaded = yield* p.sessionShow(STATE_ROOT, session.sessionId)
         expect(reloaded.lastSnapshotId).toBe(ok.snapshotId)
         expect(reloaded.activeTargetId).toBe(target("dev-1").targetId)
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            persistence(clock),
-            semanticLayer(semanticPayload),
-            nativeLayer(nativeOk)
-          )
-        )
-      )
-    }
+      }).pipe(Effect.provide(Layer.mergeAll(persistence(clock), semanticLayer(semanticPayload), nativeLayer(nativeOk))))
+    },
   )
 })
 
@@ -248,9 +227,9 @@ describe("AC-040 depth filter wired into capture", () => {
     refs: [
       { role: "view", label: "Root", text: null, testID: null, box: null, actions: [] },
       { role: "button", label: "A", text: null, testID: null, box: null, actions: ["press"] },
-      { role: "button", label: "B", text: null, testID: null, box: null, actions: ["press"] }
+      { role: "button", label: "B", text: null, testID: null, box: null, actions: ["press"] },
     ],
-    limitations: []
+    limitations: [],
   }
 
   it.effect(
@@ -268,7 +247,7 @@ describe("AC-040 depth filter wired into capture", () => {
           hasSession: true,
           activeTarget: target("dev-1"),
           depth: 0, // clamps to 1 (AC-040); 0 would also be rejected by the schema
-          clock
+          clock,
         })
         const ok = result as SnapshotCaptured
         const snapshot = yield* p.snapshotShow(STATE_ROOT, session.sessionId, ok.snapshotId)
@@ -279,12 +258,8 @@ describe("AC-040 depth filter wired into capture", () => {
         expect(snapshot.refs.map((r) => r.ref)).toEqual(["@e1", "@e2", "@e3"])
         // depth 1 keeps root + immediate children (the flat tree is 2 levels).
         expect(snapshot.tree.map((n) => n.ref)).toEqual(["@e1", "@e2", "@e3"])
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(persistence(clock), semanticLayer(threeRefs), nativeLayer(nativeOk))
-        )
-      )
-    }
+      }).pipe(Effect.provide(Layer.mergeAll(persistence(clock), semanticLayer(threeRefs), nativeLayer(nativeOk))))
+    },
   )
 
   it.effect("AC-040 depth null (unbounded) persists every tree node + the schema accepts null", () => {
@@ -300,17 +275,13 @@ describe("AC-040 depth filter wired into capture", () => {
         hasSession: true,
         activeTarget: target("dev-1"),
         depth: null,
-        clock
+        clock,
       })
       const ok = result as SnapshotCaptured
       const snapshot = yield* p.snapshotShow(STATE_ROOT, session.sessionId, ok.snapshotId)
       expect(snapshot.filters.depth).toBe(null)
       expect(snapshot.tree.map((n) => n.ref)).toEqual(["@e1", "@e2", "@e3"])
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(persistence(clock), semanticLayer(threeRefs), nativeLayer(nativeOk))
-      )
-    )
+    }).pipe(Effect.provide(Layer.mergeAll(persistence(clock), semanticLayer(threeRefs), nativeLayer(nativeOk))))
   })
 })
 
@@ -329,7 +300,7 @@ describe("AC-019 native axe fallback path", () => {
           sessionId: session.sessionId,
           hasSession: true,
           activeTarget: target("dev-1"),
-          clock
+          clock,
         })
 
         expect(result.available).toBe(true)
@@ -348,48 +319,37 @@ describe("AC-019 native axe fallback path", () => {
             persistence(clock),
             // Semantic bridge unavailable → fall back to native.
             semanticLayer(null),
-            nativeLayer(nativeOk)
-          )
-        )
+            nativeLayer(nativeOk),
+          ),
+        ),
       )
-    }
+    },
   )
 
-  it.effect(
-    "AC-019 no semantic bridge and `axe` absent → unavailable (no-axe), NO artifacts",
-    () => {
-      const clock = makeClock()
-      return Effect.gen(function* () {
-        const p = yield* PersistenceService
-        const session = yield* newSession
-        yield* p.targetSave(STATE_ROOT, session.sessionId, target("dev-1"))
+  it.effect("AC-019 no semantic bridge and `axe` absent → unavailable (no-axe), NO artifacts", () => {
+    const clock = makeClock()
+    return Effect.gen(function* () {
+      const p = yield* PersistenceService
+      const session = yield* newSession
+      yield* p.targetSave(STATE_ROOT, session.sessionId, target("dev-1"))
 
-        const result = yield* captureSnapshot({
-          stateRoot: STATE_ROOT,
-          sessionId: session.sessionId,
-          hasSession: true,
-          activeTarget: target("dev-1"),
-          clock
-        })
-        expect(result.available).toBe(false)
-        if (result.available === false) expect(result.code).toBe("no-axe")
+      const result = yield* captureSnapshot({
+        stateRoot: STATE_ROOT,
+        sessionId: session.sessionId,
+        hasSession: true,
+        activeTarget: target("dev-1"),
+        clock,
+      })
+      expect(result.available).toBe(false)
+      if (result.available === false) expect(result.code).toBe("no-axe")
 
-        const fs = yield* Fs
-        const refs = yield* fs.exists(`${STATE_ROOT}/sessions/${session.sessionId}/refs.json`)
-        expect(refs).toBe(false)
-        const reloaded = yield* p.sessionShow(STATE_ROOT, session.sessionId)
-        expect(reloaded.lastSnapshotId).toBe(null)
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            persistence(clock),
-            semanticLayer(null),
-            nativeLayer({ _tag: "absent" })
-          )
-        )
-      )
-    }
-  )
+      const fs = yield* Fs
+      const refs = yield* fs.exists(`${STATE_ROOT}/sessions/${session.sessionId}/refs.json`)
+      expect(refs).toBe(false)
+      const reloaded = yield* p.sessionShow(STATE_ROOT, session.sessionId)
+      expect(reloaded.lastSnapshotId).toBe(null)
+    }).pipe(Effect.provide(Layer.mergeAll(persistence(clock), semanticLayer(null), nativeLayer({ _tag: "absent" }))))
+  })
 
   it.effect("AC-019 native axe transport-failure → unavailable (transport-failure)", () => {
     const clock = makeClock()
@@ -403,7 +363,7 @@ describe("AC-019 native axe fallback path", () => {
         sessionId: session.sessionId,
         hasSession: true,
         activeTarget: target("dev-1"),
-        clock
+        clock,
       })
       expect(result.available).toBe(false)
       if (result.available === false) expect(result.code).toBe("transport-failure")
@@ -412,9 +372,9 @@ describe("AC-019 native axe fallback path", () => {
         Layer.mergeAll(
           persistence(clock),
           semanticLayer(null),
-          nativeLayer({ _tag: "transport-failure", reason: "axe crashed" })
-        )
-      )
+          nativeLayer({ _tag: "transport-failure", reason: "axe crashed" }),
+        ),
+      ),
     )
   })
 })

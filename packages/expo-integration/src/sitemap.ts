@@ -31,8 +31,7 @@ export interface SitemapEntry {
 const stripExtension = (path: string): string => path.replace(/\.[^./]+$/, "")
 
 /** A group segment is `(...)` — Expo Router route groups (dropped from the URL). */
-const isGroupSegment = (segment: string): boolean =>
-  segment.startsWith("(") && segment.endsWith(")")
+const isGroupSegment = (segment: string): boolean => segment.startsWith("(") && segment.endsWith(")")
 
 /** Format a single dynamic/literal segment per the AC-044 rules. */
 export const formatSegment = (segment: string): string => {
@@ -74,14 +73,11 @@ export const normalizeRoutePath = (source: string): SitemapEntry => {
   }
 
   // Route: drop `index` + group segments, format the rest, join.
-  const kept = segments
-    .filter((s) => s !== "index" && !isGroupSegment(s))
-    .map(formatSegment)
+  const kept = segments.filter((s) => s !== "index" && !isGroupSegment(s)).map(formatSegment)
 
   return { source, kind: "route", route: `/${kept.join("/")}` }
 }
 
 /** Normalize a whole listing (the file tree from the Expo SDK seam). */
-export const buildSitemap = (
-  sources: ReadonlyArray<string>
-): ReadonlyArray<SitemapEntry> => sources.map(normalizeRoutePath)
+export const buildSitemap = (sources: ReadonlyArray<string>): ReadonlyArray<SitemapEntry> =>
+  sources.map(normalizeRoutePath)

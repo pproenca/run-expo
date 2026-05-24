@@ -27,7 +27,7 @@ import {
   type CrashReportCandidate,
   evaluateCrash,
   isCrashReportPath,
-  resolveCrashGraceMs
+  resolveCrashGraceMs,
 } from "./crash.js"
 import { descriptor } from "./support.js"
 
@@ -58,7 +58,7 @@ export const lifecycleSideEffect = (verb: LifecycleVerb): "device" =>
     Match.when("uninstall-app", () => "device" as const),
     Match.when("open-route", () => "device" as const),
     Match.when("set", () => "device" as const),
-    Match.exhaustive
+    Match.exhaustive,
   )
 
 export interface LifecycleArgs {
@@ -105,34 +105,13 @@ const argvFor = (verb: LifecycleVerb, args: LifecycleArgs): ReadonlyArray<string
     Match.when("boot-simulator", () => ["simctl", "boot", device]),
     Match.when("open-url", () => ["simctl", "openurl", device, args.url ?? ""]),
     Match.when("launch-app", () => ["simctl", "launch", device, args.bundleId ?? ""]),
-    Match.when("terminate-app", () => [
-      "simctl",
-      "terminate",
-      device,
-      args.bundleId ?? ""
-    ]),
+    Match.when("terminate-app", () => ["simctl", "terminate", device, args.bundleId ?? ""]),
     Match.when("reload-app", () => ["simctl", "launch", device, args.bundleId ?? ""]),
     Match.when("install-app", () => ["simctl", "install", device, args.appPath ?? ""]),
-    Match.when("uninstall-app", () => [
-      "simctl",
-      "uninstall",
-      device,
-      args.bundleId ?? ""
-    ]),
-    Match.when("open-route", () => [
-      "simctl",
-      "openurl",
-      device,
-      `${args.scheme ?? "exp"}://${args.route ?? ""}`
-    ]),
-    Match.when("set", () => [
-      "simctl",
-      "ui",
-      device,
-      args.setting ?? "",
-      args.value ?? ""
-    ]),
-    Match.exhaustive
+    Match.when("uninstall-app", () => ["simctl", "uninstall", device, args.bundleId ?? ""]),
+    Match.when("open-route", () => ["simctl", "openurl", device, `${args.scheme ?? "exp"}://${args.route ?? ""}`]),
+    Match.when("set", () => ["simctl", "ui", device, args.setting ?? "", args.value ?? ""]),
+    Match.exhaustive,
   )
 }
 
@@ -141,8 +120,7 @@ const crashActionFor = (verb: LifecycleVerb): CrashAction | null =>
   verb === "launch-app" ? "launch-app" : verb === "reload-app" ? "reload-app" : null
 
 /** Which verbs honour `--dry-run` (AC-005). */
-const supportsDryRun = (verb: LifecycleVerb): boolean =>
-  verb === "install-app" || verb === "uninstall-app"
+const supportsDryRun = (verb: LifecycleVerb): boolean => verb === "install-app" || verb === "uninstall-app"
 
 /**
  * The simctl probe used to scan the iOS crash report directory. The device
@@ -150,14 +128,7 @@ const supportsDryRun = (verb: LifecycleVerb): boolean =>
  * paths/mtimes. (A real build resolves the per-device DiagnosticReports dir; here
  * the listing tool is package-controlled and the parsing is pure.)
  */
-const CRASH_SCAN_ARGS: ReadonlyArray<string> = [
-  "simctl",
-  "spawn",
-  "booted",
-  "log",
-  "collect",
-  "--crash-reports"
-]
+const CRASH_SCAN_ARGS: ReadonlyArray<string> = ["simctl", "spawn", "booted", "log", "collect", "--crash-reports"]
 
 /**
  * Parse the crash-scan tool output into candidates. Each non-empty line is
@@ -191,10 +162,7 @@ const parseCrashCandidates = (output: string): ReadonlyArray<CrashReportCandidat
  * (4) evaluates the crash and attaches/fails-closes (AC-029/056). The handler's
  * `R` is `DeviceCapability`; it cannot name the eval/source-write capability.
  */
-export const lifecycleCommand = (
-  verb: LifecycleVerb,
-  args: LifecycleArgs = {}
-): Command<"device", LifecycleResult> => {
+export const lifecycleCommand = (verb: LifecycleVerb, args: LifecycleArgs = {}): Command<"device", LifecycleResult> => {
   const action = verb
   const device = args.device ?? DEFAULT_DEVICE
   const crashAction = crashActionFor(verb)
@@ -217,7 +185,7 @@ export const lifecycleCommand = (
               processName: bundleId,
               startedAt,
               waitedMs,
-              candidates: parseCrashCandidates(scan)
+              candidates: parseCrashCandidates(scan),
             })
             const result: LifecycleResult = {
               action,
@@ -227,12 +195,12 @@ export const lifecycleCommand = (
               available: evaluation.available,
               reason: evaluation.reason,
               crashCheck: evaluation.crashCheck,
-              crashReports: evaluation.crashReports
+              crashReports: evaluation.crashReports,
             }
             return result
-          })
-        )
-      )
+          }),
+        ),
+      ),
     )
   }
 
@@ -241,10 +209,8 @@ export const lifecycleCommand = (
     descriptor(action, "device"),
     DeviceCapability.pipe(
       Effect.flatMap((cap) => cap.invoke("xcrun", argvFor(verb, args))),
-      Effect.map(
-        (value): LifecycleResult => ({ action, verb, device, value })
-      )
-    )
+      Effect.map((value): LifecycleResult => ({ action, verb, device, value })),
+    ),
   )
 }
 
@@ -254,10 +220,7 @@ export const lifecycleCommand = (
  * still gates it as `device` but the handler invokes the device capability 0×.
  * The caller (dispatch) attaches the policy; here we surface the plan.
  */
-export const lifecyclePlan = (
-  verb: LifecycleVerb,
-  args: LifecycleArgs = {}
-): Command<"device", LifecyclePlan> => {
+export const lifecyclePlan = (verb: LifecycleVerb, args: LifecycleArgs = {}): Command<"device", LifecyclePlan> => {
   if (!supportsDryRun(verb)) {
     throw new Error(`Verb "${verb}" does not support --dry-run.`)
   }
@@ -266,7 +229,7 @@ export const lifecyclePlan = (
     verb,
     dryRun: true,
     tool: "xcrun",
-    args: argvFor(verb, args)
+    args: argvFor(verb, args),
   }
   // A dry-run plan is a pure value; the handler reaches no capability (R never
   // names DeviceCapability), so even on gate-pass it mutates nothing (AC-005).
@@ -279,8 +242,6 @@ export const lifecyclePlan = (
  */
 export const lifecycle = (
   verb: LifecycleVerb,
-  args: LifecycleArgs = {}
+  args: LifecycleArgs = {},
 ): Command<"device", LifecycleResult> | Command<"device", LifecyclePlan> =>
-  args.dryRun === true && supportsDryRun(verb)
-    ? lifecyclePlan(verb, args)
-    : lifecycleCommand(verb, args)
+  args.dryRun === true && supportsDryRun(verb) ? lifecyclePlan(verb, args) : lifecycleCommand(verb, args)

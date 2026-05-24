@@ -23,7 +23,7 @@ describe("S5 Redaction — strongest superset (AC-003, AC-012)", () => {
       session: "se",
       auth: "a",
       // a non-secret key passes through untouched
-      keepMe: "visible"
+      keepMe: "visible",
     }
     const out = redact(input) as Record<string, unknown>
     for (const key of Object.keys(input)) {
@@ -38,7 +38,7 @@ describe("S5 Redaction — strongest superset (AC-003, AC-012)", () => {
   it("AC-003 redacts the WHOLE value, never wire-chunks (finding M2)", () => {
     // Even a deeply-structured value under a secret key is replaced wholesale.
     const out = redact({
-      token: { nested: { reallyDeep: "leak", arr: [1, 2, 3] } }
+      token: { nested: { reallyDeep: "leak", arr: [1, 2, 3] } },
     }) as Record<string, unknown>
     expect(out.token).toBe(REDACTED)
   })
@@ -46,7 +46,7 @@ describe("S5 Redaction — strongest superset (AC-003, AC-012)", () => {
   it("AC-003 recurses through objects and arrays", () => {
     const out = redact({
       list: [{ password: "x" }, { ok: "shown" }],
-      nested: { deep: { secret: "y", fine: "z" } }
+      nested: { deep: { secret: "y", fine: "z" } },
     }) as {
       list: Array<Record<string, unknown>>
       nested: { deep: Record<string, unknown> }

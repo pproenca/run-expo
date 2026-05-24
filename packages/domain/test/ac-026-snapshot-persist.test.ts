@@ -4,8 +4,8 @@ import { renumberRefs } from "../src/decisions.js"
 import type { SnapshotResult, TargetRecord } from "../src/entities.js"
 import { makeMemoryFs } from "../src/fs-port.js"
 import type { RefId, SnapshotId, TargetId } from "../src/ids.js"
-import { makePersistence } from "../src/persist.js"
 import * as P from "../src/paths.js"
+import { makePersistence } from "../src/persist.js"
 import type { RefRecord, SnapshotNode } from "../src/value-objects.js"
 import { STATE_ROOT, TestClock } from "./helpers.js"
 
@@ -22,10 +22,10 @@ const targetRecord: TargetRecord = {
     targetId: "page-1",
     title: "Example",
     appId: "com.example",
-    debuggerUrl: "ws://127.0.0.1:8081/x"
+    debuggerUrl: "ws://127.0.0.1:8081/x",
   },
   selected: true,
-  stale: false
+  stale: false,
 }
 
 const mkRef = (n: number): RefRecord => ({
@@ -41,7 +41,7 @@ const mkRef = (n: number): RefRecord => ({
   nativeID: null,
   component: null,
   box: { x: n, y: n, width: 10, height: 10 },
-  actions: ["tap"]
+  actions: ["tap"],
 })
 
 const mkNode = (n: number): SnapshotNode => ({
@@ -52,7 +52,7 @@ const mkNode = (n: number): SnapshotNode => ({
   testID: null,
   source: "axe",
   box: { x: n, y: n, width: 10, height: 10 },
-  actions: ["tap"]
+  actions: ["tap"],
 })
 
 const makeSnapshot = (sid: SnapshotId): SnapshotResult => ({
@@ -66,12 +66,12 @@ const makeSnapshot = (sid: SnapshotId): SnapshotResult => ({
     compact: false,
     depth: null,
     includeSource: true,
-    includeBounds: true
+    includeBounds: true,
   },
   refs: [mkRef(7), mkRef(3)], // intentionally out of @e1..@eN order
   tree: [mkNode(7), mkNode(3)],
   artifacts: { json: null, screenshot: null, annotatedScreenshot: null },
-  limitations: []
+  limitations: [],
 })
 
 describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
@@ -115,7 +115,7 @@ describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
 
       // All three invariants pass an explicit verification.
       yield* p.verifyInvariants(STATE_ROOT, session.sessionId)
-    })
+    }),
   )
 
   it.effect("verifyInvariants fails when lastSnapshotId points at a missing snapshot", () =>
@@ -131,13 +131,11 @@ describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
         P.sessionFile(layout, session.sessionId),
         JSON.stringify({
           ...session,
-          lastSnapshotId: "snapshot-ghost-aaaaaa"
-        })
+          lastSnapshotId: "snapshot-ghost-aaaaaa",
+        }),
       )
 
-      const result = yield* p
-        .verifyInvariants(STATE_ROOT, session.sessionId)
-        .pipe(Effect.either)
+      const result = yield* p.verifyInvariants(STATE_ROOT, session.sessionId).pipe(Effect.either)
       expect(result._tag).toBe("Left")
       if (result._tag === "Left") {
         expect(result.left._tag).toBe("InvariantViolation")
@@ -145,7 +143,7 @@ describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
           expect(result.left.invariant).toBe("lastSnapshotId-points-at-snapshot")
         }
       }
-    })
+    }),
   )
 
   it.effect("verifyInvariants fails when activeTargetId set but target.json missing", () =>
@@ -156,27 +154,19 @@ describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
       const layout = P.makeLayout(STATE_ROOT)
 
       const session = yield* p.sessionNew({ stateRoot: STATE_ROOT, name: "bad2" })
-      yield* fs.writeFile(
-        P.sessionFile(layout, session.sessionId),
-        JSON.stringify({ ...session, activeTargetId: TID })
-      )
+      yield* fs.writeFile(P.sessionFile(layout, session.sessionId), JSON.stringify({ ...session, activeTargetId: TID }))
 
-      const result = yield* p
-        .verifyInvariants(STATE_ROOT, session.sessionId)
-        .pipe(Effect.either)
+      const result = yield* p.verifyInvariants(STATE_ROOT, session.sessionId).pipe(Effect.either)
       expect(result._tag).toBe("Left")
       if (result._tag === "Left" && result.left._tag === "InvariantViolation") {
         expect(result.left.invariant).toBe("activeTargetId-points-at-target")
       }
-    })
+    }),
   )
 
-  it.skip(
-    "AC-026 semantic-bridge capture path — needs @expo98/protocols + bridge",
-    () => {
-      // The live semantic-bridge capture (CDP Runtime.evaluate -> bridge refs)
-      // lands in @expo98/protocols + the C7 bridge handler. This package only
-      // owns the persistence of an already-captured SnapshotResult.
-    }
-  )
+  it.skip("AC-026 semantic-bridge capture path — needs @expo98/protocols + bridge", () => {
+    // The live semantic-bridge capture (CDP Runtime.evaluate -> bridge refs)
+    // lands in @expo98/protocols + the C7 bridge handler. This package only
+    // owns the persistence of an already-captured SnapshotResult.
+  })
 })

@@ -17,13 +17,9 @@ import {
   EXIT_SUCCESS,
   RuntimeEvalCapability,
   type SideEffect,
-  SourceWriteCapability
+  SourceWriteCapability,
 } from "@expo98/core"
-import {
-  inspectorCommand,
-  type InspectorResult,
-  inspectorSideEffect
-} from "@expo98/handlers-devtools"
+import { inspectorCommand, type InspectorResult, inspectorSideEffect } from "@expo98/handlers-devtools"
 import { Effect, Layer, Ref } from "effect"
 
 interface Counters {
@@ -36,31 +32,27 @@ const makeCaps = (c: Counters) =>
     Layer.succeed(
       RuntimeEvalCapability,
       RuntimeEvalCapability.of({
-        evaluate: (expression) =>
-          Ref.update(c.evalCalls, (n) => n + 1).pipe(Effect.as({ ran: expression }))
-      })
+        evaluate: (expression) => Ref.update(c.evalCalls, (n) => n + 1).pipe(Effect.as({ ran: expression })),
+      }),
     ),
     Layer.succeed(
       DeviceCapability,
       DeviceCapability.of({
-        invoke: (tool, args) =>
-          Ref.update(c.deviceCalls, (n) => n + 1).pipe(
-            Effect.as([tool, ...args].join(" "))
-          )
-      })
+        invoke: (tool, args) => Ref.update(c.deviceCalls, (n) => n + 1).pipe(Effect.as([tool, ...args].join(" "))),
+      }),
     ),
     Layer.succeed(
       SourceWriteCapability,
       SourceWriteCapability.of({
         writeFile: () => Effect.void,
-        deleteFile: () => Effect.void
-      })
-    )
+        deleteFile: () => Effect.void,
+      }),
+    ),
   )
 
 const makeCounters = Effect.all({
   evalCalls: Ref.make(0),
-  deviceCalls: Ref.make(0)
+  deviceCalls: Ref.make(0),
 })
 
 /**
@@ -71,29 +63,24 @@ const makeCounters = Effect.all({
 const run = (
   cmd: Command<SideEffect, InspectorResult>,
   policy: Parameters<typeof dispatch>[1],
-  caps: Layer.Layer<
-    RuntimeEvalCapability | DeviceCapability | SourceWriteCapability
-  >
-): Effect.Effect<DispatchResult<InspectorResult>> =>
-  dispatch(cmd, policy).pipe(Effect.provide(caps))
+  caps: Layer.Layer<RuntimeEvalCapability | DeviceCapability | SourceWriteCapability>,
+): Effect.Effect<DispatchResult<InspectorResult>> => dispatch(cmd, policy).pipe(Effect.provide(caps))
 
 describe("AC-011 inspector mutating actions gated; reads ungated", () => {
   for (const verb of ["install-comment-menu", "clear-comments", "toggle"] as const) {
-    it.effect(
-      `AC-011 inspector ${verb} with NO policy is DENIED and the eval capability is NEVER invoked`,
-      () =>
-        Effect.gen(function* () {
-          const c = yield* makeCounters
-          expect(inspectorSideEffect(verb)).toBe("runtime-eval")
-          const cmd = inspectorCommand(verb) as Command<SideEffect, InspectorResult>
-          const result = yield* run(cmd, {}, makeCaps(c))
-          const payload = result.payload as { code?: string; denied?: boolean }
-          expect(payload.code).toBe("policy-denied")
-          expect(payload.denied).toBe(true)
-          expect(result.exitCode).toBe(EXIT_SUCCESS)
-          // THE behavioural assertion: zero eval invocations on denial.
-          expect(yield* Ref.get(c.evalCalls)).toBe(0)
-        })
+    it.effect(`AC-011 inspector ${verb} with NO policy is DENIED and the eval capability is NEVER invoked`, () =>
+      Effect.gen(function* () {
+        const c = yield* makeCounters
+        expect(inspectorSideEffect(verb)).toBe("runtime-eval")
+        const cmd = inspectorCommand(verb) as Command<SideEffect, InspectorResult>
+        const result = yield* run(cmd, {}, makeCaps(c))
+        const payload = result.payload as { code?: string; denied?: boolean }
+        expect(payload.code).toBe("policy-denied")
+        expect(payload.denied).toBe(true)
+        expect(result.exitCode).toBe(EXIT_SUCCESS)
+        // THE behavioural assertion: zero eval invocations on denial.
+        expect(yield* Ref.get(c.evalCalls)).toBe(0)
+      }),
     )
   }
 
@@ -105,21 +92,18 @@ describe("AC-011 inspector mutating actions gated; reads ungated", () => {
       const payload = result.payload as { action?: string }
       expect(payload.action).toBe("inspector.toggle")
       expect(yield* Ref.get(c.evalCalls)).toBe(1)
-    })
+    }),
   )
 
   it.effect("AC-011 inspector install-comment-menu allowed by --allow-runtime-eval runs", () =>
     Effect.gen(function* () {
       const c = yield* makeCounters
-      const cmd = inspectorCommand("install-comment-menu") as Command<
-        SideEffect,
-        InspectorResult
-      >
+      const cmd = inspectorCommand("install-comment-menu") as Command<SideEffect, InspectorResult>
       const result = yield* run(cmd, { allowRuntimeEval: true }, makeCaps(c))
       const payload = result.payload as { action?: string }
       expect(payload.action).toBe("inspector.install-comment-menu")
       expect(yield* Ref.get(c.evalCalls)).toBe(1)
-    })
+    }),
   )
 
   for (const verb of ["probe", "read-comments"] as const) {
@@ -142,7 +126,7 @@ describe("AC-011 inspector mutating actions gated; reads ungated", () => {
         // Reads neither touch eval nor device.
         expect(yield* Ref.get(c.evalCalls)).toBe(0)
         expect(yield* Ref.get(c.deviceCalls)).toBe(0)
-      })
+      }),
     )
   }
 
@@ -155,7 +139,7 @@ describe("AC-011 inspector mutating actions gated; reads ungated", () => {
       const payload = result.payload as { code?: string }
       expect(payload.code).toBe("policy-denied")
       expect(yield* Ref.get(c.deviceCalls)).toBe(0)
-    })
+    }),
   )
 
   it.effect("AC-011 inspector open-dev-menu WITH policy allow invokes the device capability", () =>
@@ -167,7 +151,7 @@ describe("AC-011 inspector mutating actions gated; reads ungated", () => {
       expect(payload.action).toBe("inspector.open-dev-menu")
       expect(yield* Ref.get(c.deviceCalls)).toBe(1)
       expect(yield* Ref.get(c.evalCalls)).toBe(0)
-    })
+    }),
   )
 
   it.skip("AC-011 live inspector install-comment-menu against running Hermes writes __CODEX_SIMULATOR_REVIEW__", () => {

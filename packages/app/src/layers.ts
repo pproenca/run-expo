@@ -1,3 +1,6 @@
+import { Command, CommandExecutor, FileSystem } from "@effect/platform"
+import { NodeContext } from "@effect/platform-node"
+import { type PlatformError } from "@effect/platform/Error"
 import {
   DeviceCapability,
   type DeviceCapabilityService,
@@ -12,7 +15,7 @@ import {
   SubprocessFailed,
   type SubprocessService,
   SubprocessTimeout,
-  ToolNotFound
+  ToolNotFound,
 } from "@expo98/core"
 import { Fs, type FsPort, StorageFailure } from "@expo98/domain"
 import {
@@ -23,11 +26,8 @@ import {
   MetroHttpClient,
   type MetroHttpResponse,
   MetroProbeLayer,
-  WsCdpSocketFactoryLayer
+  WsCdpSocketFactoryLayer,
 } from "@expo98/protocols"
-import { Command, CommandExecutor, FileSystem } from "@effect/platform"
-import { type PlatformError } from "@effect/platform/Error"
-import { NodeContext } from "@effect/platform-node"
 import { Effect, Layer, Stream } from "effect"
 
 /**
@@ -58,24 +58,18 @@ const makeNodeFs = Effect.gen(function* () {
 
   const port: FsPort = {
     readFile: (p) => fs.readFileString(p).pipe(Effect.mapError(fail("read", p))),
-    writeFile: (p, contents) =>
-      fs.writeFileString(p, contents).pipe(Effect.mapError(fail("write", p))),
+    writeFile: (p, contents) => fs.writeFileString(p, contents).pipe(Effect.mapError(fail("write", p))),
     exists: (p) => fs.exists(p).pipe(Effect.mapError(fail("read", p))),
-    mkdirp: (p) =>
-      fs
-        .makeDirectory(p, { recursive: true })
-        .pipe(Effect.mapError(fail("write", p))),
+    mkdirp: (p) => fs.makeDirectory(p, { recursive: true }).pipe(Effect.mapError(fail("write", p))),
     readDir: (p) => fs.readDirectory(p).pipe(Effect.mapError(fail("list", p))),
     // `remove` is a no-op if the path does not exist (port contract).
     remove: (p) =>
       fs.exists(p).pipe(
         Effect.mapError(fail("remove", p)),
         Effect.flatMap((present) =>
-          present
-            ? fs.remove(p, { recursive: true }).pipe(Effect.mapError(fail("remove", p)))
-            : Effect.void
-        )
-      )
+          present ? fs.remove(p, { recursive: true }).pipe(Effect.mapError(fail("remove", p))) : Effect.void,
+        ),
+      ),
   }
   return port
 })
@@ -93,7 +87,7 @@ export const NodeFsLayer = Layer.effect(Fs, makeNodeFs)
 const mapPlatformError = (
   tool: string,
   options: RunOptions | undefined,
-  err: PlatformError
+  err: PlatformError,
 ): ToolNotFound | SubprocessTimeout | SubprocessFailed => {
   if (err._tag === "SystemError" && err.reason === "NotFound") {
     return new ToolNotFound({ tool })
@@ -101,7 +95,7 @@ const mapPlatformError = (
   if (err._tag === "SystemError" && err.reason === "TimedOut") {
     return new SubprocessTimeout({
       tool,
-      timeoutMs: options?.timeoutMs ?? 0
+      timeoutMs: options?.timeoutMs ?? 0,
     })
   }
   return new SubprocessFailed({ tool, exitCode: 1, stderr: String(err) })
@@ -120,7 +114,7 @@ const makeNodeSubprocess = Effect.gen(function* () {
   const run = (
     tool: string,
     args: ReadonlyArray<string>,
-    options?: RunOptions
+    options?: RunOptions,
   ): Effect.Effect<RunResult, ToolNotFound | SubprocessTimeout | SubprocessFailed> => {
     // argv-only: no shell, no string interpolation — the arguments are an array.
     let cmd = Command.make(tool, ...args)
@@ -138,10 +132,10 @@ const makeNodeSubprocess = Effect.gen(function* () {
           stream.pipe(Stream.decodeText("utf-8"), Stream.mkString)
         const [stdout, stderr, exitCode] = yield* Effect.all(
           [decode(proc.stdout), decode(proc.stderr), proc.exitCode],
-          { concurrency: "unbounded" }
+          { concurrency: "unbounded" },
         )
         return { tool, args, stdout, stderr, exitCode: exitCode as number }
-      })
+      }),
     )
 
     const withTimeout =
@@ -149,15 +143,14 @@ const makeNodeSubprocess = Effect.gen(function* () {
         ? collected.pipe(
             Effect.timeoutFail({
               duration: `${options.timeoutMs} millis`,
-              onTimeout: () =>
-                new SubprocessTimeout({ tool, timeoutMs: options.timeoutMs ?? 0 })
-            })
+              onTimeout: () => new SubprocessTimeout({ tool, timeoutMs: options.timeoutMs ?? 0 }),
+            }),
           )
         : collected
 
     return withTimeout.pipe(
       Effect.mapError((err): ToolNotFound | SubprocessTimeout | SubprocessFailed =>
-        err instanceof SubprocessTimeout ? err : mapPlatformError(tool, options, err)
+        err instanceof SubprocessTimeout ? err : mapPlatformError(tool, options, err),
       ),
       Effect.flatMap((result) =>
         result.exitCode === 0
@@ -166,10 +159,10 @@ const makeNodeSubprocess = Effect.gen(function* () {
               new SubprocessFailed({
                 tool,
                 exitCode: result.exitCode,
-                stderr: result.stderr
-              })
-            )
-      )
+                stderr: result.stderr,
+              }),
+            ),
+      ),
     )
   }
 
@@ -187,11 +180,10 @@ const DeviceCapabilityLayer = Layer.effect(
   Effect.gen(function* () {
     const subprocess = yield* Subprocess
     const service: DeviceCapabilityService = {
-      invoke: (tool, args) =>
-        subprocess.run(tool, args).pipe(Effect.map((r) => r.stdout))
+      invoke: (tool, args) => subprocess.run(tool, args).pipe(Effect.map((r) => r.stdout)),
     }
     return service
-  })
+  }),
 )
 
 /** Runtime-eval capability backed by the protocols Hermes runtime-eval surface. */
@@ -207,12 +199,10 @@ const RuntimeEvalCapabilityLayer = Layer.effect(
       // root proves the wiring with no candidates (returns unavailable, never
       // throws), keeping the read-path side-effect-free.
       evaluate: (expression) =>
-        hermes.evaluate(expression, { attemptedUrls: [] }).pipe(
-          Effect.map((result) => result as unknown)
-        )
+        hermes.evaluate(expression, { attemptedUrls: [] }).pipe(Effect.map((result) => result as unknown)),
     }
     return service
-  })
+  }),
 )
 
 /** Source-write capability backed by the node FileSystem (AC-008 gated upstream). */
@@ -221,12 +211,11 @@ const SourceWriteCapabilityLayer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const service: SourceWriteCapabilityService = {
-      writeFile: (path, contents) =>
-        fs.writeFileString(path, contents).pipe(Effect.orDie),
-      deleteFile: (path) => fs.remove(path, { recursive: true }).pipe(Effect.orDie)
+      writeFile: (path, contents) => fs.writeFileString(path, contents).pipe(Effect.orDie),
+      deleteFile: (path) => fs.remove(path, { recursive: true }).pipe(Effect.orDie),
     }
     return service
-  })
+  }),
 )
 
 // ── protocols.MetroHttpClient adapter — loopback HTTP via @effect/platform. ──
@@ -239,10 +228,8 @@ const makeMetroHttpClient = Effect.sync(
     // fails closed (loopback semantics preserved — never reaches a non-loopback
     // host).
     request: (req): Effect.Effect<MetroHttpResponse, HttpTransportError> =>
-      Effect.fail(
-        new HttpTransportError({ url: req.url, cause: "metro-http-not-wired" })
-      )
-  })
+      Effect.fail(new HttpTransportError({ url: req.url, cause: "metro-http-not-wired" })),
+  }),
 )
 
 export const MetroHttpClientLayer = Layer.effect(MetroHttpClient, makeMetroHttpClient)
@@ -255,11 +242,7 @@ export const MetroHttpClientLayer = Layer.effect(MetroHttpClient, makeMetroHttpC
 export const PlatformLayer = NodeContext.layer
 
 /** The leaf port adapters resting directly on the platform foundation. */
-const AdapterLayer = Layer.mergeAll(
-  NodeSubprocessLayer,
-  MetroHttpClientLayer,
-  WsCdpSocketFactoryLayer
-)
+const AdapterLayer = Layer.mergeAll(NodeSubprocessLayer, MetroHttpClientLayer, WsCdpSocketFactoryLayer)
 
 /**
  * The protocols layer: Metro probe + the two Hermes CDP surfaces, each with the
@@ -267,11 +250,9 @@ const AdapterLayer = Layer.mergeAll(
  * supplies the adapters to the protocol layers so the socket factory does not
  * leak as an outstanding requirement of the whole stack.
  */
-const ProtocolsLayer = Layer.mergeAll(
-  MetroProbeLayer,
-  HermesEvidenceLayer,
-  HermesRuntimeEvalLayer
-).pipe(Layer.provide(AdapterLayer))
+const ProtocolsLayer = Layer.mergeAll(MetroProbeLayer, HermesEvidenceLayer, HermesRuntimeEvalLayer).pipe(
+  Layer.provide(AdapterLayer),
+)
 
 /**
  * The complete composition-root Layer providing every service the dispatcher
@@ -290,11 +271,11 @@ export const AppLayer = Layer.mergeAll(
   RuntimeEvalCapabilityLayer,
   SourceWriteCapabilityLayer,
   NodeFsLayer,
-  IdDefault
+  IdDefault,
 ).pipe(
   // The capabilities depend on Subprocess (device) and HermesRuntimeEval
   // (runtime-eval); provide BOTH the protocols and the leaf adapters beneath,
   // re-exporting them so the rest of the system can also reach Metro/Hermes.
   Layer.provideMerge(Layer.mergeAll(ProtocolsLayer, AdapterLayer)),
-  Layer.provideMerge(PlatformLayer)
+  Layer.provideMerge(PlatformLayer),
 )

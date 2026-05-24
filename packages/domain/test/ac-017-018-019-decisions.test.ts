@@ -6,14 +6,14 @@ import {
   REF_FORMAT,
   resolveTargetCurrent,
   resolveTargetSelect,
-  STALE_REASON
+  STALE_REASON,
 } from "../src/decisions.js"
 import type { RefCache, TargetRecord } from "../src/entities.js"
 import { makeMemoryFs } from "../src/fs-port.js"
 import type { RefId, SnapshotId, TargetId } from "../src/ids.js"
 import { composeTargetId } from "../src/naming.js"
-import { makePersistence } from "../src/persist.js"
 import * as P from "../src/paths.js"
+import { makePersistence } from "../src/persist.js"
 import type { RefRecord } from "../src/value-objects.js"
 import { STATE_ROOT, TestClock } from "./helpers.js"
 
@@ -34,14 +34,14 @@ const ref = (over: Partial<RefRecord>): RefRecord => ({
   component: null,
   box: { x: 10, y: 20, width: 100, height: 40 },
   actions: ["tap"],
-  ...over
+  ...over,
 })
 
 const cache = (refs: ReadonlyArray<RefRecord>): RefCache => ({
   snapshotId: SID,
   targetId: TID,
   source: ["axe"],
-  refs
+  refs,
 })
 
 // ===========================================================================
@@ -67,7 +67,7 @@ describe("AC-017 ref validity", () => {
       cache: cache([ref({ ref: "@e1" as RefId })]),
       ref: "@e9",
       action: "tap",
-      pointAction: true
+      pointAction: true,
     })
     expect(d.available).toBe(false)
     if (!d.available) expect(d.code).toBe("ref-missing")
@@ -78,7 +78,7 @@ describe("AC-017 ref validity", () => {
       cache: cache([ref({ stale: true })]),
       ref: "@e1",
       action: "tap",
-      pointAction: true
+      pointAction: true,
     })
     expect(d.available).toBe(false)
     if (!d.available) {
@@ -92,7 +92,7 @@ describe("AC-017 ref validity", () => {
       cache: cache([ref({ actions: ["longpress"] })]),
       ref: "@e1",
       action: "tap",
-      pointAction: true
+      pointAction: true,
     })
     expect(d.available).toBe(false)
     if (!d.available) {
@@ -106,7 +106,7 @@ describe("AC-017 ref validity", () => {
       cache: cache([ref({ box: null })]),
       ref: "@e1",
       action: "tap",
-      pointAction: true
+      pointAction: true,
     })
     expect(d.available).toBe(false)
     if (!d.available) expect(d.code).toBe("ref-lacks-bounds")
@@ -123,7 +123,7 @@ describe("AC-017 ref validity", () => {
       cache: cache([ref({})]),
       ref: "@e1",
       action: "tap",
-      pointAction: true
+      pointAction: true,
     })
     expect(d.available).toBe(true)
     if (d.available) {
@@ -148,11 +148,11 @@ const target = (over: Partial<TargetRecord> = {}): TargetRecord => ({
     targetId: "page-1",
     title: "Example",
     appId: "com.example",
-    debuggerUrl: "ws://127.0.0.1:8081/x"
+    debuggerUrl: "ws://127.0.0.1:8081/x",
   },
   selected: true,
   stale: false,
-  ...over
+  ...over,
 })
 
 describe("AC-018 target staleness", () => {
@@ -162,25 +162,23 @@ describe("AC-018 target staleness", () => {
         platform: "ios",
         deviceId: "DEVICE-1",
         appId: "com.example",
-        metroPort: 8081
-      })
+        metroPort: 8081,
+      }),
     ).toBe("ios:DEVICE-1:com.example:8081")
   })
 
   it("targetId falls back metroId -> metroTitle -> no-runtime / no-metro", () => {
-    expect(
-      composeTargetId({ platform: "ios", deviceId: "D", metroId: "page-2", metroPort: null })
-    ).toBe("ios:D:page-2:no-metro")
-    expect(
-      composeTargetId({ platform: "ios", deviceId: "D", metroTitle: "App" })
-    ).toBe("ios:D:App:no-metro")
+    expect(composeTargetId({ platform: "ios", deviceId: "D", metroId: "page-2", metroPort: null })).toBe(
+      "ios:D:page-2:no-metro",
+    )
+    expect(composeTargetId({ platform: "ios", deviceId: "D", metroTitle: "App" })).toBe("ios:D:App:no-metro")
     expect(composeTargetId({ platform: "ios", deviceId: "D" })).toBe("ios:D:no-runtime:no-metro")
   })
 
   it("rediscovered -> selected:true, stale:false", () => {
     const d = resolveTargetCurrent({
       persisted: target({ stale: true, selected: false }),
-      rediscovered: target()
+      rediscovered: target(),
     })
     expect(d.available).toBe(true)
     if (d.available) {
@@ -233,7 +231,7 @@ describe("AC-019 snapshot prerequisites", () => {
   it("missing device.id -> unavailable(missing-device-id)", () => {
     const d = checkSnapshotPrereqs({
       hasSession: true,
-      activeTarget: target({ device: { id: "", name: null, state: "unknown" } })
+      activeTarget: target({ device: { id: "", name: null, state: "unknown" } }),
     })
     expect(d.available).toBe(false)
     if (!d.available) expect(d.code).toBe("missing-device-id")
@@ -258,6 +256,6 @@ describe("AC-019 snapshot prerequisites", () => {
       const layout = P.makeLayout(STATE_ROOT)
       expect(yield* fs.exists(P.snapshotsDir(layout, session.sessionId))).toBe(false)
       expect(yield* fs.exists(P.refsFile(layout, session.sessionId))).toBe(false)
-    })
+    }),
   )
 })

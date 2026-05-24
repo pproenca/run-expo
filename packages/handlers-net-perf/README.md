@@ -23,18 +23,18 @@ The single HAR file write goes through core's `confinePath` (AC-013) before any
 
 ## AC → source → test map
 
-| AC | What | Source | Test |
-|---|---|---|---|
-| **AC-045** | network waterfall (numeric `durationMs`, sort desc, top 50, `slowThresholdMs=500`, `slowRequestCount`=ranked≥500); duplicates by `<method> <origin><path\|url>` keep >1; HAR `version "1.2"`, `time=durationMs??0`, query+cookies emptied, inferred `endedAt`; `status`/`ok`/`responseBytes` fallback chain, `retryCount??0` | `network.ts` | `test/network.test.ts` |
-| **AC-013** | HAR `--output-path` confined under the artifacts root (FIX); `../`/absolute/sibling-prefix escapes rejected | `network.ts` (`confineHarOutputPath` → core `confinePath`) | `test/network.test.ts` |
-| **AC-022** | network shape validation REUSED from `@expo98/protocols` (not re-implemented); re-exported | `@expo98/protocols` | `test/network.test.ts` |
-| **AC-046** | finding thresholds: network slow≥500 (high≥1000), render worst commit≥16.7 (high≥50), frames `droppedFrameCount ?? count(deltaMs>33.4)` flagged>0 (high≥5) | `perf-report.ts` | `test/perf-thresholds.test.ts` |
-| **AC-047** | `avgFps=round((1000/mean(deltaMs))*10)/10`, `droppedFrameCount=count(delta>FRAME_2)`, `longFrameCount=count(delta>FRAME_1)`, `worstFrameMs=max`, stats over last 300, retain 1000, `deltaMs=round((ts−lastTs)*10)/10` | `perf-frames.ts` | `test/perf-thresholds.test.ts` |
-| **AC-048** | confidence rollup: empty→low, any high→high, else any medium→medium else low; `lowerConfidence(a,b)` | `perf-confidence.ts` | `test/perf-thresholds.test.ts` |
-| **AC-049** | direction-aware compare (FIX): `delta=candidate−baseline`, `confidence=lowerConfidence`, `improved` per metric DIRECTION | `perf-compare.ts` | `test/perf-compare-budget-memory.test.ts` |
-| **AC-050** | budget fail-closed: `passed = value is number && (max===undefined\|\|value≤max) && (min===undefined\|\|value≥min)`; missing metric→null→fail; overall `every` | `perf-budget.ts` | `test/perf-compare-budget-memory.test.ts` |
-| **AC-051** | memory-leak claim: `samples=clamp(args.samples??1,1,100)`; confidence medium iff samples≥2 OR native artifact else low; `leakClaim.allowed = samples≥2 \|\| Boolean(nativeArtifact)` | `perf-memory.ts` | `test/perf-compare-budget-memory.test.ts` |
-| **AC-052** | native macOS `sample` parse (PRESERVE): footprint/peak/main-thread/idle/busy, hermes/yoga/mounting/coreAnimation/uiKit buckets, top 30 symbols, available iff any footprint/symbols | `native-sample.ts` | `test/native-sample.test.ts` |
+| AC         | What                                                                                                                                                                                                                                                                                                                         | Source                                                     | Test                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------- |
+| **AC-045** | network waterfall (numeric `durationMs`, sort desc, top 50, `slowThresholdMs=500`, `slowRequestCount`=ranked≥500); duplicates by `<method> <origin><path\|url>` keep >1; HAR `version "1.2"`, `time=durationMs??0`, query+cookies emptied, inferred `endedAt`; `status`/`ok`/`responseBytes` fallback chain, `retryCount??0` | `network.ts`                                               | `test/network.test.ts`                    |
+| **AC-013** | HAR `--output-path` confined under the artifacts root (FIX); `../`/absolute/sibling-prefix escapes rejected                                                                                                                                                                                                                  | `network.ts` (`confineHarOutputPath` → core `confinePath`) | `test/network.test.ts`                    |
+| **AC-022** | network shape validation REUSED from `@expo98/protocols` (not re-implemented); re-exported                                                                                                                                                                                                                                   | `@expo98/protocols`                                        | `test/network.test.ts`                    |
+| **AC-046** | finding thresholds: network slow≥500 (high≥1000), render worst commit≥16.7 (high≥50), frames `droppedFrameCount ?? count(deltaMs>33.4)` flagged>0 (high≥5)                                                                                                                                                                   | `perf-report.ts`                                           | `test/perf-thresholds.test.ts`            |
+| **AC-047** | `avgFps=round((1000/mean(deltaMs))*10)/10`, `droppedFrameCount=count(delta>FRAME_2)`, `longFrameCount=count(delta>FRAME_1)`, `worstFrameMs=max`, stats over last 300, retain 1000, `deltaMs=round((ts−lastTs)*10)/10`                                                                                                        | `perf-frames.ts`                                           | `test/perf-thresholds.test.ts`            |
+| **AC-048** | confidence rollup: empty→low, any high→high, else any medium→medium else low; `lowerConfidence(a,b)`                                                                                                                                                                                                                         | `perf-confidence.ts`                                       | `test/perf-thresholds.test.ts`            |
+| **AC-049** | direction-aware compare (FIX): `delta=candidate−baseline`, `confidence=lowerConfidence`, `improved` per metric DIRECTION                                                                                                                                                                                                     | `perf-compare.ts`                                          | `test/perf-compare-budget-memory.test.ts` |
+| **AC-050** | budget fail-closed: `passed = value is number && (max===undefined\|\|value≤max) && (min===undefined\|\|value≥min)`; missing metric→null→fail; overall `every`                                                                                                                                                                | `perf-budget.ts`                                           | `test/perf-compare-budget-memory.test.ts` |
+| **AC-051** | memory-leak claim: `samples=clamp(args.samples??1,1,100)`; confidence medium iff samples≥2 OR native artifact else low; `leakClaim.allowed = samples≥2 \|\| Boolean(nativeArtifact)`                                                                                                                                         | `perf-memory.ts`                                           | `test/perf-compare-budget-memory.test.ts` |
+| **AC-052** | native macOS `sample` parse (PRESERVE): footprint/peak/main-thread/idle/busy, hermes/yoga/mounting/coreAnimation/uiKit buckets, top 30 symbols, available iff any footprint/symbols                                                                                                                                          | `native-sample.ts`                                         | `test/native-sample.test.ts`              |
 
 ## AC-047 — the frame-budget CORRECTION (Q#18)
 
@@ -82,10 +82,10 @@ Tools (Instruments 15.x toolchain).
 ## Skipped (require a live device)
 
 - `test/network.test.ts` — `it.skip("AC-045 live network capture against a
-  running Hermes …")` — needs a running Metro + Hermes; harvest is the read-eval
+running Hermes …")` — needs a running Metro + Hermes; harvest is the read-eval
   CDP seam. All derivation logic is fully covered.
 - `test/perf-compare-budget-memory.test.ts` — `it.skip("AC-046/047/049 live perf
-  capture …")` — same reason; all calc is fully covered.
+capture …")` — same reason; all calc is fully covered.
 
 ## Boundary rule
 

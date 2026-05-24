@@ -9,14 +9,14 @@ describe("S2 confinePath (AC-013)", () => {
     Effect.gen(function* () {
       const resolved = yield* confinePath(ROOT, "screenshots/home.png")
       expect(resolved).toBe(`${ROOT}/screenshots/home.png`)
-    })
+    }),
   )
 
   it.effect("AC-013 the root itself is allowed", () =>
     Effect.gen(function* () {
       const resolved = yield* confinePath(ROOT, ".")
       expect(resolved).toBe(ROOT)
-    })
+    }),
   )
 
   it.effect("AC-013 rejects ../ traversal that escapes the root", () =>
@@ -28,7 +28,7 @@ describe("S2 confinePath (AC-013)", () => {
         // the only failure is a PathEscape
         expect(JSON.stringify(failure)).toContain("PathEscape")
       }
-    })
+    }),
   )
 
   it.effect("AC-013 rejects an absolute escape", () =>
@@ -38,7 +38,7 @@ describe("S2 confinePath (AC-013)", () => {
       if (result._tag === "Left") {
         expect(result.left).toBeInstanceOf(PathEscape)
       }
-    })
+    }),
   )
 
   it.effect("AC-013 rejects a sibling-prefix path (no separator-boundary bypass)", () =>
@@ -46,13 +46,13 @@ describe("S2 confinePath (AC-013)", () => {
       // /work/.scratch/expo98/artifacts-evil must NOT count as under artifacts
       const result = yield* Effect.either(confinePath(ROOT, "/work/.scratch/expo98/artifacts-evil/x"))
       expect(result._tag).toBe("Left")
-    })
+    }),
   )
 
   it.effect("AC-013 normalises interior ../ that stays inside the root", () =>
     Effect.gen(function* () {
       const resolved = yield* confinePath(ROOT, "a/b/../c.png")
       expect(resolved).toBe(`${ROOT}/a/c.png`)
-    })
+    }),
   )
 })

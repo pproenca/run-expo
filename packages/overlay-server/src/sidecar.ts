@@ -35,7 +35,7 @@ export const registerSidecar = (pid: number, port: number): SidecarRecord => ({
   name: SIDECAR_NAME,
   pid,
   port,
-  status: "running"
+  status: "running",
 })
 
 /**
@@ -57,7 +57,7 @@ export const observeLiveness = (sidecar: SidecarRecord, alive: boolean): Sidecar
 /** Transition a sidecar to `stopped` (clean shutdown or reaping a stale one). PURE. */
 export const stopSidecar = (sidecar: SidecarRecord): SidecarRecord => ({
   ...sidecar,
-  status: "stopped"
+  status: "stopped",
 })
 
 /** Is this sidecar a candidate for reaping (stale and thus safe to stop)? PURE. */
@@ -79,10 +79,7 @@ export interface SidecarProbe {
  * Refresh a sidecar's status from a live probe (AC-033). Effectful wrapper over
  * the pure `observeLiveness` transition; `stopped` records short-circuit (no probe).
  */
-export const refreshSidecar = (
-  sidecar: SidecarRecord,
-  probe: SidecarProbe
-): Effect.Effect<SidecarRecord> =>
+export const refreshSidecar = (sidecar: SidecarRecord, probe: SidecarProbe): Effect.Effect<SidecarRecord> =>
   sidecar.status === "stopped"
     ? Effect.succeed(sidecar)
     : probe.isAlive(sidecar).pipe(Effect.map((alive) => observeLiveness(sidecar, alive)))

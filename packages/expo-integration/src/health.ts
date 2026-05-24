@@ -1,3 +1,4 @@
+import { Fs } from "@expo98/domain"
 /**
  * `health` — bridge RUNTIME-HEALTH state machine (AC-028, brief Q#12).
  *
@@ -24,13 +25,8 @@
  */
 import { type CdpEvaluateResult, HermesEvidence } from "@expo98/protocols"
 import { Effect } from "effect"
-import {
-  BRIDGE_DOMAINS,
-  BRIDGE_SCHEMA_VERSION,
-  EXPO98_BRIDGE_VERSION
-} from "./bridge-files.js"
+import { BRIDGE_DOMAINS, BRIDGE_SCHEMA_VERSION, EXPO98_BRIDGE_VERSION } from "./bridge-files.js"
 import { type InstallStateResult, readInstallState } from "./install-state.js"
-import { Fs } from "@expo98/domain"
 
 /** Stable unavailable codes for the health machine (AC-028 + AC-009). */
 export type HealthUnavailableCode =
@@ -101,15 +97,16 @@ const readyPayload = (): HealthReady => ({
     read: "no policy required",
     device: "policy allow for the exact action",
     "runtime-eval": "policy allow OR --allow-runtime-eval",
-    "source-write": "policy allow AND confirmation token"
-  }
+    "source-write": "policy allow AND confirmation token",
+  },
 })
 
-const unavailable = (
-  step: HealthStep,
-  code: HealthUnavailableCode,
-  reason: string
-): HealthUnavailable => ({ available: false, step, code, reason })
+const unavailable = (step: HealthStep, code: HealthUnavailableCode, reason: string): HealthUnavailable => ({
+  available: false,
+  step,
+  code,
+  reason,
+})
 
 /** Package-controlled read-only probe expression (the legitimate `read` use). */
 export const REGISTRATION_PROBE_EXPRESSION = `(function () {
@@ -133,11 +130,9 @@ const parseProbe = (value: unknown): RegistrationProbe => {
     bridgePresent: typeof r["bridgePresent"] === "boolean" ? r["bridgePresent"] : undefined,
     registered: typeof r["registered"] === "boolean" ? r["registered"] : undefined,
     devMode:
-      r["devMode"] === "undefined" || r["devMode"] === "false" || r["devMode"] === "true"
-        ? r["devMode"]
-        : undefined,
+      r["devMode"] === "undefined" || r["devMode"] === "false" || r["devMode"] === "true" ? r["devMode"] : undefined,
     version: typeof r["version"] === "string" ? r["version"] : undefined,
-    schemaVersion: typeof r["schemaVersion"] === "number" ? r["schemaVersion"] : undefined
+    schemaVersion: typeof r["schemaVersion"] === "number" ? r["schemaVersion"] : undefined,
   }
 }
 
@@ -154,25 +149,19 @@ export interface HealthInput {
  * Run the ordered runtime-health state machine. `Fs` is needed only when the
  * install state isn't supplied; `HermesEvidence` is the CDP probe seam.
  */
-export const bridgeHealth = (
-  input: HealthInput
-): Effect.Effect<HealthResult, never, HermesEvidence | Fs> =>
+export const bridgeHealth = (input: HealthInput): Effect.Effect<HealthResult, never, HermesEvidence | Fs> =>
   Effect.gen(function* () {
     // ── Step 1: install-state (fail-closed BEFORE probing the device) ──
     const install = input.installState ?? (yield* readInstallState(input.root))
     if (install.status === "stale") {
-      return unavailable(
-        "install-state",
-        "stale-bridge",
-        `Bridge install is stale (${install.issue ?? "stale"}).`
-      )
+      return unavailable("install-state", "stale-bridge", `Bridge install is stale (${install.issue ?? "stale"}).`)
     }
     if (install.status === "incompatible") {
       // AC-009: developmentOnly !== true lands here as not-development-only.
       return unavailable(
         "install-state",
         "incompatible-project",
-        `Bridge install is incompatible (${install.issue ?? "incompatible"}).`
+        `Bridge install is incompatible (${install.issue ?? "incompatible"}).`,
       )
     }
     // `absent` and `present` may proceed to probe; only `present` can become ready,
@@ -181,13 +170,10 @@ export const bridgeHealth = (
 
     // ── Step 2: transport (Hermes target + CDP round-trip) ──
     const hermes = yield* HermesEvidence
-    const evalResult: CdpEvaluateResult = yield* hermes.evaluateReadOnly(
-      REGISTRATION_PROBE_EXPRESSION,
-      {
-        attemptedUrls: input.attemptedUrls ?? [],
-        metroPort: input.metroPort
-      }
-    )
+    const evalResult: CdpEvaluateResult = yield* hermes.evaluateReadOnly(REGISTRATION_PROBE_EXPRESSION, {
+      attemptedUrls: input.attemptedUrls ?? [],
+      metroPort: input.metroPort,
+    })
     if (evalResult.available === false) {
       const noTarget = (input.attemptedUrls ?? []).length === 0
       return noTarget
@@ -198,46 +184,35 @@ export const bridgeHealth = (
     // ── Step 3: registration (bridge present + registered + AC-009 dev gate) ──
     const probe = parseProbe(evalResult.result.value)
     if (probe.bridgePresent !== true) {
-      return unavailable(
-        "registration",
-        "missing-bridge",
-        "The in-app bridge global is not present."
-      )
+      return unavailable("registration", "missing-bridge", "The in-app bridge global is not present.")
     }
     // AC-009 runtime dev gate (mirrors `registerExpo98DevtoolsBridge`).
     if (probe.devMode === "undefined") {
       return unavailable(
         "registration",
         "development-mode-required",
-        "__DEV__ is undefined; the bridge refuses to register."
+        "__DEV__ is undefined; the bridge refuses to register.",
       )
     }
     if (probe.devMode === "false") {
       return unavailable(
         "registration",
         "production-build",
-        "__DEV__ is false; the bridge refuses to register in a production build."
+        "__DEV__ is false; the bridge refuses to register in a production build.",
       )
     }
     if (probe.registered !== true) {
-      return unavailable(
-        "registration",
-        "missing-registration",
-        "The bridge global is present but not registered."
-      )
+      return unavailable("registration", "missing-registration", "The bridge global is present but not registered.")
     }
 
     // ── Step 4: version (registered version/schema must match) ──
-    if (
-      probe.version !== EXPO98_BRIDGE_VERSION ||
-      probe.schemaVersion !== BRIDGE_SCHEMA_VERSION
-    ) {
+    if (probe.version !== EXPO98_BRIDGE_VERSION || probe.schemaVersion !== BRIDGE_SCHEMA_VERSION) {
       return unavailable(
         "version",
         "version-mismatch",
         `Registered bridge version ${probe.version ?? "?"}/${
           probe.schemaVersion ?? "?"
-        } does not match ${EXPO98_BRIDGE_VERSION}/${BRIDGE_SCHEMA_VERSION}.`
+        } does not match ${EXPO98_BRIDGE_VERSION}/${BRIDGE_SCHEMA_VERSION}.`,
       )
     }
 

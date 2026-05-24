@@ -2,8 +2,8 @@
   "name": "@expo98/domain",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "expo98 reimagined — domain model (Effect Schema structs) + persistence service: sessions, targets, snapshots, refs, run-records with lenient-read/strict-write migration.",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./src/index.ts",

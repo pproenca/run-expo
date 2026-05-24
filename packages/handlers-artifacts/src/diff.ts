@@ -35,10 +35,7 @@ export interface DiffResult {
  * Build a `diff` read command. With no `--baseline` the diff is designed-
  * unavailable (`available:false`) — there is nothing to compare against.
  */
-export const diffCommand = (
-  kind: DiffKind,
-  args: DiffArgs = {}
-): Command<"read", DiffResult> =>
+export const diffCommand = (kind: DiffKind, args: DiffArgs = {}): Command<"read", DiffResult> =>
   command(
     descriptor("diff", "read"),
     Effect.sync<DiffResult>(() => {
@@ -50,7 +47,7 @@ export const diffCommand = (
           baseline: null,
           candidate: args.candidate ?? null,
           changed: null,
-          reason: "A --baseline artifact is required to diff."
+          reason: "A --baseline artifact is required to diff.",
         }
       }
       const candidate = args.candidate ?? null
@@ -63,7 +60,7 @@ export const diffCommand = (
         // No AC pins the byte-level comparison; the shape is the contract. A
         // real build reads both artifacts and compares; here equal refs ⇒ no
         // change, differing/absent candidate ⇒ changed.
-        changed: candidate === null ? true : candidate !== args.baseline
+        changed: candidate === null ? true : candidate !== args.baseline,
       }
-    })
+    }),
   )

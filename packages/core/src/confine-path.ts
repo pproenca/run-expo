@@ -15,10 +15,7 @@ import { PathEscape } from "./errors.js"
  * dependency) to keep the pure spine platform-free; it mirrors POSIX
  * `path.resolve`/`normalize` semantics.
  */
-export const confinePath = (
-  root: string,
-  candidate: string
-): Effect.Effect<string, PathEscape> =>
+export const confinePath = (root: string, candidate: string): Effect.Effect<string, PathEscape> =>
   Effect.suspend(() => {
     const resolvedRoot = normalizeAbsolute(root)
     // An absolute candidate is resolved on its own; a relative one is resolved
@@ -29,17 +26,14 @@ export const confinePath = (
 
     return isContained(resolvedRoot, resolved)
       ? Effect.succeed(resolved)
-      : Effect.fail(
-          new PathEscape({ root: resolvedRoot, candidate, resolved })
-        )
+      : Effect.fail(new PathEscape({ root: resolvedRoot, candidate, resolved }))
   })
 
 const SEP = "/"
 
 const isAbsolute = (p: string): boolean => p.startsWith(SEP)
 
-const join = (a: string, b: string): string =>
-  a.endsWith(SEP) ? a + b : a + SEP + b
+const join = (a: string, b: string): string => (a.endsWith(SEP) ? a + b : a + SEP + b)
 
 /**
  * Resolve `.`/`..` segments against an absolute base. `..` cannot climb above

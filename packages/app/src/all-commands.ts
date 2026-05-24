@@ -22,6 +22,7 @@
  * SIDE-EFFECT CLASS + the DISPATCH PATH are the load-bearing parts and are real.
  */
 import { command } from "@expo98/core"
+import { installWriteCommand, removeWriteCommand, buildSitemap, classifyCompat } from "@expo98/expo-integration"
 import {
   type DiffKind,
   dashboardCommand,
@@ -32,7 +33,7 @@ import {
   reviewCommand,
   type ReviewVerb,
   reviewNextCommand,
-  uxContextCommand
+  uxContextCommand,
 } from "@expo98/handlers-artifacts"
 import {
   inspectorCommand,
@@ -41,7 +42,7 @@ import {
   navigationCommand,
   type NavigationVerb,
   traceCommand,
-  type TraceVerb
+  type TraceVerb,
 } from "@expo98/handlers-devtools"
 import {
   clipboardCommand,
@@ -56,34 +57,18 @@ import {
   type RefActionVerb,
   screenshotCommand,
   tapCommand,
-  waitCommand
+  waitCommand,
 } from "@expo98/handlers-interaction"
+import { buildWaterfall, duplicateGroups, normalizeRequests, reportFindings } from "@expo98/handlers-net-perf"
 import {
   accessibilityCommand,
   type AccessibilityVerb,
   rnCommand,
   type RnVerb,
-  snapshotCommand
+  snapshotCommand,
 } from "@expo98/handlers-snapshot"
-import {
-  buildWaterfall,
-  duplicateGroups,
-  normalizeRequests,
-  reportFindings
-} from "@expo98/handlers-net-perf"
-import {
-  installWriteCommand,
-  removeWriteCommand,
-  buildSitemap,
-  classifyCompat
-} from "@expo98/expo-integration"
 import { Effect } from "effect"
-import {
-  type CommandContext,
-  type CommandRegistration,
-  eraseRegistration,
-  registration
-} from "./registry.js"
+import { type CommandContext, type CommandRegistration, eraseRegistration, registration } from "./registry.js"
 
 /** The default project root used to confine artifact writes / locate bridge files. */
 const ARTIFACTS_ROOT = "/tmp/expo98-artifacts" as const
@@ -109,9 +94,9 @@ const traceRegs = TRACE_VERBS.map((verb) =>
       path: `trace ${verb}`,
       summary: `Runtime tracer: ${verb} (runtime-eval, gated).`,
       sideEffect: "runtime-eval",
-      build: () => traceCommand(verb, {})
-    })
-  )
+      build: () => traceCommand(verb, {}),
+    }),
+  ),
 )
 
 const INSPECTOR_VERBS: ReadonlyArray<InspectorVerb> = [
@@ -120,7 +105,7 @@ const INSPECTOR_VERBS: ReadonlyArray<InspectorVerb> = [
   "install-comment-menu",
   "clear-comments",
   "toggle",
-  "open-dev-menu"
+  "open-dev-menu",
 ]
 // inspectorCommand returns a per-verb union; each verb's class is fixed, so we
 // build it inside a class-pinned registration and erase at the boundary.
@@ -129,25 +114,18 @@ const inspectorRegs = INSPECTOR_VERBS.map((verb) =>
     path: `inspector ${verb}`,
     summary: `In-app inspector: ${verb}.`,
     sideEffect: "read",
-    build: () => inspectorCommand(verb)
-  } as CommandRegistration)
+    build: () => inspectorCommand(verb),
+  } as CommandRegistration),
 )
 
-const NAVIGATION_VERBS: ReadonlyArray<NavigationVerb> = [
-  "state",
-  "back",
-  "pop-to-root",
-  "tab",
-  "deep-link"
-]
+const NAVIGATION_VERBS: ReadonlyArray<NavigationVerb> = ["state", "back", "pop-to-root", "tab", "deep-link"]
 const navigationRegs = NAVIGATION_VERBS.map((verb) =>
   eraseRegistration({
     path: `navigation ${verb}`,
     summary: `Navigation: ${verb} (mutations gated as device).`,
     sideEffect: "read",
-    build: (ctx: CommandContext) =>
-      navigationCommand(verb, { target: ctx.positionals[0] })
-  } as CommandRegistration)
+    build: (ctx: CommandContext) => navigationCommand(verb, { target: ctx.positionals[0] }),
+  } as CommandRegistration),
 )
 
 const logsRegs = (["console", "errors"] as const).map((stream) =>
@@ -156,9 +134,9 @@ const logsRegs = (["console", "errors"] as const).map((stream) =>
       path: stream,
       summary: `Read the last N ${stream} entries (read).`,
       sideEffect: "read",
-      build: (ctx: CommandContext) => logsCommand(stream, { limit: num(ctx.positionals[0]) })
-    })
-  )
+      build: (ctx: CommandContext) => logsCommand(stream, { limit: num(ctx.positionals[0]) }),
+    }),
+  ),
 )
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -174,7 +152,7 @@ const LIFECYCLE_VERBS: ReadonlyArray<LifecycleVerb> = [
   "install-app",
   "uninstall-app",
   "open-route",
-  "set"
+  "set",
 ]
 const lifecycleRegs = LIFECYCLE_VERBS.map((verb) =>
   eraseRegistration({
@@ -186,9 +164,9 @@ const lifecycleRegs = LIFECYCLE_VERBS.map((verb) =>
         device: ctx.positionals[0],
         bundleId: ctx.positionals[1],
         url: ctx.positionals[1],
-        appPath: ctx.positionals[1]
-      })
-  } as CommandRegistration)
+        appPath: ctx.positionals[1],
+      }),
+  } as CommandRegistration),
 )
 
 const GESTURE_KINDS: ReadonlyArray<GestureKind> = ["tap", "long-press", "drag", "swipe"]
@@ -198,9 +176,9 @@ const gestureRegs = GESTURE_KINDS.map((kind) =>
       path: `gesture ${kind}`,
       summary: `Gesture: ${kind} (device, gated).`,
       sideEffect: "device",
-      build: () => gestureCommand(kind, {})
-    })
-  )
+      build: () => gestureCommand(kind, {}),
+    }),
+  ),
 )
 
 const REF_ACTION_VERBS: ReadonlyArray<RefActionVerb> = [
@@ -214,7 +192,7 @@ const REF_ACTION_VERBS: ReadonlyArray<RefActionVerb> = [
   "uncheck",
   "drag",
   "scroll",
-  "scroll-into-view"
+  "scroll-into-view",
 ]
 const refActionRegs = REF_ACTION_VERBS.map((verb) =>
   eraseRegistration(
@@ -223,9 +201,9 @@ const refActionRegs = REF_ACTION_VERBS.map((verb) =>
       summary: `Ref action over an @eN ref: ${verb} (device, gated).`,
       sideEffect: "device",
       build: (ctx: CommandContext) =>
-        refActionCommand(verb, ctx.positionals[0] ?? "@e1", { value: ctx.positionals[1] })
-    })
-  )
+        refActionCommand(verb, ctx.positionals[0] ?? "@e1", { value: ctx.positionals[1] }),
+    }),
+  ),
 )
 
 const KEYBOARD_VERBS: ReadonlyArray<KeyboardVerb> = ["type", "press", "keyboard"]
@@ -235,10 +213,9 @@ const keyboardRegs = KEYBOARD_VERBS.map((verb) =>
       path: verb,
       summary: `Keyboard: ${verb} (device, gated).`,
       sideEffect: "device",
-      build: (ctx: CommandContext) =>
-        keyboardCommand(verb, { text: ctx.positionals[0], key: ctx.positionals[0] })
-    })
-  )
+      build: (ctx: CommandContext) => keyboardCommand(verb, { text: ctx.positionals[0], key: ctx.positionals[0] }),
+    }),
+  ),
 )
 
 const CLIPBOARD_VERBS: ReadonlyArray<ClipboardVerb> = ["read", "write", "paste"]
@@ -248,9 +225,9 @@ const clipboardRegs = CLIPBOARD_VERBS.map((verb) =>
       path: `clipboard ${verb}`,
       summary: `Clipboard: ${verb} (device, gated).`,
       sideEffect: "device",
-      build: (ctx: CommandContext) => clipboardCommand(verb, { text: ctx.positionals[0] })
-    })
-  )
+      build: (ctx: CommandContext) => clipboardCommand(verb, { text: ctx.positionals[0] }),
+    }),
+  ),
 )
 
 const tapReg = eraseRegistration(
@@ -258,9 +235,8 @@ const tapReg = eraseRegistration(
     path: "tap",
     summary: "Tap at (x, y) (device, gated).",
     sideEffect: "device",
-    build: (ctx: CommandContext) =>
-      tapCommand({ x: num(ctx.positionals[0]), y: num(ctx.positionals[1]) })
-  })
+    build: (ctx: CommandContext) => tapCommand({ x: num(ctx.positionals[0]), y: num(ctx.positionals[1]) }),
+  }),
 )
 
 const screenshotReg = eraseRegistration(
@@ -268,9 +244,8 @@ const screenshotReg = eraseRegistration(
     path: "screenshot",
     summary: "Capture a screenshot to a confined artifact path (device, gated).",
     sideEffect: "device",
-    build: (ctx: CommandContext) =>
-      screenshotCommand(ARTIFACTS_ROOT, { outputPath: ctx.positionals[0], full: false })
-  })
+    build: (ctx: CommandContext) => screenshotCommand(ARTIFACTS_ROOT, { outputPath: ctx.positionals[0], full: false }),
+  }),
 )
 
 // `wait`: read by default, runtime-eval only with `--fn`. The shell maps `--ms`
@@ -282,7 +257,7 @@ const waitReg = eraseRegistration({
   build: (ctx: CommandContext) => {
     const ms = num(ctx.positionals[0])
     return waitCommand(ms !== undefined ? { ms } : {}, {})
-  }
+  },
 } as CommandRegistration)
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -302,9 +277,9 @@ const snapshotReg = eraseRegistration(
         available: false,
         action: "snapshot",
         reason: "Live capture seam not wired in this invocation.",
-        code: "no-axe"
-      })
-  })
+        code: "no-axe",
+      }),
+  }),
 )
 
 const ACCESSIBILITY_VERBS: ReadonlyArray<AccessibilityVerb> = ["tree", "audit"]
@@ -316,9 +291,9 @@ const accessibilityRegs = ACCESSIBILITY_VERBS.map((verb) =>
       sideEffect: "read",
       // The ref cache is read from refs.json by the shell ahead of time; here we
       // pass null (no cache) → an unavailable read.
-      build: () => accessibilityCommand(verb, null)
-    })
-  )
+      build: () => accessibilityCommand(verb, null),
+    }),
+  ),
 )
 
 const RN_VERBS: ReadonlyArray<RnVerb> = ["tree", "refs", "renders", "inspect"]
@@ -328,10 +303,9 @@ const rnRegs = RN_VERBS.map((verb) =>
       path: `rn ${verb}`,
       summary: `React Native introspection: ${verb} (read).`,
       sideEffect: "read",
-      build: (ctx: CommandContext) =>
-        rnCommand(verb, { graph: null, elementId: ctx.positionals[0] })
-    })
-  )
+      build: (ctx: CommandContext) => rnCommand(verb, { graph: null, elementId: ctx.positionals[0] }),
+    }),
+  ),
 )
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -355,11 +329,11 @@ const networkReg = eraseRegistration(
             action: "network",
             requestCount: requests.length,
             waterfall: buildWaterfall(requests),
-            duplicates: duplicateGroups(requests)
+            duplicates: duplicateGroups(requests),
           }
-        })
-      )
-  })
+        }),
+      ),
+  }),
 )
 
 const perfReg = eraseRegistration(
@@ -373,10 +347,10 @@ const perfReg = eraseRegistration(
         Effect.sync(() => ({
           available: true,
           action: "perf",
-          findings: reportFindings({})
-        }))
-      )
-  })
+          findings: reportFindings({}),
+        })),
+      ),
+  }),
 )
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -392,9 +366,9 @@ const diffRegs = DIFF_KINDS.map((kind) =>
       summary: `Diff a captured ${kind} against a --baseline (read).`,
       sideEffect: "read",
       build: (ctx: CommandContext) =>
-        diffCommand(kind, { baseline: ctx.positionals[0], candidate: ctx.positionals[1] })
-    })
-  )
+        diffCommand(kind, { baseline: ctx.positionals[0], candidate: ctx.positionals[1] }),
+    }),
+  ),
 )
 
 const uxContextReg = eraseRegistration(
@@ -402,8 +376,8 @@ const uxContextReg = eraseRegistration(
     path: "ux-context",
     summary: "Bundle UX-context evidence facets (read).",
     sideEffect: "read",
-    build: () => uxContextCommand({})
-  })
+    build: () => uxContextCommand({}),
+  }),
 )
 
 const reviewNextReg = eraseRegistration(
@@ -411,8 +385,8 @@ const reviewNextReg = eraseRegistration(
     path: "review-next",
     summary: "Next-step review guidance (read).",
     sideEffect: "read",
-    build: (ctx: CommandContext) => reviewNextCommand({ surface: ctx.positionals[0] })
-  })
+    build: (ctx: CommandContext) => reviewNextCommand({ surface: ctx.positionals[0] }),
+  }),
 )
 
 const REVIEW_VERBS: ReadonlyArray<ReviewVerb> = ["report", "matrix"]
@@ -422,9 +396,9 @@ const reviewRegs = REVIEW_VERBS.map((verb) =>
       path: `review ${verb}`,
       summary: `Render a review ${verb} (read).`,
       sideEffect: "read",
-      build: () => reviewCommand(verb, {})
-    })
-  )
+      build: () => reviewCommand(verb, {}),
+    }),
+  ),
 )
 
 const DASHBOARD_VERBS: ReadonlyArray<DashboardVerb> = ["start", "stop", "report"]
@@ -434,9 +408,9 @@ const dashboardRegs = DASHBOARD_VERBS.map((verb) =>
       path: `dashboard ${verb}`,
       summary: `Session observability: ${verb} (read; no network listener).`,
       sideEffect: "read",
-      build: () => dashboardCommand(verb, {})
-    })
-  )
+      build: () => dashboardCommand(verb, {}),
+    }),
+  ),
 )
 
 const liveBacklogRegs = [
@@ -445,8 +419,8 @@ const liveBacklogRegs = [
       path: "live-backlog generate",
       summary: "Emit the source-derived command-matrix template (read).",
       sideEffect: "read",
-      build: () => liveBacklogGenerateCommand()
-    })
+      build: () => liveBacklogGenerateCommand(),
+    }),
   ),
   eraseRegistration(
     registration({
@@ -457,10 +431,10 @@ const liveBacklogRegs = [
         liveBacklogMatrixCommand({
           bundleId: ctx.positionals[0],
           device: ctx.positionals[1],
-          devClientUrl: ctx.positionals[2]
-        })
-    })
-  )
+          devClientUrl: ctx.positionals[2],
+        }),
+    }),
+  ),
 ]
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -473,8 +447,8 @@ const bridgeInstallReg = eraseRegistration(
     path: "bridge install",
     summary: "Install the in-app bridge files (source-write; needs confirmation).",
     sideEffect: "source-write",
-    build: () => installWriteCommand(PROJECT_ROOT)
-  })
+    build: () => installWriteCommand(PROJECT_ROOT),
+  }),
 )
 
 const bridgeRemoveReg = eraseRegistration(
@@ -482,8 +456,8 @@ const bridgeRemoveReg = eraseRegistration(
     path: "bridge remove",
     summary: "Remove the in-app bridge files (source-write; needs confirmation).",
     sideEffect: "source-write",
-    build: () => removeWriteCommand(PROJECT_ROOT)
-  })
+    build: () => removeWriteCommand(PROJECT_ROOT),
+  }),
 )
 
 const expoCompatReg = eraseRegistration(
@@ -497,10 +471,10 @@ const expoCompatReg = eraseRegistration(
         Effect.sync(() => ({
           available: true,
           action: "expo-compat",
-          result: classifyCompat({ expo: ctx.positionals[0], reactNative: ctx.positionals[1] })
-        }))
-      )
-  })
+          result: classifyCompat({ expo: ctx.positionals[0], reactNative: ctx.positionals[1] }),
+        })),
+      ),
+  }),
 )
 
 const sitemapReg = eraseRegistration(
@@ -514,10 +488,10 @@ const sitemapReg = eraseRegistration(
         Effect.sync(() => ({
           available: true,
           action: "sitemap",
-          entries: buildSitemap(ctx.positionals)
-        }))
-      )
-  })
+          entries: buildSitemap(ctx.positionals),
+        })),
+      ),
+  }),
 )
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -535,9 +509,7 @@ const reviewOverlayReg = eraseRegistration(
         { action: "review-overlay", sideEffect: "read" } as const,
         Effect.sync(() => {
           const requested = ctx.positionals[0] ?? "prepare"
-          const action = (REVIEW_OVERLAY_ACTIONS as ReadonlyArray<string>).includes(requested)
-            ? requested
-            : "prepare"
+          const action = (REVIEW_OVERLAY_ACTIONS as ReadonlyArray<string>).includes(requested) ? requested : "prepare"
           // The hardened ingest server (token + Origin + body-cap + comments[]
           // schema) + the live bind live in @expo98/overlay-server; the `server`
           // action is the documented live seam (not wired into the read path).
@@ -545,11 +517,11 @@ const reviewOverlayReg = eraseRegistration(
             available: true,
             action: "review-overlay",
             overlayAction: action,
-            networkListener: false
+            networkListener: false,
           }
-        })
-      )
-  })
+        }),
+      ),
+  }),
 )
 
 /**
@@ -592,5 +564,5 @@ export const handlerCommands: ReadonlyArray<CommandRegistration> = [
   expoCompatReg,
   sitemapReg,
   // overlay-server
-  reviewOverlayReg
+  reviewOverlayReg,
 ]

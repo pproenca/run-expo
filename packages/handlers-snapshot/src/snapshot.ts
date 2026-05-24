@@ -40,7 +40,7 @@ import {
   type SnapshotResult,
   type SnapshotUnavailableReason,
   type StorageFailure,
-  type TargetRecord
+  type TargetRecord,
 } from "@expo98/domain"
 import { Effect } from "effect"
 import {
@@ -49,7 +49,7 @@ import {
   type NativeAxeElement,
   resolveDepth,
   SemanticCapture,
-  type SemanticRef
+  type SemanticRef,
 } from "./support.js"
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -108,12 +108,9 @@ export interface DepthedNode {
  */
 export const filterByDepth = (
   nodes: ReadonlyArray<DepthedNode>,
-  depthLimit: number | null
+  depthLimit: number | null,
 ): ReadonlyArray<SnapshotNode> =>
-  (depthLimit === null
-    ? nodes
-    : nodes.filter((n) => n.depth <= depthLimit)
-  ).map((n) => n.node)
+  (depthLimit === null ? nodes : nodes.filter((n) => n.depth <= depthLimit)).map((n) => n.node)
 
 // ───────────────────────────────────────────────────────────────────────────
 // Snapshot assembly (shared by the semantic + native paths)
@@ -124,28 +121,31 @@ const DEFAULT_FILTERS: SnapshotFilters = {
   compact: false,
   depth: null,
   includeSource: true,
-  includeBounds: true
+  includeBounds: true,
 }
 
 const toBox = (
-  box:
-    | { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
-    | null
-    | undefined
+  box: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null | undefined,
 ): ScreenBox | null =>
-  box === null || box === undefined
-    ? null
-    : { x: box.x, y: box.y, width: box.width, height: box.height }
+  box === null || box === undefined ? null : { x: box.x, y: box.y, width: box.width, height: box.height }
 
 /**
  * Build a placeholder RefRecord (ref/snapshotId are rewritten by `renumberRefs`
  * just before persistence, so the indices here are provisional).
  */
 const toRefRecord = (
-  source: { readonly role?: string | null; readonly label?: string | null; readonly text?: string | null; readonly testID?: string | null; readonly nativeID?: string | null; readonly box?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null; readonly actions?: ReadonlyArray<string> },
+  source: {
+    readonly role?: string | null
+    readonly label?: string | null
+    readonly text?: string | null
+    readonly testID?: string | null
+    readonly nativeID?: string | null
+    readonly box?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null
+    readonly actions?: ReadonlyArray<string>
+  },
   index: number,
   targetId: TargetRecord["targetId"],
-  snapshotId: SnapshotResult["snapshotId"]
+  snapshotId: SnapshotResult["snapshotId"],
 ): RefRecord => ({
   ref: `@e${index + 1}` as RefRecord["ref"],
   snapshotId,
@@ -159,7 +159,7 @@ const toRefRecord = (
   nativeID: source.nativeID ?? null,
   component: null,
   box: toBox(source.box),
-  actions: source.actions ?? []
+  actions: source.actions ?? [],
 })
 
 const toNode = (ref: RefRecord, source: string): SnapshotNode => ({
@@ -170,7 +170,7 @@ const toNode = (ref: RefRecord, source: string): SnapshotNode => ({
   testID: ref.testID,
   source,
   box: ref.box,
-  actions: ref.actions
+  actions: ref.actions,
 })
 
 interface AssemblyInput {
@@ -193,9 +193,7 @@ const assembleSnapshot = (input: AssemblyInput): SnapshotResult => {
   // a flat list; depth is a position-derived nesting hint (the tree is a flat
   // array, not nested — entities.md). The first element is the root (depth 0),
   // the rest its children (depth 1) — a faithful flat-tree model.
-  const refs = input.elements.map((el, i) =>
-    toRefRecord(el, i, input.target.targetId, input.snapshotId)
-  )
+  const refs = input.elements.map((el, i) => toRefRecord(el, i, input.target.targetId, input.snapshotId))
   const fullTree = refs.map((ref) => toNode(ref, input.sourceTag))
 
   const base: SnapshotResult = {
@@ -209,7 +207,7 @@ const assembleSnapshot = (input: AssemblyInput): SnapshotResult => {
     tree: fullTree,
     artifacts: { json: null, screenshot: null, annotatedScreenshot: null },
     limitations: input.limitations,
-    ...(input.semanticBridge !== undefined ? { semanticBridge: input.semanticBridge } : {})
+    ...(input.semanticBridge !== undefined ? { semanticBridge: input.semanticBridge } : {}),
   }
   // AC-026: rewrite refs+tree to @e1..@eN with stale:false (the canonical step
   // domain owns — the single ref normaliser). refs and tree stay index-aligned.
@@ -221,7 +219,7 @@ const assembleSnapshot = (input: AssemblyInput): SnapshotResult => {
   // tree is depth-filtered.
   const depthed: ReadonlyArray<DepthedNode> = normalised.tree.map((node, i) => ({
     node,
-    depth: i === 0 ? 0 : 1
+    depth: i === 0 ? 0 : 1,
   }))
   return { ...normalised, tree: filterByDepth(depthed, input.depthLimit) }
 }
@@ -230,10 +228,12 @@ const assembleSnapshot = (input: AssemblyInput): SnapshotResult => {
 // AC-019 / AC-026 — capture orchestration
 // ───────────────────────────────────────────────────────────────────────────
 
-const unavailable = (
-  reason: string,
-  code: SnapshotUnavailable["code"]
-): SnapshotUnavailable => ({ available: false, action: "snapshot", reason, code })
+const unavailable = (reason: string, code: SnapshotUnavailable["code"]): SnapshotUnavailable => ({
+  available: false,
+  action: "snapshot",
+  reason,
+  code,
+})
 
 /**
  * AC-019 + AC-026: orchestrate a snapshot capture and persist it via domain.
@@ -243,7 +243,7 @@ const unavailable = (
  * miss or no transport it returns an unavailable envelope WITHOUT touching disk.
  */
 export const captureSnapshot = (
-  input: SnapshotCaptureInput
+  input: SnapshotCaptureInput,
 ): Effect.Effect<
   SnapshotCaptureResult,
   StorageFailure | NotFound | CorruptRecord | InvariantViolation,
@@ -253,7 +253,7 @@ export const captureSnapshot = (
     // 1. Prerequisites (reuse domain's decision; write NO artifacts on a miss).
     const prereq = checkSnapshotPrereqs({
       hasSession: input.hasSession,
-      activeTarget: input.activeTarget
+      activeTarget: input.activeTarget,
     })
     if (!prereq.available) {
       return unavailable(prereq.reason, prereq.code)
@@ -270,20 +270,18 @@ export const captureSnapshot = (
     const native = yield* NativeAxe
 
     const persist = (snapshot: SnapshotResult, source: string) =>
-      persistence
-        .snapshotPersist(input.stateRoot, input.sessionId, snapshot)
-        .pipe(
-          Effect.map(
-            (session): SnapshotCaptured => ({
-              available: true,
-              action: "snapshot",
-              snapshotId: snapshot.snapshotId,
-              source: [source],
-              refCount: snapshot.refs.length,
-              session
-            })
-          )
-        )
+      persistence.snapshotPersist(input.stateRoot, input.sessionId, snapshot).pipe(
+        Effect.map(
+          (session): SnapshotCaptured => ({
+            available: true,
+            action: "snapshot",
+            snapshotId: snapshot.snapshotId,
+            source: [source],
+            refCount: snapshot.refs.length,
+            session,
+          }),
+        ),
+      )
 
     // 2. SEMANTIC bridge path (primary).
     const semanticPayload = yield* semantic.capture()
@@ -291,9 +289,7 @@ export const captureSnapshot = (
       const snapshotId = makeSnapshotId(input.clock.nowIso(), input.clock.suffix())
       const generatedAt = input.clock.nowIso()
       const semanticBridge: SemanticBridgeSnapshot = {
-        ...(semanticPayload.routeHint !== undefined
-          ? { routeHint: semanticPayload.routeHint }
-          : {}),
+        ...(semanticPayload.routeHint !== undefined ? { routeHint: semanticPayload.routeHint } : {}),
         refs: semanticPayload.refs.map((r) => ({
           role: r.role ?? null,
           label: r.label ?? null,
@@ -301,9 +297,9 @@ export const captureSnapshot = (
           testID: r.testID ?? null,
           nativeID: r.nativeID ?? null,
           box: toBox(r.box),
-          actions: r.actions ?? []
+          actions: r.actions ?? [],
         })),
-        limitations: semanticPayload.limitations
+        limitations: semanticPayload.limitations,
       }
       const snapshot = assembleSnapshot({
         source: "semantic-bridge",
@@ -316,7 +312,7 @@ export const captureSnapshot = (
         generatedAt,
         elements: semanticPayload.refs,
         semanticBridge,
-        limitations: semanticPayload.limitations
+        limitations: semanticPayload.limitations,
       })
       return yield* persist(snapshot, "semantic-bridge")
     }
@@ -337,21 +333,15 @@ export const captureSnapshot = (
           snapshotId,
           generatedAt,
           elements: nativeResult.elements,
-          limitations: []
+          limitations: [],
         })
         return yield* persist(snapshot, "native-axe")
       }
       case "transport-failure":
-        return unavailable(
-          `Native axe capture failed: ${nativeResult.reason}`,
-          "transport-failure"
-        )
+        return unavailable(`Native axe capture failed: ${nativeResult.reason}`, "transport-failure")
       case "absent":
         // 4. No transport available at all.
-        return unavailable(
-          "No semantic bridge and the axe CLI is not installed.",
-          "no-axe"
-        )
+        return unavailable("No semantic bridge and the axe CLI is not installed.", "no-axe")
     }
   })
 
@@ -365,7 +355,5 @@ export const captureSnapshot = (
  * persistence) is run by the shell ahead of this wrapper, exactly like the read
  * handlers compute their payload at construction time.
  */
-export const snapshotCommand = (
-  result: SnapshotCaptureResult
-): Command<"read", SnapshotCaptureResult> =>
+export const snapshotCommand = (result: SnapshotCaptureResult): Command<"read", SnapshotCaptureResult> =>
   command(descriptor("snapshot", "read"), Effect.succeed(result))

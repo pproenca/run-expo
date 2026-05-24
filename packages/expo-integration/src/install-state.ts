@@ -18,19 +18,11 @@
  */
 import { Fs } from "@expo98/domain"
 import { Effect } from "effect"
-import {
-  BRIDGE_SCHEMA_VERSION,
-  bridgeFilePaths,
-  EXPO98_BRIDGE_VERSION
-} from "./bridge-files.js"
+import { BRIDGE_SCHEMA_VERSION, bridgeFilePaths, EXPO98_BRIDGE_VERSION } from "./bridge-files.js"
 
 export type InstallStatus = "absent" | "present" | "stale" | "incompatible"
 
-export type InstallIssue =
-  | "missing-expo"
-  | "partial-install"
-  | "version-mismatch"
-  | "not-development-only"
+export type InstallIssue = "missing-expo" | "partial-install" | "version-mismatch" | "not-development-only"
 
 export interface InstallStateResult {
   readonly status: InstallStatus
@@ -55,7 +47,7 @@ interface RawMetadata {
 const EMPTY_META: RawMetadata = {
   bridgeVersion: null,
   schemaVersion: null,
-  developmentOnly: null
+  developmentOnly: null,
 }
 
 /** Read a file's JSON, returning `undefined` on any read/parse failure. */
@@ -69,7 +61,7 @@ const readJson = (path: string): Effect.Effect<unknown, never, Fs> =>
         return undefined
       }
     }),
-    Effect.orElseSucceed(() => undefined)
+    Effect.orElseSucceed(() => undefined),
   )
 
 /** Does the project declare an `expo` dependency? (package.json read seam.) */
@@ -83,11 +75,9 @@ const detectExpo = (root: string): Effect.Effect<boolean, never, Fs> =>
       const deps = record["dependencies"]
       const devDeps = record["devDependencies"]
       const hasExpo = (block: unknown): boolean =>
-        typeof block === "object" &&
-        block !== null &&
-        Object.prototype.hasOwnProperty.call(block, "expo")
+        typeof block === "object" && block !== null && Object.prototype.hasOwnProperty.call(block, "expo")
       return hasExpo(deps) || hasExpo(devDeps)
-    })
+    }),
   )
 
 const parseMetadata = (raw: unknown): RawMetadata => {
@@ -95,14 +85,9 @@ const parseMetadata = (raw: unknown): RawMetadata => {
     return EMPTY_META
   }
   const record = raw as Record<string, unknown>
-  const bridgeVersion =
-    typeof record["bridgeVersion"] === "string" ? record["bridgeVersion"] : null
-  const schemaVersion =
-    typeof record["schemaVersion"] === "number" ? record["schemaVersion"] : null
-  const developmentOnly =
-    typeof record["developmentOnly"] === "boolean"
-      ? record["developmentOnly"]
-      : null
+  const bridgeVersion = typeof record["bridgeVersion"] === "string" ? record["bridgeVersion"] : null
+  const schemaVersion = typeof record["schemaVersion"] === "number" ? record["schemaVersion"] : null
+  const developmentOnly = typeof record["developmentOnly"] === "boolean" ? record["developmentOnly"] : null
   return { bridgeVersion, schemaVersion, developmentOnly }
 }
 
@@ -114,7 +99,7 @@ const result = (
     readonly metadataPresent: boolean
     readonly sourcePresent: boolean
     readonly meta: RawMetadata
-  }
+  },
 ): InstallStateResult => ({
   status,
   issue,
@@ -123,15 +108,13 @@ const result = (
   sourcePresent: fields.sourcePresent,
   bridgeVersion: fields.meta.bridgeVersion,
   schemaVersion: fields.meta.schemaVersion,
-  developmentOnly: fields.meta.developmentOnly
+  developmentOnly: fields.meta.developmentOnly,
 })
 
 /**
  * Classify the bridge install state for `root`. A pure `read` over the `Fs` port.
  */
-export const readInstallState = (
-  root: string
-): Effect.Effect<InstallStateResult, never, Fs> =>
+export const readInstallState = (root: string): Effect.Effect<InstallStateResult, never, Fs> =>
   Effect.gen(function* () {
     const fs = yield* Fs
     const paths = bridgeFilePaths(root)
@@ -139,22 +122,16 @@ export const readInstallState = (
     const expoPresent = yield* detectExpo(root)
 
     // metadata may be in `.expo98/bridge.json` or the legacy `.expo-ios/bridge.json`.
-    const metaExists = yield* fs
-      .exists(paths.metadata)
-      .pipe(Effect.orElseSucceed(() => false))
+    const metaExists = yield* fs.exists(paths.metadata).pipe(Effect.orElseSucceed(() => false))
     const legacyMetaExists = metaExists
       ? Effect.succeed(false)
       : fs.exists(paths.legacyMetadata).pipe(Effect.orElseSucceed(() => false))
     const metadataPresent = metaExists || (yield* legacyMetaExists)
 
-    const sourcePresent = yield* fs
-      .exists(paths.source)
-      .pipe(Effect.orElseSucceed(() => false))
+    const sourcePresent = yield* fs.exists(paths.source).pipe(Effect.orElseSucceed(() => false))
 
     const metaPath = metaExists ? paths.metadata : paths.legacyMetadata
-    const meta = metadataPresent
-      ? parseMetadata(yield* readJson(metaPath))
-      : EMPTY_META
+    const meta = metadataPresent ? parseMetadata(yield* readJson(metaPath)) : EMPTY_META
 
     const fields = { expoPresent, metadataPresent, sourcePresent, meta }
 
@@ -174,10 +151,7 @@ export const readInstallState = (
     }
 
     // 3. both present, version/schema mismatch → stale(version-mismatch).
-    if (
-      meta.bridgeVersion !== EXPO98_BRIDGE_VERSION ||
-      meta.schemaVersion !== BRIDGE_SCHEMA_VERSION
-    ) {
+    if (meta.bridgeVersion !== EXPO98_BRIDGE_VERSION || meta.schemaVersion !== BRIDGE_SCHEMA_VERSION) {
       return result("stale", "version-mismatch", fields)
     }
 

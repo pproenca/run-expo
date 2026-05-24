@@ -18,12 +18,7 @@
  * to exactly `CapabilityFor<S>` — a `read` verb's handler is `R = never` and
  * literally cannot name the eval capability.
  */
-import {
-  command,
-  type Command,
-  DeviceCapability,
-  RuntimeEvalCapability
-} from "@expo98/core"
+import { command, type Command, DeviceCapability, RuntimeEvalCapability } from "@expo98/core"
 import { Effect, Match } from "effect"
 import { descriptor, EVAL_TIMEOUT_MS } from "./support.js"
 
@@ -31,10 +26,7 @@ import { descriptor, EVAL_TIMEOUT_MS } from "./support.js"
 export type InspectorReadVerb = "probe" | "read-comments"
 export type InspectorEvalVerb = "install-comment-menu" | "clear-comments" | "toggle"
 export type InspectorDeviceVerb = "open-dev-menu"
-export type InspectorVerb =
-  | InspectorReadVerb
-  | InspectorEvalVerb
-  | InspectorDeviceVerb
+export type InspectorVerb = InspectorReadVerb | InspectorEvalVerb | InspectorDeviceVerb
 
 export type InspectorSideEffect = "read" | "runtime-eval" | "device"
 
@@ -51,7 +43,7 @@ export const inspectorSideEffect = (verb: InspectorVerb): InspectorSideEffect =>
     Match.when("clear-comments", () => "runtime-eval" as const),
     Match.when("toggle", () => "runtime-eval" as const),
     Match.when("open-dev-menu", () => "device" as const),
-    Match.exhaustive
+    Match.exhaustive,
   )
 
 export interface InspectorResult {
@@ -65,11 +57,7 @@ export interface InspectorResult {
 /** Package-controlled mutating expression (writes the runtime review global). */
 const inspectorEvalExpression = (verb: InspectorEvalVerb): string =>
   `globalThis.__CODEX_SIMULATOR_REVIEW__ && globalThis.__CODEX_SIMULATOR_REVIEW__.${
-    verb === "install-comment-menu"
-      ? "install"
-      : verb === "clear-comments"
-        ? "clear"
-        : "toggle"
+    verb === "install-comment-menu" ? "install" : verb === "clear-comments" ? "clear" : "toggle"
   }()`
 
 /** Read-only probe expression (package-controlled; legitimate `read` use). */
@@ -78,16 +66,12 @@ const inspectorReadExpression = (verb: InspectorReadVerb): string =>
     ? "globalThis.__CODEX_SIMULATOR_REVIEW__ ? 'present' : 'absent'"
     : "(globalThis.__CODEX_SIMULATOR_REVIEW__ && globalThis.__CODEX_SIMULATOR_REVIEW__.comments) || []"
 
-const result = (
-  verb: InspectorVerb,
-  sideEffect: InspectorSideEffect,
-  value: unknown
-): InspectorResult => ({
+const result = (verb: InspectorVerb, sideEffect: InspectorSideEffect, value: unknown): InspectorResult => ({
   action: `inspector.${verb}`,
   verb,
   sideEffect,
   timeoutMs: EVAL_TIMEOUT_MS,
-  value
+  value,
 })
 
 // ── Per-class command builders (each pins handler R to exactly its class) ──
@@ -96,39 +80,33 @@ const result = (
  * A read verb's handler. `R = CapabilityFor<"read"> = never`: it CANNOT name the
  * eval capability — the AC-011 structural guarantee at this boundary.
  */
-const readInspectorCommand = (
-  verb: InspectorReadVerb
-): Command<"read", InspectorResult> =>
+const readInspectorCommand = (verb: InspectorReadVerb): Command<"read", InspectorResult> =>
   command(
     descriptor(`inspector.${verb}`, "read"),
     // Read verbs are classified `read`; here we model the read as a pure
     // package-controlled projection so the handler's R stays `never`. (A real
     // build would route this through `HermesEvidence` via `R`, still `read`.)
-    Effect.succeed(result(verb, "read", inspectorReadExpression(verb)))
+    Effect.succeed(result(verb, "read", inspectorReadExpression(verb))),
   )
 
 /** A mutating verb's handler — reaches the eval capability via `R` (gated). */
-const evalInspectorCommand = (
-  verb: InspectorEvalVerb
-): Command<"runtime-eval", InspectorResult> =>
+const evalInspectorCommand = (verb: InspectorEvalVerb): Command<"runtime-eval", InspectorResult> =>
   command(
     descriptor(`inspector.${verb}`, "runtime-eval"),
     RuntimeEvalCapability.pipe(
       Effect.flatMap((evalCap) => evalCap.evaluate(inspectorEvalExpression(verb))),
-      Effect.map((value) => result(verb, "runtime-eval", value))
-    )
+      Effect.map((value) => result(verb, "runtime-eval", value)),
+    ),
   )
 
 /** The device verb's handler — reaches the device capability via `R` (gated). */
-const deviceInspectorCommand = (
-  verb: InspectorDeviceVerb
-): Command<"device", InspectorResult> =>
+const deviceInspectorCommand = (verb: InspectorDeviceVerb): Command<"device", InspectorResult> =>
   command(
     descriptor(`inspector.${verb}`, "device"),
     DeviceCapability.pipe(
       Effect.flatMap((device) => device.invoke("xcrun", ["simctl", "ui", "dev-menu"])),
-      Effect.map((value) => result(verb, "device", value))
-    )
+      Effect.map((value) => result(verb, "device", value)),
+    ),
   )
 
 /**
@@ -146,5 +124,5 @@ export const inspectorCommand = (verb: InspectorVerb): InspectorCommand =>
     Match.when("read", () => readInspectorCommand(verb as InspectorReadVerb)),
     Match.when("runtime-eval", () => evalInspectorCommand(verb as InspectorEvalVerb)),
     Match.when("device", () => deviceInspectorCommand(verb as InspectorDeviceVerb)),
-    Match.exhaustive
+    Match.exhaustive,
   )

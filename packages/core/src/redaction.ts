@@ -25,8 +25,7 @@ const SECRET_KEY_PATTERN =
  * blobs). We redact the VALUE half of any `key=value` (or `key: value`) pair
  * whose key half matches the secret pattern, including URL query parameters.
  */
-const SECRET_PARAM_KEY =
-  /token|secret|key|password|pwd|auth|session|cookie|bearer|credential|refresh|client_secret/i
+const SECRET_PARAM_KEY = /token|secret|key|password|pwd|auth|session|cookie|bearer|credential|refresh|client_secret/i
 
 const isSecretKey = (key: string): boolean => SECRET_KEY_PATTERN.test(key)
 
@@ -47,13 +46,11 @@ export const redactSecretsInString = (input: string): string => {
   let out = input.replace(
     /([?&#;\s]|^)([A-Za-z0-9_.\-[\]]{1,256})(=)([^&;#\s]*)/g,
     (match, lead: string, key: string, eq: string, _value: string) =>
-      SECRET_PARAM_KEY.test(key) ? `${lead}${key}${eq}${REDACTED}` : match
+      SECRET_PARAM_KEY.test(key) ? `${lead}${key}${eq}${REDACTED}` : match,
   )
   // `key: value` header-style pairs (e.g. "authorization: Bearer abc").
-  out = out.replace(
-    /([A-Za-z0-9_.-]{1,256})(\s*:\s*)([^\r\n]*)/g,
-    (match, key: string, sep: string, _value: string) =>
-      SECRET_PARAM_KEY.test(key) ? `${key}${sep}${REDACTED}` : match
+  out = out.replace(/([A-Za-z0-9_.-]{1,256})(\s*:\s*)([^\r\n]*)/g, (match, key: string, sep: string, _value: string) =>
+    SECRET_PARAM_KEY.test(key) ? `${key}${sep}${REDACTED}` : match,
   )
   return out
 }

@@ -34,16 +34,5 @@ export * as Migration from "./migration.js"
 export * from "./decisions.js"
 
 // S7 Persistence service
-export {
-  PersistenceService,
-  makePersistence,
-  layer as persistenceLayer,
-  defaultClock
-} from "./persist.js"
-export type {
-  Persistence,
-  PersistenceClock,
-  NewSessionInput,
-  SessionListEntry,
-  CleanInput
-} from "./persist.js"
+export { PersistenceService, makePersistence, layer as persistenceLayer, defaultClock } from "./persist.js"
+export type { Persistence, PersistenceClock, NewSessionInput, SessionListEntry, CleanInput } from "./persist.js"

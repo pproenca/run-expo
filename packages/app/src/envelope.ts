@@ -1,10 +1,4 @@
-import {
-  type ExitCode,
-  OUTPUT_BUDGET,
-  redact,
-  RunningTruncator,
-  truncate
-} from "@expo98/core"
+import { type ExitCode, OUTPUT_BUDGET, redact, RunningTruncator, truncate } from "@expo98/core"
 import { Stream } from "effect"
 
 /**
@@ -35,14 +29,9 @@ export type JsonEnvelope =
  * NOTE: when `payload` was already finalised by `dispatch` (redacted at the core
  * boundary), redaction here is idempotent — `[redacted]` survives a second pass.
  */
-export const formatJson = (
-  payload: unknown,
-  exitCode: ExitCode
-): string => {
+export const formatJson = (payload: unknown, exitCode: ExitCode): string => {
   const envelope: JsonEnvelope =
-    exitCode === 0
-      ? { ok: true, data: redact(payload) }
-      : { ok: false, error: errorString(payload) }
+    exitCode === 0 ? { ok: true, data: redact(payload) } : { ok: false, error: errorString(payload) }
   return truncate(JSON.stringify(envelope), OUTPUT_BUDGET)
 }
 
@@ -89,8 +78,7 @@ const plainLines = (value: unknown): ReadonlyArray<string> => {
 }
 
 /** A compact, stable scalar rendering for a plain line. */
-const scalar = (v: unknown): string =>
-  typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)
+const scalar = (v: unknown): string => (typeof v === "object" && v !== null ? JSON.stringify(v) : String(v))
 
 /**
  * AC-041 (streaming) — NDJSON progress as a `Stream<string>`.
@@ -103,14 +91,12 @@ const scalar = (v: unknown): string =>
  * This mirrors core's `ndjsonStream` but is exposed at the shell boundary so the
  * CLI can pipe a handler's progress `Stream` straight to stdout.
  */
-export const ndjsonEnvelope = <E, R>(
-  events: Stream.Stream<unknown, E, R>
-): Stream.Stream<string, E, R> =>
+export const ndjsonEnvelope = <E, R>(events: Stream.Stream<unknown, E, R>): Stream.Stream<string, E, R> =>
   Stream.suspend(() => {
     const budget = new RunningTruncator()
     return events.pipe(
       Stream.map((event) => budget.push(JSON.stringify(redact(event)) + "\n")),
-      Stream.filter((emitted) => emitted.length > 0)
+      Stream.filter((emitted) => emitted.length > 0),
     )
   })
 
@@ -121,5 +107,4 @@ export const selectMode = (globals: {
   readonly json: boolean
   readonly plain: boolean
   readonly ndjson: boolean
-}): OutputMode =>
-  globals.ndjson ? "ndjson" : globals.plain ? "plain" : "json"
+}): OutputMode => (globals.ndjson ? "ndjson" : globals.plain ? "plain" : "json")

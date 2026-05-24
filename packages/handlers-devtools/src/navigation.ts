@@ -30,7 +30,7 @@ export const navigationSideEffect = (verb: NavigationVerb): NavigationSideEffect
     Match.when("pop-to-root", () => "device" as const),
     Match.when("tab", () => "device" as const),
     Match.when("deep-link", () => "device" as const),
-    Match.exhaustive
+    Match.exhaustive,
   )
 
 export interface NavigationArgs {
@@ -45,49 +45,36 @@ export interface NavigationResult {
   readonly value: unknown
 }
 
-const result = (
-  verb: NavigationVerb,
-  sideEffect: NavigationSideEffect,
-  value: unknown
-): NavigationResult => ({ action: `navigation.${verb}`, verb, sideEffect, value })
+const result = (verb: NavigationVerb, sideEffect: NavigationSideEffect, value: unknown): NavigationResult => ({
+  action: `navigation.${verb}`,
+  verb,
+  sideEffect,
+  value,
+})
 
 /** `state` is a pure read — handler `R = never`. */
-const readNavigationCommand = (
-  verb: NavigationReadVerb
-): Command<"read", NavigationResult> =>
-  command(
-    descriptor(`navigation.${verb}`, "read"),
-    Effect.succeed(result(verb, "read", { route: "unknown" }))
-  )
+const readNavigationCommand = (verb: NavigationReadVerb): Command<"read", NavigationResult> =>
+  command(descriptor(`navigation.${verb}`, "read"), Effect.succeed(result(verb, "read", { route: "unknown" })))
 
 /** A mutating nav verb — reaches the device capability via `R` (gated). */
 const deviceNavigationCommand = (
   verb: NavigationDeviceVerb,
-  args: NavigationArgs
+  args: NavigationArgs,
 ): Command<"device", NavigationResult> =>
   command(
     descriptor(`navigation.${verb}`, "device"),
     DeviceCapability.pipe(
-      Effect.flatMap((device) =>
-        device.invoke("xcrun", ["simctl", "navigate", verb, args.target ?? ""])
-      ),
-      Effect.map((value) => result(verb, "device", value))
-    )
+      Effect.flatMap((device) => device.invoke("xcrun", ["simctl", "navigate", verb, args.target ?? ""])),
+      Effect.map((value) => result(verb, "device", value)),
+    ),
   )
 
-export type NavigationCommand =
-  | Command<"read", NavigationResult>
-  | Command<"device", NavigationResult>
+export type NavigationCommand = Command<"read", NavigationResult> | Command<"device", NavigationResult>
 
 /** Build the right per-class nav command for a verb (EXHAUSTIVE over the class). */
-export const navigationCommand = (
-  verb: NavigationVerb,
-  args: NavigationArgs = {}
-): NavigationCommand =>
+export const navigationCommand = (verb: NavigationVerb, args: NavigationArgs = {}): NavigationCommand =>
   Match.value(navigationSideEffect(verb)).pipe(
     Match.when("read", () => readNavigationCommand(verb as NavigationReadVerb)),
-    Match.when("device", () =>
-      deviceNavigationCommand(verb as NavigationDeviceVerb, args)
-    ),
-    Match.exhaustive
+    Match.when("device", () => deviceNavigationCommand(verb as NavigationDeviceVerb, args)),
+    Match.exhaustive,
   )

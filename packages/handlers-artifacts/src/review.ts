@@ -25,10 +25,7 @@ export interface ReviewResult {
 }
 
 /** Build a `review report`/`review matrix` read command over captured evidence. */
-export const reviewCommand = (
-  verb: ReviewVerb,
-  args: ReviewArgs = {}
-): Command<"read", ReviewResult> => {
+export const reviewCommand = (verb: ReviewVerb, args: ReviewArgs = {}): Command<"read", ReviewResult> => {
   const entries = args.entries ?? []
   return command(
     descriptor(`review.${verb}`, "read"),
@@ -36,7 +33,7 @@ export const reviewCommand = (
       action: "review",
       verb,
       entryCount: entries.length,
-      entries
-    })
+      entries,
+    }),
   )
 }

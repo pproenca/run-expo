@@ -28,19 +28,17 @@ export interface UxContextResult {
 }
 
 /** Build a `ux-context` read command from the `--include-*` flags. */
-export const uxContextCommand = (
-  args: UxContextArgs = {}
-): Command<"read", UxContextResult> => {
+export const uxContextCommand = (args: UxContextArgs = {}): Command<"read", UxContextResult> => {
   const facets: Record<UxFacet, boolean> = {
     screenshot: args.includeScreenshot === true,
     runtime: args.includeRuntime === true,
     hierarchy: args.includeHierarchy === true,
-    logs: args.includeLogs === true
+    logs: args.includeLogs === true,
   }
   const order: ReadonlyArray<UxFacet> = ["screenshot", "runtime", "hierarchy", "logs"]
   const includes = order.filter((facet) => facets[facet])
   return command(
     descriptor("ux-context", "read"),
-    Effect.succeed<UxContextResult>({ action: "ux-context", includes, facets })
+    Effect.succeed<UxContextResult>({ action: "ux-context", includes, facets }),
   )
 }

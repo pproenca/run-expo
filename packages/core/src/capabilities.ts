@@ -19,22 +19,24 @@ export interface RuntimeEvalCapabilityService {
   readonly evaluate: (expression: string) => Effect.Effect<unknown>
 }
 
-export class RuntimeEvalCapability extends Context.Tag(
-  "@expo98/core/RuntimeEvalCapability"
-)<RuntimeEvalCapability, RuntimeEvalCapabilityService>() {}
+export class RuntimeEvalCapability extends Context.Tag("@expo98/core/RuntimeEvalCapability")<
+  RuntimeEvalCapability,
+  RuntimeEvalCapabilityService
+>() {}
 
 /** device capability — drives the simulator/device via subprocess. AC-005/006/007. */
 export interface DeviceCapabilityService {
   /** Invoke a device tool (xcrun/simctl/idb/…) with argv (no shell). */
   readonly invoke: (
     tool: string,
-    args: ReadonlyArray<string>
+    args: ReadonlyArray<string>,
   ) => Effect.Effect<string, ToolNotFound | SubprocessTimeout | SubprocessFailed>
 }
 
-export class DeviceCapability extends Context.Tag(
-  "@expo98/core/DeviceCapability"
-)<DeviceCapability, DeviceCapabilityService>() {}
+export class DeviceCapability extends Context.Tag("@expo98/core/DeviceCapability")<
+  DeviceCapability,
+  DeviceCapabilityService
+>() {}
 
 /** source-write capability — writes/deletes project source files. AC-008. */
 export interface SourceWriteCapabilityService {
@@ -42,16 +44,14 @@ export interface SourceWriteCapabilityService {
   readonly deleteFile: (path: string) => Effect.Effect<void>
 }
 
-export class SourceWriteCapability extends Context.Tag(
-  "@expo98/core/SourceWriteCapability"
-)<SourceWriteCapability, SourceWriteCapabilityService>() {}
+export class SourceWriteCapability extends Context.Tag("@expo98/core/SourceWriteCapability")<
+  SourceWriteCapability,
+  SourceWriteCapabilityService
+>() {}
 
 /**
  * The union of capability tag *identifiers* a handler may require. Used purely
  * to express the dispatcher's input bound — a handler's `R` is some subset of
  * these (or `never` for a read-classed handler).
  */
-export type AnyCapability =
-  | RuntimeEvalCapability
-  | DeviceCapability
-  | SourceWriteCapability
+export type AnyCapability = RuntimeEvalCapability | DeviceCapability | SourceWriteCapability

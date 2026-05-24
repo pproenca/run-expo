@@ -14,7 +14,7 @@ import {
   BACKLOG_SUMMARY_KEY_CAP,
   RUN_RECORD_SUMMARY_KEY_CAP,
   summarizeBacklogPayload,
-  summarizeRunRecordPayload
+  summarizeRunRecordPayload,
 } from "@expo98/handlers-artifacts"
 import { Schema } from "effect"
 
@@ -45,7 +45,7 @@ describe("AC-042 run-record summary caps to the first 40 keys + rollups", () => 
       available: true,
       routeCount: 12,
       eventCount: 3,
-      other: "x"
+      other: "x",
     })
     expect(full.available).toBe(true)
     expect(full.routeCount).toBe(12)
@@ -68,7 +68,7 @@ describe("AC-042 run-record summary caps to the first 40 keys + rollups", () => 
     const summary = summarizeRunRecordPayload({
       available: false,
       routeCount: 0,
-      keyA: 1
+      keyA: 1,
     })
     // Decoding through the domain schema proves shape compatibility (reuse).
     const decoded = Schema.decodeUnknownSync(RunPayloadSummary)(summary)
@@ -98,15 +98,15 @@ describe("AC-042 backlog summary caps to the first 20 keys + rollups", () => {
         { id: "a", classification: "live-pass" },
         { id: "b", classification: "live-pass" },
         { id: "c", classification: "environment-blocked" },
-        { id: "d", classification: "static-pass" }
-      ]
+        { id: "d", classification: "static-pass" },
+      ],
     }
     const summary = summarizeBacklogPayload(payload)
     expect(summary.rowCount).toBe(4)
     expect(summary.byClassification).toEqual({
       "live-pass": 2,
       "environment-blocked": 1,
-      "static-pass": 1
+      "static-pass": 1,
     })
     // keys are the top-level keys of the payload (capped at 20).
     expect(summary.keys).toEqual(["action", "rows"])

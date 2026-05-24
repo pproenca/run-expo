@@ -1,26 +1,16 @@
 #!/usr/bin/env node
-import {
-  type CapabilityEnv,
-  type DispatchResult,
-  EXIT_SUCCESS,
-  type ExitCode,
-  exitCodeForError
-} from "@expo98/core"
-import { Fs } from "@expo98/domain"
 import { Args, Command } from "@effect/cli"
 import { NodeContext, NodeRuntime } from "@effect/platform-node"
+import { type CapabilityEnv, type DispatchResult, EXIT_SUCCESS, type ExitCode, exitCodeForError } from "@expo98/core"
+import { Fs } from "@expo98/domain"
 import { Cause, Console, Effect, Exit, Layer, Option } from "effect"
 import { handlerCommands } from "./all-commands.js"
 import { CLI_VERSION, coreReadCommands } from "./commands.js"
 import { formatJson, formatPlain, selectMode } from "./envelope.js"
 import { type CliGlobals, assertUsage, globalOptions } from "./globals.js"
-import { resolvePolicy } from "./policy-resolve.js"
 import { AppLayer } from "./layers.js"
-import {
-  type CommandRegistration,
-  registerCommands,
-  runRegistered
-} from "./registry.js"
+import { resolvePolicy } from "./policy-resolve.js"
+import { type CommandRegistration, registerCommands, runRegistered } from "./registry.js"
 
 /**
  * The CLI shell composition root (S12).
@@ -67,7 +57,7 @@ const isEntryModule = (): boolean => {
  * (which would collide on the shared first token).
  */
 const groupByFirstToken = (
-  regs: ReadonlyArray<CommandRegistration>
+  regs: ReadonlyArray<CommandRegistration>,
 ): ReadonlyArray<readonly [string, ReadonlyArray<CommandRegistration>]> => {
   const groups = new Map<string, Array<CommandRegistration>>()
   for (const reg of regs) {
@@ -91,13 +81,11 @@ const groupByFirstToken = (
  */
 const resolveInGroup = (
   group: ReadonlyArray<CommandRegistration>,
-  args: ReadonlyArray<string>
+  args: ReadonlyArray<string>,
 ): readonly [CommandRegistration, ReadonlyArray<string>] | undefined => {
   // Longest sub-verb path first, so `live-backlog generate` wins over a bare
   // `live-backlog`.
-  const sorted = [...group].sort(
-    (a, b) => b.path.split(" ").length - a.path.split(" ").length
-  )
+  const sorted = [...group].sort((a, b) => b.path.split(" ").length - a.path.split(" ").length)
   for (const reg of sorted) {
     const subVerbs = reg.path.split(" ").slice(1)
     if (subVerbs.every((v, i) => args[i] === v)) {
@@ -115,10 +103,7 @@ const resolveInGroup = (
  * handler's effect is `void` (it prints); the exit code is carried out-of-band
  * via `ProgramExit` so `@effect/cli`'s ValidationError handling stays untouched.
  */
-const subcommandForGroup = (
-  name: string,
-  group: ReadonlyArray<CommandRegistration>
-) => {
+const subcommandForGroup = (name: string, group: ReadonlyArray<CommandRegistration>) => {
   const summary = group[0]?.summary ?? name
   return Command.make(
     name,
@@ -131,7 +116,7 @@ const subcommandForGroup = (
       }
       const [reg, positionals] = resolved
       return runVerb(reg, globals, positionals)
-    }
+    },
   ).pipe(Command.withDescription(summary))
 }
 
@@ -150,7 +135,7 @@ class ProgramExit {
 const runVerb = (
   reg: CommandRegistration,
   globals: CliGlobals,
-  positionals: ReadonlyArray<string>
+  positionals: ReadonlyArray<string>,
 ): Effect.Effect<void, ProgramExit, Fs | CapabilityEnv> =>
   Effect.gen(function* () {
     const fs = yield* Fs
@@ -158,7 +143,7 @@ const runVerb = (
     const result: DispatchResult<unknown> = yield* runRegistered(reg, {
       positionals,
       policy,
-      fs
+      fs,
     })
     yield* emit(result, globals)
     if (result.exitCode !== EXIT_SUCCESS) {
@@ -169,24 +154,18 @@ const runVerb = (
 // The registry always carries the 5 core READ proof-commands, so the subcommand
 // tuple is non-empty by construction (asserted at module load). Verb FAMILIES
 // (sharing a first token) collapse into one `@effect/cli` subcommand each.
-const subcommands = groupByFirstToken(registry.all).map(([name, group]) =>
-  subcommandForGroup(name, group)
-)
+const subcommands = groupByFirstToken(registry.all).map(([name, group]) => subcommandForGroup(name, group))
 const subcommandsNonEmpty = asNonEmpty(subcommands)
 
 /** The root command: global options + every registered verb as a subcommand. */
 const rootCommand = Command.make(CLI_NAME, { globals: globalOptions }, () =>
-  Console.log(`${CLI_NAME} ${CLI_VERSION} — run with --help for commands.`)
-).pipe(
-  Command.withDescription("expo98 — local-first evidence CLI for Expo / RN iOS."),
-  (self) => Command.withSubcommands(self, subcommandsNonEmpty)
+  Console.log(`${CLI_NAME} ${CLI_VERSION} — run with --help for commands.`),
+).pipe(Command.withDescription("expo98 — local-first evidence CLI for Expo / RN iOS."), (self) =>
+  Command.withSubcommands(self, subcommandsNonEmpty),
 )
 
 /** Emit the finalised payload on the channel the globals selected. */
-const emit = (
-  result: DispatchResult<unknown>,
-  globals: CliGlobals
-): Effect.Effect<void> => {
+const emit = (result: DispatchResult<unknown>, globals: CliGlobals): Effect.Effect<void> => {
   const mode = selectMode(globals)
   switch (mode) {
     case "plain":
@@ -211,7 +190,7 @@ const emit = (
  * code.
  */
 export const runProgram = (
-  argv: ReadonlyArray<string>
+  argv: ReadonlyArray<string>,
 ): Effect.Effect<ExitCode, never, Fs | CapabilityEnv | NodeContext.NodeContext> =>
   Effect.gen(function* () {
     const userArgs = argv.slice(2)
@@ -221,15 +200,13 @@ export const runProgram = (
     if (Exit.isFailure(usage)) {
       const error = failureValue(usage.cause)
       const code = exitCodeForError(error) // CliUsageError ⇒ 2
-      yield* Console.error(
-        formatJson({ ok: false, error: messageOf(error) }, code)
-      )
+      yield* Console.error(formatJson({ ok: false, error: messageOf(error) }, code))
       return code
     }
 
     const run = Command.run(rootCommand, {
       name: CLI_NAME,
-      version: CLI_VERSION
+      version: CLI_VERSION,
     })
 
     // @effect/cli fails with ValidationError on its own checks; ProgramExit
@@ -274,11 +251,10 @@ const isValidationError = (value: unknown): boolean =>
     "MultipleValuesDetected",
     "UnclusteredFlag",
     "CorrectedFlag",
-    "NoBuiltInMatch"
+    "NoBuiltInMatch",
   ].includes(String((value as { _tag: unknown })._tag))
 
-const failureValue = (cause: Cause.Cause<unknown>): unknown =>
-  Option.getOrElse(Cause.failureOption(cause), () => cause)
+const failureValue = (cause: Cause.Cause<unknown>): unknown => Option.getOrElse(Cause.failureOption(cause), () => cause)
 
 const messageOf = (error: unknown): string =>
   typeof error === "object" &&
@@ -301,10 +277,10 @@ export const main = (): void => {
       Effect.tap((code) =>
         Effect.sync(() => {
           process.exitCode = code
-        })
-      )
+        }),
+      ),
     ),
-    { disablePrettyLogger: true }
+    { disablePrettyLogger: true },
   )
 }
 

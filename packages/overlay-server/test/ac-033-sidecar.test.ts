@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest"
 /**
  * AC-033 — Session sidecar lifecycle (the "implement, don't drop" decision).
  *
@@ -7,7 +8,6 @@
  * each transition.
  */
 import { type SidecarRecord } from "@expo98/domain"
-import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import {
   isReapable,
@@ -16,7 +16,7 @@ import {
   registerSidecar,
   SIDECAR_NAME,
   type SidecarProbe,
-  stopSidecar
+  stopSidecar,
 } from "../src/index.js"
 
 describe("AC-033 sidecar transitions (PURE)", () => {
@@ -84,7 +84,7 @@ describe("AC-033 refreshSidecar (Effectful, scripted probe)", () => {
       const running = registerSidecar(4242, 17655)
       const refreshed = yield* refreshSidecar(running, aliveProbe(false))
       expect(refreshed.status).toBe("stale")
-    })
+    }),
   )
 
   it.effect("refresh keeps running when the probe reports alive", () =>
@@ -92,7 +92,7 @@ describe("AC-033 refreshSidecar (Effectful, scripted probe)", () => {
       const running = registerSidecar(4242, 17655)
       const refreshed = yield* refreshSidecar(running, aliveProbe(true))
       expect(refreshed.status).toBe("running")
-    })
+    }),
   )
 
   it.effect("refresh short-circuits a stopped record (no probe call)", () =>
@@ -103,12 +103,12 @@ describe("AC-033 refreshSidecar (Effectful, scripted probe)", () => {
           Effect.sync(() => {
             probed = true
             return true
-          })
+          }),
       }
       const stopped = stopSidecar(registerSidecar(4242, 17655))
       const refreshed = yield* refreshSidecar(stopped, probe)
       expect(refreshed.status).toBe("stopped")
       expect(probed).toBe(false)
-    })
+    }),
   )
 })

@@ -20,9 +20,7 @@ export const normalizeConfidence = (value: unknown): PerfConfidence =>
  * The highest confidence present, else `low` (AC-048). Empty → `low`.
  * Accepts any object carrying a `confidence` field (e.g. a metric or a delta).
  */
-export const overallConfidence = (
-  signals: ReadonlyArray<{ readonly confidence: unknown }>
-): PerfConfidence => {
+export const overallConfidence = (signals: ReadonlyArray<{ readonly confidence: unknown }>): PerfConfidence => {
   if (signals.length === 0) {
     return "low"
   }

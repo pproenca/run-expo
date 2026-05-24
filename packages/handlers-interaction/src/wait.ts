@@ -46,15 +46,11 @@ export const resolveIntervalMs = (timeoutMs: number): number =>
   Math.min(Math.max(Math.floor(timeoutMs / 10), MIN_INTERVAL_MS), MAX_INTERVAL_MS)
 
 /** AC-035: `ms = clamp(args.ms ?? 0, 0, 60000)`. */
-export const resolveMs = (ms: number | undefined): number =>
-  clamp(ms ?? MIN_MS, MIN_MS, MAX_MS)
+export const resolveMs = (ms: number | undefined): number => clamp(ms ?? MIN_MS, MIN_MS, MAX_MS)
 
 /** AC-035: each tick sleeps `min(intervalMs, timeoutMs - elapsed)`. */
-export const tickSleepMs = (
-  intervalMs: number,
-  timeoutMs: number,
-  elapsedMs: number
-): number => Math.min(intervalMs, timeoutMs - elapsedMs)
+export const tickSleepMs = (intervalMs: number, timeoutMs: number, elapsedMs: number): number =>
+  Math.min(intervalMs, timeoutMs - elapsedMs)
 
 export type WaitMode = "ms" | "predicate" | "fn"
 
@@ -88,8 +84,7 @@ export interface WaitResult {
 export const waitMode = (args: WaitArgs): WaitMode =>
   args.fn !== undefined ? "fn" : args.ms !== undefined ? "ms" : "predicate"
 
-export const waitSideEffect = (mode: WaitMode): "read" | "runtime-eval" =>
-  mode === "fn" ? "runtime-eval" : "read"
+export const waitSideEffect = (mode: WaitMode): "read" | "runtime-eval" => (mode === "fn" ? "runtime-eval" : "read")
 
 /**
  * A non-runtime predicate sampled each tick. Returns whether it matched at the
@@ -98,8 +93,7 @@ export const waitSideEffect = (mode: WaitMode): "read" | "runtime-eval" =>
  */
 export type Predicate = () => Effect.Effect<boolean>
 
-const RUNTIME_ADAPTER_REASON =
-  "Runtime wait predicates require a runtime adapter." as const
+const RUNTIME_ADAPTER_REASON = "Runtime wait predicates require a runtime adapter." as const
 
 // ── `--ms` path (read): sleep the clamped duration, report matched:true ──
 
@@ -113,18 +107,15 @@ const msWaitCommand = (args: WaitArgs): Command<"read", WaitResult> => {
         mode: "ms",
         matched: true,
         available: true,
-        waitedMs: ms
-      })
-    )
+        waitedMs: ms,
+      }),
+    ),
   )
 }
 
 // ── predicate path (read): poll on the AC-035 cadence until match/timeout ──
 
-const predicateWaitCommand = (
-  args: WaitArgs,
-  predicate: Predicate
-): Command<"read", WaitResult> => {
+const predicateWaitCommand = (args: WaitArgs, predicate: Predicate): Command<"read", WaitResult> => {
   const timeoutMs = resolveTimeoutMs(args.timeoutMs)
   const intervalMs = resolveIntervalMs(timeoutMs)
   return command(
@@ -151,10 +142,10 @@ const predicateWaitCommand = (
         available: true,
         timeoutMs,
         intervalMs,
-        waitedMs: elapsed
+        waitedMs: elapsed,
       }
       return result
-    })
+    }),
   )
 }
 
@@ -179,10 +170,10 @@ const fnWaitCommand = (args: WaitArgs): Command<"runtime-eval", WaitResult> => {
           matched: value === true,
           available: true,
           timeoutMs,
-          value
-        })
-      )
-    )
+          value,
+        }),
+      ),
+    ),
   )
 }
 
@@ -199,8 +190,8 @@ const fnWaitUnavailableCommand = (): Command<"runtime-eval", WaitResult> =>
       mode: "fn",
       matched: false,
       available: false,
-      reason: RUNTIME_ADAPTER_REASON
-    })
+      reason: RUNTIME_ADAPTER_REASON,
+    }),
   )
 
 export interface WaitDeps {
@@ -218,20 +209,15 @@ export interface WaitDeps {
  */
 export const waitCommand = (
   args: WaitArgs = {},
-  deps: WaitDeps = {}
+  deps: WaitDeps = {},
 ): Command<"read", WaitResult> | Command<"runtime-eval", WaitResult> => {
   const mode = waitMode(args)
   switch (mode) {
     case "fn":
-      return deps.hasRuntimeAdapter === true
-        ? fnWaitCommand(args)
-        : fnWaitUnavailableCommand()
+      return deps.hasRuntimeAdapter === true ? fnWaitCommand(args) : fnWaitUnavailableCommand()
     case "ms":
       return msWaitCommand(args)
     case "predicate":
-      return predicateWaitCommand(
-        args,
-        deps.predicate ?? (() => Effect.succeed(false))
-      )
+      return predicateWaitCommand(args, deps.predicate ?? (() => Effect.succeed(false)))
   }
 }

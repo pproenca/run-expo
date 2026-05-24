@@ -34,7 +34,7 @@ export {
   numberOrNull,
   optionalString,
   resolveMetroPort,
-  resolveSamples
+  resolveSamples,
 } from "./support.js"
 
 // AC-045 + AC-013 — network derivations and HAR confinement.
@@ -57,7 +57,7 @@ export {
   parseUrlParts,
   type RawNetworkRequest,
   SLOW_THRESHOLD_MS,
-  WATERFALL_TOP_N
+  WATERFALL_TOP_N,
 } from "./network.js"
 
 // AC-022 — network shape validation, REUSED from protocols (not re-implemented).
@@ -66,7 +66,7 @@ export {
   type NetworkEvidenceResult,
   type NetworkEvidenceValidated,
   type NetworkUnavailableCode,
-  validateNetworkEvidence
+  validateNetworkEvidence,
 } from "@expo98/protocols"
 
 // AC-046 — perf finding thresholds.
@@ -80,7 +80,7 @@ export {
   RENDER_FLAG_MS,
   RENDER_HIGH_MS,
   type ReportInput,
-  reportFindings
+  reportFindings,
 } from "./perf-report.js"
 
 // AC-047 — frame / FPS calc (exact budgets).
@@ -94,16 +94,11 @@ export {
   pushFrame,
   RETAIN_WINDOW,
   round1,
-  STATS_WINDOW
+  STATS_WINDOW,
 } from "./perf-frames.js"
 
 // AC-048 — confidence rollup.
-export {
-  lowerConfidence,
-  normalizeConfidence,
-  overallConfidence,
-  type PerfConfidence
-} from "./perf-confidence.js"
+export { lowerConfidence, normalizeConfidence, overallConfidence, type PerfConfidence } from "./perf-confidence.js"
 
 // AC-049 — direction-aware compare (FIX).
 export {
@@ -112,16 +107,11 @@ export {
   HIGHER_IS_BETTER_NAMES,
   type MetricDirection,
   metricDirection,
-  type PerfMetricLike
+  type PerfMetricLike,
 } from "./perf-compare.js"
 
 // AC-050 — budget fail-closed.
-export {
-  type BudgetCheck,
-  type BudgetResult,
-  type BudgetRule,
-  evaluateBudget
-} from "./perf-budget.js"
+export { type BudgetCheck, type BudgetResult, type BudgetRule, evaluateBudget } from "./perf-budget.js"
 
 // AC-051 — memory-leak claim gating.
 export {
@@ -129,7 +119,7 @@ export {
   type LeakClaim,
   type MemoryEvidence,
   type MemoryEvidenceInput,
-  MIN_SAMPLES_FOR_CLAIM
+  MIN_SAMPLES_FOR_CLAIM,
 } from "./perf-memory.js"
 
 // AC-052 — native macOS `sample` parse (PRESERVE).
@@ -137,5 +127,5 @@ export {
   type NativeSampleBuckets,
   type NativeSampleSummary,
   type NativeSampleSymbol,
-  parseNativeSample
+  parseNativeSample,
 } from "./native-sample.js"

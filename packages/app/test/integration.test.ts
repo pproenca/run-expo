@@ -15,20 +15,10 @@
  *      (fake) capability — confirming the dispatch path is real, not a stub.
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  DeviceCapability,
-  EXIT_SUCCESS,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "@expo98/core"
+import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "@expo98/app"
+import { DeviceCapability, EXIT_SUCCESS, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import { makeMemoryFs } from "@expo98/domain"
 import { Effect, Layer, Option, Ref } from "effect"
-import {
-  coreReadCommands,
-  handlerCommands,
-  registerCommands,
-  runRegistered
-} from "@expo98/app"
 
 const registry = registerCommands([...coreReadCommands, ...handlerCommands])
 
@@ -38,22 +28,22 @@ const countingCaps = (deviceCalls: Ref.Ref<number>, evalCalls: Ref.Ref<number>) 
     Layer.succeed(
       DeviceCapability,
       DeviceCapability.of({
-        invoke: () => Ref.update(deviceCalls, (n) => n + 1).pipe(Effect.as("device-ok"))
-      })
+        invoke: () => Ref.update(deviceCalls, (n) => n + 1).pipe(Effect.as("device-ok")),
+      }),
     ),
     Layer.succeed(
       RuntimeEvalCapability,
       RuntimeEvalCapability.of({
-        evaluate: () => Ref.update(evalCalls, (n) => n + 1).pipe(Effect.as("eval-ok"))
-      })
+        evaluate: () => Ref.update(evalCalls, (n) => n + 1).pipe(Effect.as("eval-ok")),
+      }),
     ),
     Layer.succeed(
       SourceWriteCapability,
       SourceWriteCapability.of({
         writeFile: () => Effect.void,
-        deleteFile: () => Effect.void
-      })
-    )
+        deleteFile: () => Effect.void,
+      }),
+    ),
   )
 
 const globals = {
@@ -71,7 +61,7 @@ const globals = {
   contentBoundaries: false,
   debug: false,
   noColor: false,
-  noInput: false
+  noInput: false,
 }
 
 describe("Final integration — full command surface", () => {
@@ -99,7 +89,7 @@ describe("Final integration — full command surface", () => {
       "bridge install",
       "expo-compat",
       "sitemap",
-      "review-overlay"
+      "review-overlay",
     ]) {
       expect(registry.get(path), `missing wired path: ${path}`).toBeDefined()
     }
@@ -114,78 +104,72 @@ describe("Final integration — full command surface", () => {
       const result = yield* runRegistered(reg, {
         positionals: [],
         policy: {},
-        fs
+        fs,
       }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
       expect(result.exitCode).toBe(EXIT_SUCCESS)
       expect(result.sideEffect).toBe("read")
       const payload = result.payload as { available: boolean }
       expect(payload.available).toBe(true)
-    })
+    }),
   )
 
-  it.effect(
-    "gated device command (launch-app) WITHOUT policy → denied, exit 0, device invoked 0×",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* makeMemoryFs()
-        const deviceCalls = yield* Ref.make(0)
-        const evalCalls = yield* Ref.make(0)
-        const reg = registry.get("launch-app")!
-        expect(reg.sideEffect).toBe("device")
-        const result = yield* runRegistered(reg, {
-          positionals: ["booted", "com.example.app"],
-          policy: {}, // no allow → fail-closed denial
-          fs
-        }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
-        // Designed-unavailable: exit 0 with the policy-denied payload.
-        expect(result.exitCode).toBe(EXIT_SUCCESS)
-        const payload = result.payload as { code?: string; denied?: boolean }
-        expect(payload.code).toBe("policy-denied")
-        expect(payload.denied).toBe(true)
-        // CAPABILITY WITHHELD: the device capability was never invoked.
-        expect(yield* Ref.get(deviceCalls)).toBe(0)
-      })
+  it.effect("gated device command (launch-app) WITHOUT policy → denied, exit 0, device invoked 0×", () =>
+    Effect.gen(function* () {
+      const fs = yield* makeMemoryFs()
+      const deviceCalls = yield* Ref.make(0)
+      const evalCalls = yield* Ref.make(0)
+      const reg = registry.get("launch-app")!
+      expect(reg.sideEffect).toBe("device")
+      const result = yield* runRegistered(reg, {
+        positionals: ["booted", "com.example.app"],
+        policy: {}, // no allow → fail-closed denial
+        fs,
+      }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
+      // Designed-unavailable: exit 0 with the policy-denied payload.
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      const payload = result.payload as { code?: string; denied?: boolean }
+      expect(payload.code).toBe("policy-denied")
+      expect(payload.denied).toBe(true)
+      // CAPABILITY WITHHELD: the device capability was never invoked.
+      expect(yield* Ref.get(deviceCalls)).toBe(0)
+    }),
   )
 
-  it.effect(
-    "gated runtime-eval command (trace start) WITHOUT policy → denied, eval invoked 0×",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* makeMemoryFs()
-        const deviceCalls = yield* Ref.make(0)
-        const evalCalls = yield* Ref.make(0)
-        const reg = registry.get("trace start")!
-        expect(reg.sideEffect).toBe("runtime-eval")
-        const result = yield* runRegistered(reg, {
-          positionals: [],
-          policy: {},
-          fs
-        }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
-        expect(result.exitCode).toBe(EXIT_SUCCESS)
-        const payload = result.payload as { code?: string }
-        expect(payload.code).toBe("policy-denied")
-        expect(yield* Ref.get(evalCalls)).toBe(0)
-      })
+  it.effect("gated runtime-eval command (trace start) WITHOUT policy → denied, eval invoked 0×", () =>
+    Effect.gen(function* () {
+      const fs = yield* makeMemoryFs()
+      const deviceCalls = yield* Ref.make(0)
+      const evalCalls = yield* Ref.make(0)
+      const reg = registry.get("trace start")!
+      expect(reg.sideEffect).toBe("runtime-eval")
+      const result = yield* runRegistered(reg, {
+        positionals: [],
+        policy: {},
+        fs,
+      }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      const payload = result.payload as { code?: string }
+      expect(payload.code).toBe("policy-denied")
+      expect(yield* Ref.get(evalCalls)).toBe(0)
+    }),
   )
 
-  it.effect(
-    "gated device command WITH policy → gate passes, the concrete capability IS reached",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* makeMemoryFs()
-        const deviceCalls = yield* Ref.make(0)
-        const evalCalls = yield* Ref.make(0)
-        const reg = registry.get("launch-app")!
-        const result = yield* runRegistered(reg, {
-          positionals: ["booted", "com.example.app"],
-          policy: { allow: ["launch-app"] },
-          fs
-        }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
-        expect(result.exitCode).toBe(EXIT_SUCCESS)
-        // The dispatch path is REAL: with the gate open, the injected device
-        // capability was invoked (≥1 — launch-app also runs a crash scan).
-        expect(yield* Ref.get(deviceCalls)).toBeGreaterThanOrEqual(1)
-      })
+  it.effect("gated device command WITH policy → gate passes, the concrete capability IS reached", () =>
+    Effect.gen(function* () {
+      const fs = yield* makeMemoryFs()
+      const deviceCalls = yield* Ref.make(0)
+      const evalCalls = yield* Ref.make(0)
+      const reg = registry.get("launch-app")!
+      const result = yield* runRegistered(reg, {
+        positionals: ["booted", "com.example.app"],
+        policy: { allow: ["launch-app"] },
+        fs,
+      }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      // The dispatch path is REAL: with the gate open, the injected device
+      // capability was invoked (≥1 — launch-app also runs a crash scan).
+      expect(yield* Ref.get(deviceCalls)).toBeGreaterThanOrEqual(1)
+    }),
   )
 
   it.effect("resolvePolicy + dispatch survive an absent --action-policy (Fs read)", () =>
@@ -200,9 +184,9 @@ describe("Final integration — full command surface", () => {
       const result = yield* runRegistered(reg, {
         positionals: [],
         policy: {},
-        fs
+        fs,
       }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
       expect(result.exitCode).toBe(EXIT_SUCCESS)
-    })
+    }),
   )
 })

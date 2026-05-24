@@ -26,15 +26,11 @@ import {
   type DispatchResult,
   type PolicyDocument,
   RuntimeEvalCapability,
-  SourceWriteCapability
+  SourceWriteCapability,
 } from "@expo98/core"
 import { Fs } from "@expo98/domain"
 import { Effect } from "effect"
-import {
-  bridgeFilePaths,
-  bridgeMetadataContents,
-  bridgeSourceContents
-} from "./bridge-files.js"
+import { bridgeFilePaths, bridgeMetadataContents, bridgeSourceContents } from "./bridge-files.js"
 import { type InstallStateResult, readInstallState } from "./install-state.js"
 
 /** The confirmation tokens (also the action names) for AC-008. */
@@ -75,7 +71,7 @@ export const installPlan = (root: string): BridgePlan => {
   return {
     action: BRIDGE_INSTALL_TOKEN,
     writes: [paths.metadata, paths.source],
-    deletes: []
+    deletes: [],
   }
 }
 
@@ -85,14 +81,12 @@ export const removePlan = (root: string): BridgePlan => {
   return {
     action: BRIDGE_REMOVE_TOKEN,
     writes: [],
-    deletes: [paths.metadata, paths.source, paths.legacyMetadata]
+    deletes: [paths.metadata, paths.source, paths.legacyMetadata],
   }
 }
 
 /** The `source-write` install command — writes both files via the capability. */
-export const installWriteCommand = (
-  root: string
-): Command<"source-write", BridgeWriteResult> => {
+export const installWriteCommand = (root: string): Command<"source-write", BridgeWriteResult> => {
   const paths = bridgeFilePaths(root)
   return command(
     { action: BRIDGE_INSTALL_TOKEN, sideEffect: "source-write" },
@@ -100,22 +94,20 @@ export const installWriteCommand = (
       Effect.flatMap((cap) =>
         cap
           .writeFile(paths.metadata, bridgeMetadataContents())
-          .pipe(Effect.zipRight(cap.writeFile(paths.source, bridgeSourceContents())))
+          .pipe(Effect.zipRight(cap.writeFile(paths.source, bridgeSourceContents()))),
       ),
       Effect.as<BridgeWriteResult>({
         action: BRIDGE_INSTALL_TOKEN,
         applied: true,
         written: [paths.metadata, paths.source],
-        deleted: []
-      })
-    )
+        deleted: [],
+      }),
+    ),
   )
 }
 
 /** The `source-write` remove command — deletes both files (+ legacy fallback). */
-export const removeWriteCommand = (
-  root: string
-): Command<"source-write", BridgeWriteResult> => {
+export const removeWriteCommand = (root: string): Command<"source-write", BridgeWriteResult> => {
   const paths = bridgeFilePaths(root)
   return command(
     { action: BRIDGE_REMOVE_TOKEN, sideEffect: "source-write" },
@@ -123,18 +115,15 @@ export const removeWriteCommand = (
       Effect.flatMap((cap) =>
         cap
           .deleteFile(paths.metadata)
-          .pipe(
-            Effect.zipRight(cap.deleteFile(paths.source)),
-            Effect.zipRight(cap.deleteFile(paths.legacyMetadata))
-          )
+          .pipe(Effect.zipRight(cap.deleteFile(paths.source)), Effect.zipRight(cap.deleteFile(paths.legacyMetadata))),
       ),
       Effect.as<BridgeWriteResult>({
         action: BRIDGE_REMOVE_TOKEN,
         applied: true,
         written: [],
-        deleted: [paths.metadata, paths.source, paths.legacyMetadata]
-      })
-    )
+        deleted: [paths.metadata, paths.source, paths.legacyMetadata],
+      }),
+    ),
   )
 }
 
@@ -154,26 +143,23 @@ export const removeWriteCommand = (
  * (+ `Fs`) without ever invoking device/eval — they are structurally unreachable.
  */
 const inertDevice = DeviceCapability.of({
-  invoke: () => Effect.succeed("")
+  invoke: () => Effect.succeed(""),
 })
 const inertEval = RuntimeEvalCapability.of({
-  evaluate: () => Effect.succeed(undefined)
+  evaluate: () => Effect.succeed(undefined),
 })
 
 const runBridgeWrite = (
   root: string,
   action: BridgeWriteAction,
-  policy: PolicyDocument
+  policy: PolicyDocument,
 ): Effect.Effect<DispatchResult<BridgeWritePayload>, never, SourceWriteCapability | Fs> =>
   Effect.gen(function* () {
-    const cmd =
-      action === BRIDGE_INSTALL_TOKEN
-        ? installWriteCommand(root)
-        : removeWriteCommand(root)
+    const cmd = action === BRIDGE_INSTALL_TOKEN ? installWriteCommand(root) : removeWriteCommand(root)
 
     const dispatched = yield* dispatch(cmd, policy).pipe(
       Effect.provideService(DeviceCapability, inertDevice),
-      Effect.provideService(RuntimeEvalCapability, inertEval)
+      Effect.provideService(RuntimeEvalCapability, inertEval),
     )
 
     // Gate passed → the write/delete happened; pass the applied payload through.
@@ -194,25 +180,25 @@ const runBridgeWrite = (
       applied: false,
       requiredConfirmation: action,
       status,
-      plan
+      plan,
     }
     return {
       exitCode: dispatched.exitCode,
       sideEffect: dispatched.sideEffect,
-      payload: confirmationPayload
+      payload: confirmationPayload,
     }
   })
 
 /** AC-008 — `bridge install`. */
 export const bridgeInstall = (
   root: string,
-  policy: PolicyDocument
+  policy: PolicyDocument,
 ): Effect.Effect<DispatchResult<BridgeWritePayload>, never, SourceWriteCapability | Fs> =>
   runBridgeWrite(root, BRIDGE_INSTALL_TOKEN, policy)
 
 /** AC-008 — `bridge remove`. */
 export const bridgeRemove = (
   root: string,
-  policy: PolicyDocument
+  policy: PolicyDocument,
 ): Effect.Effect<DispatchResult<BridgeWritePayload>, never, SourceWriteCapability | Fs> =>
   runBridgeWrite(root, BRIDGE_REMOVE_TOKEN, policy)

@@ -18,13 +18,9 @@ import { Effect } from "effect"
 import { descriptor } from "../src/support.js"
 
 // An effect that REQUIRES the runtime-eval capability in its R channel.
-const evalEffect = RuntimeEvalCapability.pipe(
-  Effect.flatMap((e) => e.evaluate("Boolean(globalThis.ready)"))
-)
+const evalEffect = RuntimeEvalCapability.pipe(Effect.flatMap((e) => e.evaluate("Boolean(globalThis.ready)")))
 // An effect that REQUIRES the device capability in its R channel.
-const deviceEffect = DeviceCapability.pipe(
-  Effect.flatMap((d) => d.invoke("xcrun", ["simctl", "boot", "booted"]))
-)
+const deviceEffect = DeviceCapability.pipe(Effect.flatMap((d) => d.invoke("xcrun", ["simctl", "boot", "booted"])))
 
 // ── POSITIVE: a device-classed lifecycle/interaction handler MAY pair with a
 //    device-requiring handler (exactly what `lifecycleCommand`/`tapCommand` do). ──
@@ -40,7 +36,7 @@ void waitFnLikeOk
 const deviceCannotEval = command(
   descriptor("launch-app", "device"),
   // @ts-expect-error device-classed handler cannot require RuntimeEvalCapability
-  evalEffect
+  evalEffect,
 )
 void deviceCannotEval
 
@@ -49,7 +45,7 @@ void deviceCannotEval
 const readCannotEval = command(
   descriptor("wait", "read"),
   // @ts-expect-error read-classed handler cannot require RuntimeEvalCapability
-  evalEffect
+  evalEffect,
 )
 void readCannotEval
 
@@ -57,6 +53,6 @@ void readCannotEval
 const readCannotDevice = command(
   descriptor("wait", "read"),
   // @ts-expect-error read-classed handler cannot require DeviceCapability
-  deviceEffect
+  deviceEffect,
 )
 void readCannotDevice

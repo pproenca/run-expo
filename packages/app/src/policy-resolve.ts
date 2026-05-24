@@ -15,23 +15,19 @@ import { type CliGlobals } from "./globals.js"
  * document. A missing/unreadable policy file yields an EMPTY allow-list (fail
  * closed) — never an error that would change a read command's exit code.
  */
-export const resolvePolicy = (
-  globals: CliGlobals
-): Effect.Effect<PolicyDocument, never, Fs> =>
+export const resolvePolicy = (globals: CliGlobals): Effect.Effect<PolicyDocument, never, Fs> =>
   Effect.gen(function* () {
     const base = yield* loadPolicyFile(globals.actionPolicy)
     const policy: PolicyDocument = {
       ...base,
       allowRuntimeEval: globals.allowRuntimeEval || base.allowRuntimeEval === true,
-      confirmations: globals.confirmActions
+      confirmations: globals.confirmActions,
     }
     return policy
   })
 
 /** Load + lenient-parse the policy file, or `{}` when absent/unreadable. */
-const loadPolicyFile = (
-  path: Option.Option<string>
-): Effect.Effect<PolicyDocument, never, Fs> =>
+const loadPolicyFile = (path: Option.Option<string>): Effect.Effect<PolicyDocument, never, Fs> =>
   Option.match(path, {
     onNone: () => Effect.succeed<PolicyDocument>({}),
     onSome: (p) =>
@@ -42,7 +38,7 @@ const loadPolicyFile = (
           return {} satisfies PolicyDocument // fail closed on unreadable file
         }
         return parsePolicy(raw.value)
-      })
+      }),
   })
 
 /** Parse policy JSON into the narrow allow/actions shape; tolerate junk. */
@@ -64,11 +60,10 @@ const parsePolicy = (raw: string): PolicyDocument => {
     typeof obj["actions"] === "object" && obj["actions"] !== null
       ? (obj["actions"] as PolicyDocument["actions"])
       : undefined
-  const allowRuntimeEval =
-    typeof obj["allowRuntimeEval"] === "boolean" ? obj["allowRuntimeEval"] : undefined
+  const allowRuntimeEval = typeof obj["allowRuntimeEval"] === "boolean" ? obj["allowRuntimeEval"] : undefined
   return {
     ...(allow !== undefined ? { allow } : {}),
     ...(actions !== undefined ? { actions } : {}),
-    ...(allowRuntimeEval !== undefined ? { allowRuntimeEval } : {})
+    ...(allowRuntimeEval !== undefined ? { allowRuntimeEval } : {}),
   }
 }

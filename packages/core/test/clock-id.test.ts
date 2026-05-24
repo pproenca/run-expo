@@ -3,10 +3,7 @@ import { formatTimestamp, Id, IdLive, RandomBytes } from "@expo98/core"
 import { Effect, Layer, TestClock } from "effect"
 
 // Deterministic randomness so the suffix is fixed under test.
-const FixedRandom = Layer.succeed(
-  RandomBytes,
-  RandomBytes.of({ nextSuffix: Effect.succeed("aaaaaaaaaa") })
-)
+const FixedRandom = Layer.succeed(RandomBytes, RandomBytes.of({ nextSuffix: Effect.succeed("aaaaaaaaaa") }))
 
 const TestId = IdLive.pipe(Layer.provide(FixedRandom))
 
@@ -21,7 +18,7 @@ describe("S3 Clock / Id (AC-034)", () => {
       const id = yield* Effect.flatMap(Id, (svc) => svc.generateId("snapshot"))
       // timestamp portion is filesystem-safe (no ':' or '.')
       expect(id).toBe("snapshot-19700101T000000000Z-aaaaaaaaaa")
-    }).pipe(Effect.provide(TestId))
+    }).pipe(Effect.provide(TestId)),
   )
 
   it.effect("AC-034 suffix is collision-resistant length (>= 6, fixed 10)", () =>
@@ -30,6 +27,6 @@ describe("S3 Clock / Id (AC-034)", () => {
       const suffix = id.split("-").at(-1) ?? ""
       expect(suffix.length).toBeGreaterThanOrEqual(6)
       expect(suffix.length).toBe(10)
-    }).pipe(Effect.provide(TestId))
+    }).pipe(Effect.provide(TestId)),
   )
 })

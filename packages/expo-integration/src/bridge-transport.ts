@@ -40,7 +40,7 @@ export interface BridgeTransportService {
   readonly call: (
     domain: string,
     action: string,
-    args: Readonly<Record<string, unknown>>
+    args: Readonly<Record<string, unknown>>,
   ) => Effect.Effect<BridgeCallResult>
 }
 

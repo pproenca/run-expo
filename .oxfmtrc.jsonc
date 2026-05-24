@@ -1,4 +1,7 @@
 {
+  // Formatting learned from opencode (anomalyco/opencode) — an Effect-TS codebase:
+  //   prettier { "semi": false, "printWidth": 120 }, minimal ignores (generated only).
+  //   We keep oxfmt as the tool but adopt its Effect-native style and format the whole repo.
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "arrowParens": "always",
   "bracketSameLine": false,
@@ -9,10 +12,10 @@
   "insertFinalNewline": true,
   "jsxSingleQuote": false,
   "objectWrap": "preserve",
-  "printWidth": 100,
+  "printWidth": 120,
   "proseWrap": "preserve",
   "quoteProps": "as-needed",
-  "semi": true,
+  "semi": false,
   "singleAttributePerLine": false,
   "singleQuote": false,
   "sortImports": {
@@ -29,12 +32,11 @@
     ".cache/",
     ".clawpatch/",
     ".scratch/",
-    "cli/",
+    ".tmp/",
     "coverage/",
     "dist/",
     "node_modules/",
     "pnpm-lock.yaml",
-    "**/*.json",
     "**/node_modules/**",
   ],
 }

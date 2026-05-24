@@ -9,13 +9,7 @@
  * flag (or policy) the handler runs and the eval capability IS invoked.
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  DeviceCapability,
-  dispatch,
-  EXIT_SUCCESS,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "@expo98/core"
+import { DeviceCapability, dispatch, EXIT_SUCCESS, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import { traceCommand, type TraceVerb } from "@expo98/handlers-devtools"
 import { Effect, Layer, Ref } from "effect"
 
@@ -25,23 +19,17 @@ const makeCountingCaps = (calls: Ref.Ref<number>) =>
     Layer.succeed(
       RuntimeEvalCapability,
       RuntimeEvalCapability.of({
-        evaluate: (expression) =>
-          Ref.update(calls, (n) => n + 1).pipe(
-            Effect.as({ ran: expression })
-          )
-      })
+        evaluate: (expression) => Ref.update(calls, (n) => n + 1).pipe(Effect.as({ ran: expression })),
+      }),
     ),
-    Layer.succeed(
-      DeviceCapability,
-      DeviceCapability.of({ invoke: () => Effect.succeed("device-ok") })
-    ),
+    Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("device-ok") })),
     Layer.succeed(
       SourceWriteCapability,
       SourceWriteCapability.of({
         writeFile: () => Effect.void,
-        deleteFile: () => Effect.void
-      })
-    )
+        deleteFile: () => Effect.void,
+      }),
+    ),
   )
 
 const VERBS: ReadonlyArray<TraceVerb> = ["start", "read", "clear", "stop"]
@@ -53,9 +41,7 @@ describe("AC-010 trace is runtime-eval through core's gate", () => {
       () =>
         Effect.gen(function* () {
           const calls = yield* Ref.make(0)
-          const result = yield* dispatch(traceCommand(verb), {}).pipe(
-            Effect.provide(makeCountingCaps(calls))
-          )
+          const result = yield* dispatch(traceCommand(verb), {}).pipe(Effect.provide(makeCountingCaps(calls)))
           // Denied: the AC-001/policyDeniedPayload shape, exit 0 (designed-unavailable).
           const payload = result.payload as {
             code?: string
@@ -69,58 +55,52 @@ describe("AC-010 trace is runtime-eval through core's gate", () => {
           expect(result.sideEffect).toBe("runtime-eval")
           // THE behavioural assertion: zero eval invocations on denial.
           expect(yield* Ref.get(calls)).toBe(0)
-        })
+        }),
     )
   }
 
-  it.effect(
-    "AC-010 trace.start WITH --allow-runtime-eval runs the handler and INVOKES the eval capability",
-    () =>
-      Effect.gen(function* () {
-        const calls = yield* Ref.make(0)
-        const result = yield* dispatch(traceCommand("start"), {
-          allowRuntimeEval: true
-        }).pipe(Effect.provide(makeCountingCaps(calls)))
-        const payload = result.payload as { action?: string; value?: unknown }
-        expect(payload.action).toBe("trace.start")
-        expect(result.exitCode).toBe(EXIT_SUCCESS)
-        // The eval capability was invoked exactly once.
-        expect(yield* Ref.get(calls)).toBe(1)
-      })
+  it.effect("AC-010 trace.start WITH --allow-runtime-eval runs the handler and INVOKES the eval capability", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      const result = yield* dispatch(traceCommand("start"), {
+        allowRuntimeEval: true,
+      }).pipe(Effect.provide(makeCountingCaps(calls)))
+      const payload = result.payload as { action?: string; value?: unknown }
+      expect(payload.action).toBe("trace.start")
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      // The eval capability was invoked exactly once.
+      expect(yield* Ref.get(calls)).toBe(1)
+    }),
   )
 
-  it.effect(
-    "AC-010 trace.stop allowed by an explicit policy entry runs and INVOKES the eval capability",
-    () =>
-      Effect.gen(function* () {
-        const calls = yield* Ref.make(0)
-        const result = yield* dispatch(traceCommand("stop"), {
-          allow: ["trace.stop"]
-        }).pipe(Effect.provide(makeCountingCaps(calls)))
-        const payload = result.payload as { action?: string }
-        expect(payload.action).toBe("trace.stop")
-        expect(yield* Ref.get(calls)).toBe(1)
-      })
+  it.effect("AC-010 trace.stop allowed by an explicit policy entry runs and INVOKES the eval capability", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      const result = yield* dispatch(traceCommand("stop"), {
+        allow: ["trace.stop"],
+      }).pipe(Effect.provide(makeCountingCaps(calls)))
+      const payload = result.payload as { action?: string }
+      expect(payload.action).toBe("trace.stop")
+      expect(yield* Ref.get(calls)).toBe(1)
+    }),
   )
 
   it.effect("AC-010 maxEvents clamps to 1..2000 and metroPort to 1..65535", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
-      const tooBig = yield* dispatch(
-        traceCommand("start", { maxEvents: 9_999, metroPort: 70_000 }),
-        { allowRuntimeEval: true }
-      ).pipe(Effect.provide(makeCountingCaps(calls)))
-      const tooSmall = yield* dispatch(
-        traceCommand("start", { maxEvents: 0, metroPort: 0 }),
-        { allowRuntimeEval: true }
-      ).pipe(Effect.provide(makeCountingCaps(calls)))
+      const tooBig = yield* dispatch(traceCommand("start", { maxEvents: 9_999, metroPort: 70_000 }), {
+        allowRuntimeEval: true,
+      }).pipe(Effect.provide(makeCountingCaps(calls)))
+      const tooSmall = yield* dispatch(traceCommand("start", { maxEvents: 0, metroPort: 0 }), {
+        allowRuntimeEval: true,
+      }).pipe(Effect.provide(makeCountingCaps(calls)))
       const big = tooBig.payload as { maxEvents?: number; metroPort?: number }
       const small = tooSmall.payload as { maxEvents?: number; metroPort?: number }
       expect(big.maxEvents).toBe(2_000)
       expect(big.metroPort).toBe(65_535)
       expect(small.maxEvents).toBe(1)
       expect(small.metroPort).toBe(1)
-    })
+    }),
   )
 
   it.skip("AC-010 live trace against a running Hermes patches RAF + commit hook", () => {

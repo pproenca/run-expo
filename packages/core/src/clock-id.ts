@@ -13,8 +13,7 @@ import { Clock, Context, Effect, Layer } from "effect"
  */
 
 /** Single canonical timestamp format: ISO-8601 UTC with millisecond precision. */
-export const formatTimestamp = (epochMillis: number): string =>
-  new Date(epochMillis).toISOString()
+export const formatTimestamp = (epochMillis: number): string => new Date(epochMillis).toISOString()
 
 export interface IdService {
   /** Current time as the one canonical timestamp string. */
@@ -37,10 +36,7 @@ export interface RandomBytesService {
   readonly nextSuffix: Effect.Effect<string>
 }
 
-export class RandomBytes extends Context.Tag("@expo98/core/RandomBytes")<
-  RandomBytes,
-  RandomBytesService
->() {}
+export class RandomBytes extends Context.Tag("@expo98/core/RandomBytes")<RandomBytes, RandomBytesService>() {}
 
 const SUFFIX_LEN = 10
 
@@ -65,8 +61,8 @@ export const RandomBytesLive = Layer.succeed(
         s += Math.random().toString(36).slice(2)
       }
       return s.slice(0, SUFFIX_LEN)
-    })
-  })
+    }),
+  }),
 )
 
 /** The Id service, built from the ambient `Clock` and an injected `RandomBytes`. */
@@ -84,9 +80,9 @@ export const IdLive = Layer.effect(
           const ts = fsSafeTimestamp(yield* now)
           const suffix = yield* random.nextSuffix
           return `${prefix}-${ts}-${suffix}`
-        })
+        }),
     })
-  })
+  }),
 )
 
 /** Convenience: the full production stack for the Id service. */

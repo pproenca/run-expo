@@ -16,22 +16,18 @@ import {
   bridgeFilePaths,
   bridgeMetadataContents,
   bridgeSourceContents,
-  readInstallState
+  readInstallState,
 } from "@expo98/expo-integration"
 import { Effect, Layer } from "effect"
 
 const ROOT = "/proj"
 const paths = bridgeFilePaths(ROOT)
 
-const withFs = (
-  setup: (fs: Fs["Type"]) => Effect.Effect<unknown, never>
-) =>
+const withFs = (setup: (fs: Fs["Type"]) => Effect.Effect<unknown, never>) =>
   Effect.gen(function* () {
     const fs = yield* makeMemoryFs()
     yield* setup(fs)
-    return yield* readInstallState(ROOT).pipe(
-      Effect.provide(Layer.succeed(Fs, fs))
-    )
+    return yield* readInstallState(ROOT).pipe(Effect.provide(Layer.succeed(Fs, fs)))
   })
 
 const writePackageJson = (fs: Fs["Type"], withExpo: boolean) =>
@@ -41,8 +37,8 @@ const writePackageJson = (fs: Fs["Type"], withExpo: boolean) =>
       JSON.stringify(
         withExpo
           ? { dependencies: { expo: "54.0.0", "react-native": "0.81.0" } }
-          : { dependencies: { "react-native": "0.81.0" } }
-      )
+          : { dependencies: { "react-native": "0.81.0" } },
+      ),
     )
     .pipe(Effect.orDie)
 
@@ -53,12 +49,12 @@ describe("AC-027 bridge install state", () => {
         writePackageJson(fs, false).pipe(
           Effect.zipRight(fs.writeFile(paths.metadata, bridgeMetadataContents())),
           Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("incompatible")
       expect(result.issue).toBe("missing-expo")
-    })
+    }),
   )
 
   it.effect("absent — expo present, neither file", () =>
@@ -67,7 +63,7 @@ describe("AC-027 bridge install state", () => {
       expect(result.status).toBe("absent")
       expect(result.issue).toBeNull()
       expect(result.expoPresent).toBe(true)
-    })
+    }),
   )
 
   it.effect("stale(partial-install) — metadata WITHOUT source", () =>
@@ -75,12 +71,12 @@ describe("AC-027 bridge install state", () => {
       const result = yield* withFs((fs) =>
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.metadata, bridgeMetadataContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("stale")
       expect(result.issue).toBe("partial-install")
-    })
+    }),
   )
 
   it.effect("stale(partial-install) — source WITHOUT metadata", () =>
@@ -88,12 +84,12 @@ describe("AC-027 bridge install state", () => {
       const result = yield* withFs((fs) =>
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("stale")
       expect(result.issue).toBe("partial-install")
-    })
+    }),
   )
 
   it.effect("stale(version-mismatch) — both present, wrong version", () =>
@@ -103,18 +99,18 @@ describe("AC-027 bridge install state", () => {
         bridgeVersion: "0.9.0",
         developmentOnly: true,
         generatedBy: "expo98",
-        domains: []
+        domains: [],
       })
       const result = yield* withFs((fs) =>
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.metadata, wrongMeta)),
           Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("stale")
       expect(result.issue).toBe("version-mismatch")
-    })
+    }),
   )
 
   it.effect("stale(version-mismatch) — both present, wrong schema", () =>
@@ -124,18 +120,18 @@ describe("AC-027 bridge install state", () => {
         bridgeVersion: "1.0.0",
         developmentOnly: true,
         generatedBy: "expo98",
-        domains: []
+        domains: [],
       })
       const result = yield* withFs((fs) =>
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.metadata, wrongMeta)),
           Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("stale")
       expect(result.issue).toBe("version-mismatch")
-    })
+    }),
   )
 
   it.effect("incompatible(not-development-only) — versions match, dev-only false", () =>
@@ -145,18 +141,18 @@ describe("AC-027 bridge install state", () => {
         bridgeVersion: "1.0.0",
         developmentOnly: false,
         generatedBy: "expo98",
-        domains: []
+        domains: [],
       })
       const result = yield* withFs((fs) =>
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.metadata, notDev)),
           Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("incompatible")
       expect(result.issue).toBe("not-development-only")
-    })
+    }),
   )
 
   it.effect("present — both present, versions match, dev-only", () =>
@@ -165,33 +161,30 @@ describe("AC-027 bridge install state", () => {
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.metadata, bridgeMetadataContents())),
           Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.status).toBe("present")
       expect(result.issue).toBeNull()
       expect(result.bridgeVersion).toBe("1.0.0")
       expect(result.schemaVersion).toBe(1)
       expect(result.developmentOnly).toBe(true)
-    })
+    }),
   )
 
   it.effect("present — recognises a devDependencies expo entry", () =>
     Effect.gen(function* () {
       const result = yield* withFs((fs) =>
         fs
-          .writeFile(
-            `${ROOT}/package.json`,
-            JSON.stringify({ devDependencies: { expo: "54.0.0" } })
-          )
+          .writeFile(`${ROOT}/package.json`, JSON.stringify({ devDependencies: { expo: "54.0.0" } }))
           .pipe(
             Effect.zipRight(fs.writeFile(paths.metadata, bridgeMetadataContents())),
             Effect.zipRight(fs.writeFile(paths.source, bridgeSourceContents())),
-            Effect.orDie
-          )
+            Effect.orDie,
+          ),
       )
       expect(result.status).toBe("present")
-    })
+    }),
   )
 
   it.effect("legacy .expo-ios/bridge.json is recognised as metadata (partial-install)", () =>
@@ -200,12 +193,12 @@ describe("AC-027 bridge install state", () => {
       const result = yield* withFs((fs) =>
         writePackageJson(fs, true).pipe(
           Effect.zipRight(fs.writeFile(paths.legacyMetadata, bridgeMetadataContents())),
-          Effect.orDie
-        )
+          Effect.orDie,
+        ),
       )
       expect(result.metadataPresent).toBe(true)
       expect(result.status).toBe("stale")
       expect(result.issue).toBe("partial-install")
-    })
+    }),
   )
 })

@@ -50,7 +50,7 @@ export {
   SemanticCapture,
   type SemanticCapturePayload,
   type SemanticCaptureService,
-  type SemanticRef
+  type SemanticRef,
 } from "./support.js"
 
 // snapshot capture (AC-019/026) + depth filter (AC-040)
@@ -62,7 +62,7 @@ export {
   type SnapshotCaptureInput,
   type SnapshotCaptureResult,
   snapshotCommand,
-  type SnapshotUnavailable
+  type SnapshotUnavailable,
 } from "./snapshot.js"
 
 // accessibility tree / audit (AC-023)
@@ -77,7 +77,7 @@ export {
   type AccessibilityUnavailable,
   type AccessibilityVerb,
   INTERACTIVE_NAME_MESSAGE,
-  isInteractiveUnnamed
+  isInteractiveUnnamed,
 } from "./accessibility.js"
 
 // rn introspection tree / refs / renders / inspect (AC-055)
@@ -100,5 +100,5 @@ export {
   type RnTreeResult,
   type RnTreeRow,
   type RnUnavailable,
-  type RnVerb
+  type RnVerb,
 } from "./rn.js"

@@ -22,7 +22,7 @@ export const RefUnavailableReason = Schema.Literal(
   "ref-stale",
   "ref-lacks-action",
   "ref-lacks-bounds",
-  "invalid-ref-format"
+  "invalid-ref-format",
 )
 export type RefUnavailableReason = Schema.Schema.Type<typeof RefUnavailableReason>
 
@@ -30,7 +30,7 @@ const ScreenBoxStruct = Schema.Struct({
   x: Schema.Number,
   y: Schema.Number,
   width: Schema.Number,
-  height: Schema.Number
+  height: Schema.Number,
 })
 const ScreenPointStruct = Schema.Struct({ x: Schema.Number, y: Schema.Number })
 
@@ -42,7 +42,7 @@ export const RefActionPlan = Schema.Struct({
   // null only for non-point actions on a boundless ref; point actions are
   // rejected earlier with `ref-lacks-bounds`.
   box: Schema.NullOr(ScreenBoxStruct),
-  point: Schema.NullOr(ScreenPointStruct)
+  point: Schema.NullOr(ScreenPointStruct),
 })
 export type RefActionPlan = Schema.Schema.Type<typeof RefActionPlan>
 
@@ -50,7 +50,7 @@ export const RefUnavailable = Schema.Struct({
   available: Schema.Literal(false),
   reason: Schema.String,
   code: RefUnavailableReason,
-  availableActions: Schema.optional(Schema.Array(Schema.String))
+  availableActions: Schema.optional(Schema.Array(Schema.String)),
 })
 export type RefUnavailable = Schema.Schema.Type<typeof RefUnavailable>
 
@@ -59,7 +59,7 @@ export type RefDecision = RefActionPlan | RefUnavailable
 /** AC-036: point = box centre. */
 export const centerOf = (box: ScreenBox): ScreenPoint => ({
   x: box.x + box.width / 2,
-  y: box.y + box.height / 2
+  y: box.y + box.height / 2,
 })
 
 /**
@@ -76,7 +76,7 @@ export const planRefAction = (input: {
     return {
       available: false,
       code: "invalid-ref-format",
-      reason: `Ref must match ${REF_FORMAT.source}.`
+      reason: `Ref must match ${REF_FORMAT.source}.`,
     }
   }
   if (input.cache === null) {
@@ -94,14 +94,14 @@ export const planRefAction = (input: {
       available: false,
       code: "ref-lacks-action",
       reason: `Ref does not support action "${input.action}".`,
-      availableActions: found.actions
+      availableActions: found.actions,
     }
   }
   if (input.pointAction && found.box === null) {
     return {
       available: false,
       code: "ref-lacks-bounds",
-      reason: "Ref has no bounds; cannot compute a point."
+      reason: "Ref has no bounds; cannot compute a point.",
     }
   }
   // box is guaranteed non-null here when pointAction (checked above); for a
@@ -113,7 +113,7 @@ export const planRefAction = (input: {
     ref: input.ref,
     targetId: input.cache.targetId,
     box,
-    point: box === null ? null : centerOf(box)
+    point: box === null ? null : centerOf(box),
   }
 }
 
@@ -142,13 +142,13 @@ export const resolveTargetCurrent = (input: {
   if (input.rediscovered !== null) {
     return {
       available: true,
-      target: { ...input.rediscovered, selected: true, stale: false }
+      target: { ...input.rediscovered, selected: true, stale: false },
     }
   }
   return {
     available: false,
     reason: "Selected target is stale.",
-    target: { ...input.persisted, stale: true }
+    target: { ...input.persisted, stale: true },
   }
 }
 
@@ -168,11 +168,7 @@ export const resolveTargetSelect = (input: {
 // AC-019 — snapshot prerequisites
 // ---------------------------------------------------------------------------
 
-export const SnapshotUnavailableReason = Schema.Literal(
-  "no-session",
-  "no-active-target",
-  "missing-device-id"
-)
+export const SnapshotUnavailableReason = Schema.Literal("no-session", "no-active-target", "missing-device-id")
 export type SnapshotUnavailableReason = Schema.Schema.Type<typeof SnapshotUnavailableReason>
 
 export type SnapshotPrereqDecision =
@@ -197,7 +193,7 @@ export const checkSnapshotPrereqs = (input: {
     return {
       available: false,
       code: "missing-device-id",
-      reason: "Active target is missing device.id."
+      reason: "Active target is missing device.id.",
     }
   }
   return { available: true }
@@ -213,11 +209,11 @@ export const renumberRefs = (snapshot: SnapshotResult): SnapshotResult => {
     ...r,
     ref: `@e${i + 1}` as RefRecord["ref"],
     snapshotId: snapshot.snapshotId,
-    stale: false
+    stale: false,
   }))
   const tree = snapshot.tree.map((n, i) => ({
     ...n,
-    ref: `@e${i + 1}` as RefRecord["ref"]
+    ref: `@e${i + 1}` as RefRecord["ref"],
   }))
   return { ...snapshot, refs, tree }
 }

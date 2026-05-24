@@ -19,7 +19,7 @@ import {
   EXIT_SUCCESS,
   RuntimeEvalCapability,
   type SideEffect,
-  SourceWriteCapability
+  SourceWriteCapability,
 } from "@expo98/core"
 import {
   resolveMs,
@@ -29,7 +29,7 @@ import {
   type WaitResult,
   waitCommand,
   waitMode,
-  waitSideEffect
+  waitSideEffect,
 } from "@expo98/handlers-interaction"
 import { Effect, Fiber, Layer, Ref, TestClock } from "effect"
 
@@ -87,69 +87,68 @@ const makeCaps = (evalCalls: Ref.Ref<number>) =>
       RuntimeEvalCapability,
       RuntimeEvalCapability.of({
         evaluate: (expression) =>
-          Ref.update(evalCalls, (n) => n + 1).pipe(Effect.as(true)).pipe(
-            Effect.tap(() => Effect.sync(() => void expression))
-          )
-      })
+          Ref.update(evalCalls, (n) => n + 1)
+            .pipe(Effect.as(true))
+            .pipe(Effect.tap(() => Effect.sync(() => void expression))),
+      }),
     ),
-    Layer.succeed(
-      DeviceCapability,
-      DeviceCapability.of({ invoke: () => Effect.succeed("ok") })
-    ),
+    Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("ok") })),
     Layer.succeed(
       SourceWriteCapability,
       SourceWriteCapability.of({
         writeFile: () => Effect.void,
-        deleteFile: () => Effect.void
-      })
-    )
+        deleteFile: () => Effect.void,
+      }),
+    ),
   )
 
 const run = (
   cmd: Command<"read", WaitResult> | Command<"runtime-eval", WaitResult>,
   policy: Parameters<typeof dispatch>[1],
-  caps: Layer.Layer<
-    RuntimeEvalCapability | DeviceCapability | SourceWriteCapability
-  >
+  caps: Layer.Layer<RuntimeEvalCapability | DeviceCapability | SourceWriteCapability>,
 ): Effect.Effect<DispatchResult<WaitResult>> =>
   dispatch(cmd as Command<SideEffect, WaitResult>, policy).pipe(Effect.provide(caps))
 
 describe("AC-004 wait.fn runtime-eval gate", () => {
-  it.effect(
-    "AC-004 wait --fn with NO flag and NO policy is DENIED and the eval capability is NEVER invoked",
-    () =>
-      Effect.gen(function* () {
-        const calls = yield* Ref.make(0)
-        const cmd = waitCommand({ fn: "globalThis.ready === true" }, {
-          hasRuntimeAdapter: true
-        })
-        const result = yield* run(cmd, {}, makeCaps(calls))
-        const payload = result.payload as {
-          code?: string
-          denied?: boolean
-          available?: boolean
-        }
-        expect(payload.code).toBe("policy-denied")
-        expect(payload.denied).toBe(true)
-        expect(result.exitCode).toBe(EXIT_SUCCESS)
-        expect(result.sideEffect).toBe("runtime-eval")
-        // THE behavioural assertion: zero eval invocations on denial.
-        expect(yield* Ref.get(calls)).toBe(0)
-      })
+  it.effect("AC-004 wait --fn with NO flag and NO policy is DENIED and the eval capability is NEVER invoked", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      const cmd = waitCommand(
+        { fn: "globalThis.ready === true" },
+        {
+          hasRuntimeAdapter: true,
+        },
+      )
+      const result = yield* run(cmd, {}, makeCaps(calls))
+      const payload = result.payload as {
+        code?: string
+        denied?: boolean
+        available?: boolean
+      }
+      expect(payload.code).toBe("policy-denied")
+      expect(payload.denied).toBe(true)
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      expect(result.sideEffect).toBe("runtime-eval")
+      // THE behavioural assertion: zero eval invocations on denial.
+      expect(yield* Ref.get(calls)).toBe(0)
+    }),
   )
 
   it.effect("AC-004 wait --fn WITH --allow-runtime-eval runs and INVOKES eval once", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
-      const cmd = waitCommand({ fn: "globalThis.ready === true" }, {
-        hasRuntimeAdapter: true
-      })
+      const cmd = waitCommand(
+        { fn: "globalThis.ready === true" },
+        {
+          hasRuntimeAdapter: true,
+        },
+      )
       const result = yield* run(cmd, { allowRuntimeEval: true }, makeCaps(calls))
       const payload = result.payload as { action?: string; matched?: boolean }
       expect(payload.action).toBe("wait.fn")
       expect(payload.matched).toBe(true)
       expect(yield* Ref.get(calls)).toBe(1)
-    })
+    }),
   )
 
   it.effect("AC-004 wait --fn allowed by an explicit `wait.fn` policy entry runs and INVOKES eval", () =>
@@ -160,7 +159,7 @@ describe("AC-004 wait.fn runtime-eval gate", () => {
       const payload = result.payload as { action?: string }
       expect(payload.action).toBe("wait.fn")
       expect(yield* Ref.get(calls)).toBe(1)
-    })
+    }),
   )
 
   it.effect(
@@ -177,12 +176,10 @@ describe("AC-004 wait.fn runtime-eval gate", () => {
         }
         expect(payload.matched).toBe(false)
         expect(payload.available).toBe(false)
-        expect(payload.reason).toBe(
-          "Runtime wait predicates require a runtime adapter."
-        )
+        expect(payload.reason).toBe("Runtime wait predicates require a runtime adapter.")
         // No adapter ⇒ nothing to evaluate ⇒ eval capability untouched.
         expect(yield* Ref.get(calls)).toBe(0)
-      })
+      }),
   )
 })
 
@@ -205,16 +202,13 @@ describe("AC-035 wait read paths (ms + predicate cadence)", () => {
       expect(payload.mode).toBe("ms")
       expect(payload.matched).toBe(true)
       expect(payload.waitedMs).toBe(1_500)
-    })
+    }),
   )
 
   it.effect("AC-035 a predicate that is already true matches WITHOUT sleeping", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
-      const cmd = waitCommand(
-        { text: "Welcome" },
-        { predicate: () => Effect.succeed(true) }
-      )
+      const cmd = waitCommand({ text: "Welcome" }, { predicate: () => Effect.succeed(true) })
       const result = yield* run(cmd, {}, makeCaps(calls))
       const payload = result.payload as {
         mode?: string
@@ -226,7 +220,7 @@ describe("AC-035 wait read paths (ms + predicate cadence)", () => {
       expect(payload.matched).toBe(true)
       expect(payload.timeoutMs).toBe(5_000)
       expect(payload.intervalMs).toBe(250)
-    })
+    }),
   )
 
   it.effect("AC-035 a predicate that flips true after a few ticks matches via the cadence loop", () =>
@@ -234,8 +228,7 @@ describe("AC-035 wait read paths (ms + predicate cadence)", () => {
       const calls = yield* Ref.make(0)
       const ticks = yield* Ref.make(0)
       // False for the first 3 samples, true thereafter.
-      const predicate = () =>
-        Ref.updateAndGet(ticks, (n) => n + 1).pipe(Effect.map((n) => n > 3))
+      const predicate = () => Ref.updateAndGet(ticks, (n) => n + 1).pipe(Effect.map((n) => n > 3))
       const cmd = waitCommand({ timeoutMs: 5_000 }, { predicate })
       const fiber = yield* Effect.fork(run(cmd, {}, makeCaps(calls)))
       // interval = 250ms; advance enough for >3 samples to occur.
@@ -244,16 +237,13 @@ describe("AC-035 wait read paths (ms + predicate cadence)", () => {
       const payload = result.payload as { matched?: boolean; intervalMs?: number }
       expect(payload.matched).toBe(true)
       expect(payload.intervalMs).toBe(250)
-    })
+    }),
   )
 
   it.effect("AC-035 a never-true predicate times out (matched:false) at the deadline", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
-      const cmd = waitCommand(
-        { timeoutMs: 1_000 },
-        { predicate: () => Effect.succeed(false) }
-      )
+      const cmd = waitCommand({ timeoutMs: 1_000 }, { predicate: () => Effect.succeed(false) })
       const fiber = yield* Effect.fork(run(cmd, {}, makeCaps(calls)))
       // interval = floor(1000/10)=100ms; advance past the full timeout.
       yield* TestClock.adjust("1000 millis")
@@ -266,6 +256,6 @@ describe("AC-035 wait read paths (ms + predicate cadence)", () => {
       expect(payload.matched).toBe(false)
       expect(payload.timeoutMs).toBe(1_000)
       expect(payload.intervalMs).toBe(100)
-    })
+    }),
   )
 })

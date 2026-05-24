@@ -1,19 +1,14 @@
 import { describe, expect, it } from "@effect/vitest"
+import { coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "@expo98/app"
 import {
   DeviceCapability,
   EXIT_RUNTIME_FAILURE,
   EXIT_SUCCESS,
   RuntimeEvalCapability,
-  SourceWriteCapability
+  SourceWriteCapability,
 } from "@expo98/core"
 import { makeMemoryFs, MemoryFsLayer } from "@expo98/domain"
 import { Effect, Layer, Option } from "effect"
-import {
-  coreReadCommands,
-  registerCommands,
-  resolvePolicy,
-  runRegistered
-} from "@expo98/app"
 
 /**
  * The proof READ commands run end-to-end THROUGH core's dispatch — the gate +
@@ -24,21 +19,15 @@ import {
 // Concrete capability services (the dispatcher injects them only on gate-pass;
 // the read commands never reach them, but the env must satisfy CapabilityEnv).
 const TestCaps = Layer.mergeAll(
-  Layer.succeed(
-    DeviceCapability,
-    DeviceCapability.of({ invoke: () => Effect.succeed("device-ok") })
-  ),
-  Layer.succeed(
-    RuntimeEvalCapability,
-    RuntimeEvalCapability.of({ evaluate: () => Effect.succeed("eval-ok") })
-  ),
+  Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("device-ok") })),
+  Layer.succeed(RuntimeEvalCapability, RuntimeEvalCapability.of({ evaluate: () => Effect.succeed("eval-ok") })),
   Layer.succeed(
     SourceWriteCapability,
     SourceWriteCapability.of({
       writeFile: () => Effect.void,
-      deleteFile: () => Effect.void
-    })
-  )
+      deleteFile: () => Effect.void,
+    }),
+  ),
 )
 
 const registry = registerCommands([...coreReadCommands])
@@ -58,7 +47,7 @@ const globals = {
   contentBoundaries: false,
   debug: false,
   noColor: false,
-  noInput: false
+  noInput: false,
 }
 
 describe("Read commands through dispatch", () => {
@@ -73,7 +62,7 @@ describe("Read commands through dispatch", () => {
       const payload = result.payload as { available: boolean; version: string }
       expect(payload.available).toBe(true)
       expect(payload.version).toBe("0.0.0")
-    }).pipe(Effect.provide(Layer.merge(TestCaps, MemoryFsLayer)))
+    }).pipe(Effect.provide(Layer.merge(TestCaps, MemoryFsLayer))),
   )
 
   it.effect("doctor → exit 0, capability summary (read, always allowed)", () =>
@@ -88,7 +77,7 @@ describe("Read commands through dispatch", () => {
       }
       expect(payload.available).toBe(true)
       expect(payload.capabilities.xcrun).toBe("unknown")
-    }).pipe(Effect.provide(TestCaps))
+    }).pipe(Effect.provide(TestCaps)),
   )
 
   it.effect("policy show → reflects the gate decision for an action", () =>
@@ -99,7 +88,7 @@ describe("Read commands through dispatch", () => {
       const denied = yield* runRegistered(reg, {
         positionals: ["launch-app"],
         policy: {},
-        fs
+        fs,
       })
       const dp = denied.payload as { denied: boolean; decision: string }
       expect(dp.denied).toBe(true)
@@ -108,26 +97,23 @@ describe("Read commands through dispatch", () => {
       const allowed = yield* runRegistered(reg, {
         positionals: ["launch-app"],
         policy: { allow: ["launch-app"] },
-        fs
+        fs,
       })
       const ap = allowed.payload as { denied: boolean; decision: string }
       expect(ap.denied).toBe(false)
       expect(ap.decision).toBe("allow")
-    }).pipe(Effect.provide(TestCaps))
+    }).pipe(Effect.provide(TestCaps)),
   )
 
   it.effect("redact <file> → reads + redacts file contents (AC-003/012)", () =>
     Effect.gen(function* () {
       const fs = yield* makeMemoryFs()
-      yield* fs.writeFile(
-        "/secrets.json",
-        JSON.stringify({ authorization: "Bearer abc", visible: 1 })
-      )
+      yield* fs.writeFile("/secrets.json", JSON.stringify({ authorization: "Bearer abc", visible: 1 }))
       const reg = registry.get("redact")!
       const result = yield* runRegistered(reg, {
         positionals: ["/secrets.json"],
         policy: {},
-        fs
+        fs,
       })
       expect(result.exitCode).toBe(EXIT_SUCCESS)
       const payload = result.payload as {
@@ -135,7 +121,7 @@ describe("Read commands through dispatch", () => {
       }
       expect(payload.redacted.authorization).toBe("[redacted]")
       expect(payload.redacted.visible).toBe(1)
-    }).pipe(Effect.provide(TestCaps))
+    }).pipe(Effect.provide(TestCaps)),
   )
 
   it.effect("redact with a missing file → exit 1, { ok:false, error }", () =>
@@ -145,14 +131,14 @@ describe("Read commands through dispatch", () => {
       const result = yield* runRegistered(reg, {
         positionals: ["/does-not-exist.json"],
         policy: {},
-        fs
+        fs,
       })
       // A handler runtime failure ⇒ exit 1 and the failure envelope.
       expect(result.exitCode).toBe(EXIT_RUNTIME_FAILURE)
       const payload = result.payload as { ok: boolean; error: string }
       expect(payload.ok).toBe(false)
       expect(payload.error).toContain("Cannot read")
-    }).pipe(Effect.provide(TestCaps))
+    }).pipe(Effect.provide(TestCaps)),
   )
 
   it.effect("redact with no <file> argument → exit 1 usage-ish runtime error", () =>
@@ -163,20 +149,16 @@ describe("Read commands through dispatch", () => {
       expect(result.exitCode).toBe(EXIT_RUNTIME_FAILURE)
       const payload = result.payload as { ok: boolean; error: string }
       expect(payload.error).toContain("requires a <file>")
-    }).pipe(Effect.provide(TestCaps))
+    }).pipe(Effect.provide(TestCaps)),
   )
 })
 
 describe("registry — composition wiring", () => {
   it("registers the five core read commands at stable paths", () => {
-    expect([...registry.paths].sort()).toEqual(
-      ["doctor", "policy show", "redact", "skills list", "version"].sort()
-    )
+    expect([...registry.paths].sort()).toEqual(["doctor", "policy show", "redact", "skills list", "version"].sort())
   })
 
   it("rejects duplicate command paths (fail fast)", () => {
-    expect(() => registerCommands([...coreReadCommands, ...coreReadCommands])).toThrow(
-      /Duplicate command path/
-    )
+    expect(() => registerCommands([...coreReadCommands, ...coreReadCommands])).toThrow(/Duplicate command path/)
   })
 })

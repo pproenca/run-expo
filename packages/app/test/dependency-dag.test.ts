@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 /**
  * CI dependency-DAG guard (architecture finding M4).
  *
@@ -15,8 +17,6 @@
  * `devDependencies` / `peerDependencies` (the `@expo98/*` edges only).
  */
 import { describe, expect, it } from "@effect/vitest"
-import { readFileSync, readdirSync } from "node:fs"
-import { fileURLToPath } from "node:url"
 
 const PACKAGES_DIR = fileURLToPath(new URL("../../", import.meta.url))
 
@@ -56,7 +56,7 @@ const expoDepsOf = (manifest: PackageManifest): ReadonlySet<string> => {
   const all = {
     ...manifest.dependencies,
     ...manifest.devDependencies,
-    ...manifest.peerDependencies
+    ...manifest.peerDependencies,
   }
   return new Set(Object.keys(all).filter((dep) => dep.startsWith(SCOPE)))
 }
@@ -106,7 +106,7 @@ describe("M4 — dependency DAG guard", () => {
       for (const dep of deps) {
         expect(
           FOUNDATION.has(dep),
-          `${short(name)} must NOT depend on ${short(dep)} — handlers may only depend on core/domain/protocols`
+          `${short(name)} must NOT depend on ${short(dep)} — handlers may only depend on core/domain/protocols`,
         ).toBe(true)
       }
     }
@@ -156,10 +156,7 @@ describe("M4 — dependency DAG guard", () => {
       }
     }
     // If anything remains, those nodes are in a cycle.
-    expect(
-      [...remaining.keys()].map(short),
-      "remaining nodes indicate a dependency cycle"
-    ).toEqual([])
+    expect([...remaining.keys()].map(short), "remaining nodes indicate a dependency cycle").toEqual([])
     expect(order.length).toBe(graph.size)
     expect(indegree.get(CORE)).toBeGreaterThanOrEqual(1) // core is depended upon
   })

@@ -49,14 +49,11 @@ export interface SubprocessService {
   readonly run: (
     tool: string,
     args: ReadonlyArray<string>,
-    options?: RunOptions
+    options?: RunOptions,
   ) => Effect.Effect<RunResult, ToolNotFound | SubprocessTimeout | SubprocessFailed>
 }
 
-export class Subprocess extends Context.Tag("@expo98/core/Subprocess")<
-  Subprocess,
-  SubprocessService
->() {}
+export class Subprocess extends Context.Tag("@expo98/core/Subprocess")<Subprocess, SubprocessService>() {}
 
 /** A scripted response for the test fake, keyed by `"<tool> <args...>"`. */
 export type FakeResponse =
@@ -65,26 +62,18 @@ export type FakeResponse =
   | { readonly _tag: "timeout"; readonly timeoutMs: number }
   | { readonly _tag: "failed"; readonly exitCode: number; readonly stderr: string }
 
-export const fakeKey = (
-  tool: string,
-  args: ReadonlyArray<string>
-): string => [tool, ...args].join(" ")
+export const fakeKey = (tool: string, args: ReadonlyArray<string>): string => [tool, ...args].join(" ")
 
 /**
  * Deterministic in-memory fake of S1 for tests. Unmatched invocations fail
  * closed with `ToolNotFound` rather than succeeding silently.
  */
-export const SubprocessFake = (
-  responses: ReadonlyMap<string, FakeResponse>
-): Layer.Layer<Subprocess> =>
+export const SubprocessFake = (responses: ReadonlyMap<string, FakeResponse>): Layer.Layer<Subprocess> =>
   Layer.succeed(
     Subprocess,
     Subprocess.of({
       run: (tool, args) =>
-        Effect.suspend((): Effect.Effect<
-          RunResult,
-          ToolNotFound | SubprocessTimeout | SubprocessFailed
-        > => {
+        Effect.suspend((): Effect.Effect<RunResult, ToolNotFound | SubprocessTimeout | SubprocessFailed> => {
           const response = responses.get(fakeKey(tool, args))
           if (response === undefined) {
             return Effect.fail(new ToolNotFound({ tool }))
@@ -96,23 +85,21 @@ export const SubprocessFake = (
                 args,
                 stdout: response.stdout,
                 stderr: response.stderr ?? "",
-                exitCode: 0
+                exitCode: 0,
               })
             case "notFound":
               return Effect.fail(new ToolNotFound({ tool }))
             case "timeout":
-              return Effect.fail(
-                new SubprocessTimeout({ tool, timeoutMs: response.timeoutMs })
-              )
+              return Effect.fail(new SubprocessTimeout({ tool, timeoutMs: response.timeoutMs }))
             case "failed":
               return Effect.fail(
                 new SubprocessFailed({
                   tool,
                   exitCode: response.exitCode,
-                  stderr: response.stderr
-                })
+                  stderr: response.stderr,
+                }),
               )
           }
-        })
-    })
+        }),
+    }),
   )

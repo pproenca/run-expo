@@ -10,7 +10,7 @@ import {
   evaluateCrash,
   isCrashReportPath,
   MAX_CRASH_GRACE_MS,
-  resolveCrashGraceMs
+  resolveCrashGraceMs,
 } from "@expo98/handlers-interaction"
 
 describe("AC-056 crash grace window default + clamp", () => {
@@ -44,7 +44,7 @@ describe("AC-029 crash report matching + evaluation", () => {
       processName: "com.example.app",
       startedAt: 1_000,
       waitedMs: 1_000,
-      candidates: []
+      candidates: [],
     })
     expect(e.available).toBe(true)
     expect(e.reason).toBeNull()
@@ -55,7 +55,7 @@ describe("AC-029 crash report matching + evaluation", () => {
       processName: "com.example.app",
       since: 1_000,
       waitedMs: 1_000,
-      reportCount: 0
+      reportCount: 0,
     })
   })
 
@@ -66,12 +66,10 @@ describe("AC-029 crash report matching + evaluation", () => {
       processName: "com.example.app",
       startedAt: 1_000,
       waitedMs: 1_000,
-      candidates: [{ path: "/x/App.ips", mtimeMs: 2_000 }]
+      candidates: [{ path: "/x/App.ips", mtimeMs: 2_000 }],
     })
     expect(e.available).toBe(false)
-    expect(e.reason).toBe(
-      "The app generated 1 matching iOS crash report(s) after launch-app."
-    )
+    expect(e.reason).toBe("The app generated 1 matching iOS crash report(s) after launch-app.")
     expect(e.crashCheck.reportCount).toBe(1)
     expect(e.crashReports).toEqual([{ path: "/x/App.ips", mtimeMs: 2_000 }])
   })
@@ -85,8 +83,8 @@ describe("AC-029 crash report matching + evaluation", () => {
       waitedMs: 1_000,
       candidates: [
         { path: "/x/old.crash", mtimeMs: 4_999 },
-        { path: "/x/exact.crash", mtimeMs: 5_000 }
-      ]
+        { path: "/x/exact.crash", mtimeMs: 5_000 },
+      ],
     })
     expect(e.available).toBe(true)
     expect(e.crashCheck.reportCount).toBe(0)
@@ -99,7 +97,7 @@ describe("AC-029 crash report matching + evaluation", () => {
       processName: "b",
       startedAt: 1_000,
       waitedMs: 1_000,
-      candidates: [{ path: "/x/App.log", mtimeMs: 9_999 }]
+      candidates: [{ path: "/x/App.log", mtimeMs: 9_999 }],
     })
     expect(e.available).toBe(true)
     expect(e.crashCheck.reportCount).toBe(0)
@@ -114,8 +112,8 @@ describe("AC-029 crash report matching + evaluation", () => {
       waitedMs: 1_000,
       candidates: [
         { path: "/x/a.ips", mtimeMs: 1_500 },
-        { path: "/x/b.crash", mtimeMs: 2_000 }
-      ]
+        { path: "/x/b.crash", mtimeMs: 2_000 },
+      ],
     })
     expect(e.available).toBe(false)
     expect(e.crashCheck.reportCount).toBe(2)

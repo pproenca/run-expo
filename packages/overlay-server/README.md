@@ -13,8 +13,8 @@ rebuild of `expo98`. It captures and serves review events. **Ingest-only.**
   2. a **strict loopback-only `Origin`** check,
   3. a **hard body-size cap** (`413` when exceeded),
   4. **`comments[]` schema validation** via Effect `Schema` (`422` when malformed).
-  Bind is `127.0.0.1` only; the default port search starts at `17655` and
-  increments on `EADDRINUSE`.
+     Bind is `127.0.0.1` only; the default port search starts at `17655` and
+     increments on `EADDRINUSE`.
 - **Events-file lifecycle (AC-032).** `prepare` (create, or `reset`) → fresh
   `{ version:1, title, createdAt, events:[] }`; a valid POST appends to
   `events[]`, sets `updatedAt`, rewrites; `read` with no file → unavailable with
@@ -44,24 +44,24 @@ via `@expo98/domain`'s `Fs` port — in-memory in tests, platform-node in the ap
 
 ## AC → test map
 
-| AC | What | Test file | Status |
-|---|---|---|---|
-| AC-014 | path allowlist, Origin check, token compare (PURE) | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | POST rejected: missing/wrong token → 401 | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | POST rejected: cross/missing Origin → 403 | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | POST rejected: oversized body → 413 | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | POST rejected: malformed `comments[]` → 422 | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | disallowed path → 404 | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | valid POST → appended (200) + GET `/events.json` | `test/ac-014-handler.test.ts` | pass |
-| AC-014 | live loopback bind + EADDRINUSE port-search round-trip | `test/ac-014-handler.test.ts` | **skip** |
-| AC-032 | prepare creates/resets; no-reset leaves untouched | `test/ac-032-events-lifecycle.test.ts` | pass |
-| AC-032 | append pushes + sets `updatedAt` | `test/ac-032-events-lifecycle.test.ts` | pass |
-| AC-032 | read-with-no-file → unavailable (exact reason) | `test/ac-032-events-lifecycle.test.ts` | pass |
-| AC-032 | clear removes the file (idempotent) | `test/ac-032-events-lifecycle.test.ts` | pass |
-| AC-032 | fs-backed round-trip over the `Fs` port; corrupt-file decode | `test/ac-032-events-lifecycle.test.ts` | pass |
-| AC-032 | action enum has no `scaffold` | `test/ac-032-events-lifecycle.test.ts` | pass |
-| AC-033 | running → stale → stopped (+ all edges) | `test/ac-033-sidecar.test.ts` | pass |
-| AC-033 | `refreshSidecar` drives the edge from a scripted probe | `test/ac-033-sidecar.test.ts` | pass |
+| AC     | What                                                         | Test file                              | Status   |
+| ------ | ------------------------------------------------------------ | -------------------------------------- | -------- |
+| AC-014 | path allowlist, Origin check, token compare (PURE)           | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | POST rejected: missing/wrong token → 401                     | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | POST rejected: cross/missing Origin → 403                    | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | POST rejected: oversized body → 413                          | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | POST rejected: malformed `comments[]` → 422                  | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | disallowed path → 404                                        | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | valid POST → appended (200) + GET `/events.json`             | `test/ac-014-handler.test.ts`          | pass     |
+| AC-014 | live loopback bind + EADDRINUSE port-search round-trip       | `test/ac-014-handler.test.ts`          | **skip** |
+| AC-032 | prepare creates/resets; no-reset leaves untouched            | `test/ac-032-events-lifecycle.test.ts` | pass     |
+| AC-032 | append pushes + sets `updatedAt`                             | `test/ac-032-events-lifecycle.test.ts` | pass     |
+| AC-032 | read-with-no-file → unavailable (exact reason)               | `test/ac-032-events-lifecycle.test.ts` | pass     |
+| AC-032 | clear removes the file (idempotent)                          | `test/ac-032-events-lifecycle.test.ts` | pass     |
+| AC-032 | fs-backed round-trip over the `Fs` port; corrupt-file decode | `test/ac-032-events-lifecycle.test.ts` | pass     |
+| AC-032 | action enum has no `scaffold`                                | `test/ac-032-events-lifecycle.test.ts` | pass     |
+| AC-033 | running → stale → stopped (+ all edges)                      | `test/ac-033-sidecar.test.ts`          | pass     |
+| AC-033 | `refreshSidecar` drives the edge from a scripted probe       | `test/ac-033-sidecar.test.ts`          | pass     |
 
 ### Skipped (live, AC-tagged)
 

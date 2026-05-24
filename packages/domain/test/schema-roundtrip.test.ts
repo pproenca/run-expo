@@ -7,7 +7,7 @@ import {
   RunRecord,
   SessionRecord,
   SnapshotResult,
-  TargetRecord
+  TargetRecord,
 } from "../src/entities.js"
 import type { RefId, RunId, SessionId, SnapshotId, TargetId } from "../src/ids.js"
 import { readSessionLenient } from "../src/migration.js"
@@ -35,8 +35,8 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       closedAt: "2026-05-24T01:00:00.000Z",
       activeTargetId: null,
       lastSnapshotId: null,
-      sidecars: [{ name: "overlay", pid: 123, port: 17655, status: "running" }]
-    })
+      sidecars: [{ name: "overlay", pid: 123, port: 17655, status: "running" }],
+    }),
   )
 
   it.effect("TargetRecord", () =>
@@ -51,11 +51,11 @@ describe("Schema round-trip (encode -> decode === original)", () => {
         targetId: "page-1",
         title: "T",
         appId: "app",
-        debuggerUrl: "ws://127.0.0.1:8081/x"
+        debuggerUrl: "ws://127.0.0.1:8081/x",
       },
       selected: true,
-      stale: false
-    })
+      stale: false,
+    }),
   )
 
   it.effect("SnapshotResult (with semanticBridge)", () =>
@@ -67,7 +67,7 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       semanticBridge: {
         routeHint: "/home",
         refs: [{ ref: "@e1", role: "button", actions: ["tap"] }],
-        limitations: ["partial"]
+        limitations: ["partial"],
       },
       generatedAt: "2026-05-24T01:00:00.000Z",
       filters: {
@@ -75,7 +75,7 @@ describe("Schema round-trip (encode -> decode === original)", () => {
         compact: false,
         depth: 10,
         includeSource: true,
-        includeBounds: true
+        includeBounds: true,
       },
       refs: [
         {
@@ -92,8 +92,8 @@ describe("Schema round-trip (encode -> decode === original)", () => {
           component: null,
           box: { x: 1, y: 2, width: 3, height: 4 },
           actions: ["tap"],
-          disabled: false
-        }
+          disabled: false,
+        },
       ],
       tree: [
         {
@@ -104,12 +104,12 @@ describe("Schema round-trip (encode -> decode === original)", () => {
           testID: null,
           source: "axe",
           box: { x: 1, y: 2, width: 3, height: 4 },
-          actions: ["tap"]
-        }
+          actions: ["tap"],
+        },
       ],
       artifacts: { json: "/x.json", screenshot: null, annotatedScreenshot: null },
-      limitations: []
-    })
+      limitations: [],
+    }),
   )
 
   it.effect("RefCache", () =>
@@ -117,8 +117,8 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       snapshotId: SID,
       targetId: TID,
       source: ["axe"],
-      refs: []
-    })
+      refs: [],
+    }),
   )
 
   it.effect("RunRecord (finished)", () =>
@@ -135,8 +135,8 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       status: "completed",
       exitCode: 0,
       summary: { keys: ["available", "refs"], available: true, routeCount: 2 },
-      error: null
-    })
+      error: null,
+    }),
   )
 
   it.effect("BridgeMetadata", () =>
@@ -145,8 +145,8 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       bridgeVersion: "1.0.0",
       developmentOnly: true,
       generatedBy: "expo98",
-      domains: ["navigation", "network", "snapshot"]
-    })
+      domains: ["navigation", "network", "snapshot"],
+    }),
   )
 
   it.effect("OverlayEventsFile", () =>
@@ -155,10 +155,8 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       title: "Review",
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:01:00.000Z",
-      events: [
-        { id: "evt-1", createdAt: "2026-05-24T00:00:30.000Z", kind: "comment", payload: { note: "hi" } }
-      ]
-    })
+      events: [{ id: "evt-1", createdAt: "2026-05-24T00:00:30.000Z", kind: "comment", payload: { note: "hi" } }],
+    }),
   )
 })
 
@@ -179,8 +177,8 @@ describe("migration shim normalises a legacy-loose SessionRecord", () => {
         sidecars: [
           { name: "srv", pid: 1, port: 99, status: "running" },
           { name: "bad", status: "weird-status" }, // coerced to unknown
-          "not-an-object" // dropped
-        ]
+          "not-an-object", // dropped
+        ],
       }
 
       const normalised = yield* readSessionLenient(legacy, "/old/session.json")
@@ -198,12 +196,12 @@ describe("migration shim normalises a legacy-loose SessionRecord", () => {
         name: "srv",
         pid: 1,
         port: 99,
-        status: "running"
+        status: "running",
       })
       expect(normalised.sidecars[1]?.status).toBe("unknown") // coerced
 
       // The normalised value validates against the STRICT schema.
       yield* Schema.decode(SessionRecord)(yield* Schema.encode(SessionRecord)(normalised))
-    })
+    }),
   )
 })

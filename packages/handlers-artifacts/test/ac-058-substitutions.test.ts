@@ -12,13 +12,7 @@
  * ungated) and directly against the pure resolver/builder.
  */
 import { describe, expect, it } from "@effect/vitest"
-import {
-  DeviceCapability,
-  dispatch,
-  EXIT_SUCCESS,
-  RuntimeEvalCapability,
-  SourceWriteCapability
-} from "@expo98/core"
+import { DeviceCapability, dispatch, EXIT_SUCCESS, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import {
   applySubstitutions,
   BACKLOG_TEMPLATE,
@@ -28,26 +22,20 @@ import {
   MissingBacklogInput,
   resolveMetroPort,
   resolveSubstitution,
-  resolveSubstitutions
+  resolveSubstitutions,
 } from "@expo98/handlers-artifacts"
 import { Effect, Layer } from "effect"
 
 const Caps = Layer.mergeAll(
-  Layer.succeed(
-    RuntimeEvalCapability,
-    RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })
-  ),
-  Layer.succeed(
-    DeviceCapability,
-    DeviceCapability.of({ invoke: () => Effect.succeed("ok") })
-  ),
+  Layer.succeed(RuntimeEvalCapability, RuntimeEvalCapability.of({ evaluate: () => Effect.succeed(null) })),
+  Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("ok") })),
   Layer.succeed(
     SourceWriteCapability,
     SourceWriteCapability.of({
       writeFile: () => Effect.void,
-      deleteFile: () => Effect.void
-    })
-  )
+      deleteFile: () => Effect.void,
+    }),
+  ),
 )
 
 const FORBIDDEN_FIXTURES = ["com.maddie.console", "exp+maddie://", "exp+maddie", "booted"]
@@ -56,7 +44,7 @@ const COMPLETE_INPUTS: BacklogInputs = {
   metroPort: 8081,
   bundleId: "com.example.myapp",
   device: "iPhone 16 Pro",
-  devClientUrl: "exp+myapp://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+  devClientUrl: "exp+myapp://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081",
 }
 
 describe("AC-058 live-backlog substitutions are project inputs, not fixtures", () => {
@@ -80,12 +68,12 @@ describe("AC-058 live-backlog substitutions are project inputs, not fixtures", (
     expect(bundle).toEqual({
       _tag: "resolved",
       placeholder: "__BUNDLE_ID__",
-      value: "com.example.myapp"
+      value: "com.example.myapp",
     })
     expect(device).toEqual({
       _tag: "resolved",
       placeholder: "__DEVICE__",
-      value: "iPhone 16 Pro"
+      value: "iPhone 16 Pro",
     })
     expect(url._tag).toBe("resolved")
     if (url._tag === "resolved") {
@@ -131,7 +119,7 @@ describe("AC-058 live-backlog substitutions are project inputs, not fixtures", (
         "--device",
         "iPhone 16 Pro",
         "--crash-check-ms",
-        "1000"
+        "1000",
       ])
       const metro = result.rows.find((r) => r.id === "metro-status")
       expect(metro?.argv).toContain("8081")
@@ -160,56 +148,40 @@ describe("AC-058 live-backlog substitutions are project inputs, not fixtures", (
         __METRO_PORT__: "8081",
         __BUNDLE_ID__: "com.example.myapp",
         __DEVICE__: "iPhone 16 Pro",
-        __DEV_CLIENT_URL__: "exp+myapp://x"
-      }
+        __DEV_CLIENT_URL__: "exp+myapp://x",
+      },
     }
-    expect(applySubstitutions("port=__METRO_PORT__/__METRO_PORT__", map)).toBe(
-      "port=8081/8081"
-    )
+    expect(applySubstitutions("port=__METRO_PORT__/__METRO_PORT__", map)).toBe("port=8081/8081")
     expect(applySubstitutions("literal", map)).toBe("literal")
   })
 
-  it.effect(
-    "AC-058 live-backlog matrix command (read, ungated) substitutes provided inputs",
-    () =>
-      Effect.gen(function* () {
-        const result = yield* dispatch(
-          liveBacklogMatrixCommand(COMPLETE_INPUTS),
-          {}
-        ).pipe(Effect.provide(Caps))
-        expect(result.exitCode).toBe(EXIT_SUCCESS)
-        expect(result.sideEffect).toBe("read")
-        const payload = result.payload as {
-          available: boolean
-          rows: ReadonlyArray<{ argv: ReadonlyArray<string> }>
-        }
-        expect(payload.available).toBe(true)
-        const flat = JSON.stringify(payload)
-        for (const fixture of FORBIDDEN_FIXTURES) {
-          expect(flat).not.toContain(fixture)
-        }
-      })
+  it.effect("AC-058 live-backlog matrix command (read, ungated) substitutes provided inputs", () =>
+    Effect.gen(function* () {
+      const result = yield* dispatch(liveBacklogMatrixCommand(COMPLETE_INPUTS), {}).pipe(Effect.provide(Caps))
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      expect(result.sideEffect).toBe("read")
+      const payload = result.payload as {
+        available: boolean
+        rows: ReadonlyArray<{ argv: ReadonlyArray<string> }>
+      }
+      expect(payload.available).toBe(true)
+      const flat = JSON.stringify(payload)
+      for (const fixture of FORBIDDEN_FIXTURES) {
+        expect(flat).not.toContain(fixture)
+      }
+    }),
   )
 
-  it.effect(
-    "AC-058 live-backlog matrix command with missing inputs is available:false (no fixtures)",
-    () =>
-      Effect.gen(function* () {
-        const result = yield* dispatch(
-          liveBacklogMatrixCommand({ metroPort: 8081 }),
-          {}
-        ).pipe(Effect.provide(Caps))
-        const payload = result.payload as {
-          available: boolean
-          missing: ReadonlyArray<string>
-        }
-        expect(payload.available).toBe(false)
-        expect([...payload.missing].sort()).toEqual([
-          "bundleId",
-          "devClientUrl",
-          "device"
-        ])
-      })
+  it.effect("AC-058 live-backlog matrix command with missing inputs is available:false (no fixtures)", () =>
+    Effect.gen(function* () {
+      const result = yield* dispatch(liveBacklogMatrixCommand({ metroPort: 8081 }), {}).pipe(Effect.provide(Caps))
+      const payload = result.payload as {
+        available: boolean
+        missing: ReadonlyArray<string>
+      }
+      expect(payload.available).toBe(false)
+      expect([...payload.missing].sort()).toEqual(["bundleId", "devClientUrl", "device"])
+    }),
   )
 
   it("AC-058 NO baked developer fixtures appear in the source-derived template", () => {

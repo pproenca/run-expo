@@ -1,8 +1,4 @@
-import {
-  Fs,
-  type OverlayEvent,
-  OverlayEventsFile
-} from "@expo98/domain"
+import { Fs, type OverlayEvent, OverlayEventsFile } from "@expo98/domain"
 import { Context, Effect, Layer, Schema } from "effect"
 import { CorruptEventsFile, EventsStoreFailure, type EventsStoreError } from "./errors.js"
 
@@ -56,7 +52,7 @@ export interface EventsStore {
    */
   readonly append: (
     event: OverlayEvent,
-    now: string
+    now: string,
   ) => Effect.Effect<{ readonly eventCount: number; readonly file: OverlayEventsFile }, EventsStoreError>
   /** Read the events file or report unavailable (AC-032). */
   readonly read: Effect.Effect<EventsReadResult, EventsStoreError>
@@ -64,10 +60,7 @@ export interface EventsStore {
   readonly clear: Effect.Effect<void, EventsStoreError>
 }
 
-export class EventsStoreTag extends Context.Tag("@expo98/overlay-server/EventsStore")<
-  EventsStoreTag,
-  EventsStore
->() {}
+export class EventsStoreTag extends Context.Tag("@expo98/overlay-server/EventsStore")<EventsStoreTag, EventsStore>() {}
 
 // ---------------------------------------------------------------------------
 // Encode / decode helpers — strict schema in, strict schema out.
@@ -76,30 +69,26 @@ export class EventsStoreTag extends Context.Tag("@expo98/overlay-server/EventsSt
 const decodeFile = (raw: string): Effect.Effect<OverlayEventsFile, EventsStoreError> =>
   Effect.try({
     try: () => JSON.parse(raw) as unknown,
-    catch: () => new CorruptEventsFile({ reason: "events.json is not valid JSON." })
+    catch: () => new CorruptEventsFile({ reason: "events.json is not valid JSON." }),
   }).pipe(
     Effect.flatMap((parsed) =>
       Schema.decodeUnknown(OverlayEventsFile)(parsed).pipe(
-        Effect.mapError(
-          (e) => new CorruptEventsFile({ reason: `events.json failed schema decode: ${e.message}` })
-        )
-      )
-    )
+        Effect.mapError((e) => new CorruptEventsFile({ reason: `events.json failed schema decode: ${e.message}` })),
+      ),
+    ),
   )
 
 const encodeFile = (file: OverlayEventsFile): Effect.Effect<string, EventsStoreError> =>
   Schema.encode(OverlayEventsFile)(file).pipe(
-    Effect.mapError(
-      (e) => new CorruptEventsFile({ reason: `events file failed schema encode: ${e.message}` })
-    ),
-    Effect.map((encoded) => JSON.stringify(encoded, null, 2))
+    Effect.mapError((e) => new CorruptEventsFile({ reason: `events file failed schema encode: ${e.message}` })),
+    Effect.map((encoded) => JSON.stringify(encoded, null, 2)),
   )
 
 const freshFile = (title: string, now: string): OverlayEventsFile => ({
   version: 1,
   title,
   createdAt: now,
-  events: []
+  events: [],
 })
 
 // ---------------------------------------------------------------------------
@@ -142,7 +131,7 @@ export const makeEventsStore = (backend: RawEventsBackend): EventsStore => {
 
   const append = (
     event: OverlayEvent,
-    now: string
+    now: string,
   ): Effect.Effect<{ readonly eventCount: number; readonly file: OverlayEventsFile }, EventsStoreError> =>
     Effect.gen(function* () {
       const present = yield* backend.exists
@@ -153,7 +142,7 @@ export const makeEventsStore = (backend: RawEventsBackend): EventsStore => {
       const next: OverlayEventsFile = {
         ...base,
         updatedAt: now,
-        events: [...base.events, event]
+        events: [...base.events, event],
       }
       yield* backend.writeRaw(yield* encodeFile(next))
       return { eventCount: next.events.length, file: next }
@@ -169,28 +158,23 @@ export const makeEventsStore = (backend: RawEventsBackend): EventsStore => {
 // ---------------------------------------------------------------------------
 
 /** Build an in-memory `EventsStore` Layer (no disk). For lifecycle tests. */
-export const memoryEventsStoreLayer: Layer.Layer<EventsStoreTag> = Layer.sync(
-  EventsStoreTag,
-  () => {
-    let cell: string | null = null
-    const backend: RawEventsBackend = {
-      exists: Effect.sync(() => cell !== null),
-      readRaw: Effect.suspend(() =>
-        cell === null
-          ? Effect.fail(new EventsStoreFailure({ op: "read", reason: "ENOENT" }))
-          : Effect.succeed(cell)
-      ),
-      writeRaw: (contents) =>
-        Effect.sync(() => {
-          cell = contents
-        }),
-      removeRaw: Effect.sync(() => {
-        cell = null
-      })
-    }
-    return makeEventsStore(backend)
+export const memoryEventsStoreLayer: Layer.Layer<EventsStoreTag> = Layer.sync(EventsStoreTag, () => {
+  let cell: string | null = null
+  const backend: RawEventsBackend = {
+    exists: Effect.sync(() => cell !== null),
+    readRaw: Effect.suspend(() =>
+      cell === null ? Effect.fail(new EventsStoreFailure({ op: "read", reason: "ENOENT" })) : Effect.succeed(cell),
+    ),
+    writeRaw: (contents) =>
+      Effect.sync(() => {
+        cell = contents
+      }),
+    removeRaw: Effect.sync(() => {
+      cell = null
+    }),
   }
-)
+  return makeEventsStore(backend)
+})
 
 // ---------------------------------------------------------------------------
 // Filesystem backend — bridges `@expo98/domain`'s `Fs` port to `RawEventsBackend`.
@@ -209,7 +193,7 @@ export const makeFsEventsStore = (eventsPath: string): Effect.Effect<EventsStore
       readRaw: fs.readFile(eventsPath).pipe(Effect.mapError((e) => adaptErr("read", e.reason))),
       writeRaw: (contents) =>
         fs.writeFile(eventsPath, contents).pipe(Effect.mapError((e) => adaptErr("write", e.reason))),
-      removeRaw: fs.remove(eventsPath).pipe(Effect.mapError((e) => adaptErr("clear", e.reason)))
+      removeRaw: fs.remove(eventsPath).pipe(Effect.mapError((e) => adaptErr("clear", e.reason))),
     }
     return makeEventsStore(backend)
   })

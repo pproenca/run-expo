@@ -1,17 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
-import {
-  DEFAULT_MAX_BUFFER,
-  fakeKey,
-  OUTPUT_BUDGET,
-  Subprocess,
-  SubprocessFake,
-  ToolNotFound
-} from "@expo98/core"
+import { DEFAULT_MAX_BUFFER, fakeKey, OUTPUT_BUDGET, Subprocess, SubprocessFake, ToolNotFound } from "@expo98/core"
 import { Effect } from "effect"
 
 const responses = new Map([
   [fakeKey("xcrun", ["simctl", "list"]), { _tag: "ok", stdout: "{}" } as const],
-  [fakeKey("axe", ["describe-ui"]), { _tag: "failed", exitCode: 3, stderr: "no app" } as const]
+  [fakeKey("axe", ["describe-ui"]), { _tag: "failed", exitCode: 3, stderr: "no app" } as const],
 ])
 
 const TestSubprocess = SubprocessFake(responses)
@@ -28,7 +21,7 @@ describe("S1 Subprocess service (AC-053)", () => {
       const result = yield* sp.run("xcrun", ["simctl", "list"])
       expect(result.exitCode).toBe(0)
       expect(result.stdout).toBe("{}")
-    }).pipe(Effect.provide(TestSubprocess))
+    }).pipe(Effect.provide(TestSubprocess)),
   )
 
   it.effect("AC-053 unknown tool fails closed with typed ToolNotFound", () =>
@@ -39,7 +32,7 @@ describe("S1 Subprocess service (AC-053)", () => {
       if (result._tag === "Left") {
         expect(result.left).toBeInstanceOf(ToolNotFound)
       }
-    }).pipe(Effect.provide(TestSubprocess))
+    }).pipe(Effect.provide(TestSubprocess)),
   )
 
   it.effect("AC-053 a non-zero exit surfaces a typed SubprocessFailed", () =>
@@ -50,6 +43,6 @@ describe("S1 Subprocess service (AC-053)", () => {
       if (result._tag === "Left") {
         expect(result.left._tag).toBe("SubprocessFailed")
       }
-    }).pipe(Effect.provide(TestSubprocess))
+    }).pipe(Effect.provide(TestSubprocess)),
   )
 })

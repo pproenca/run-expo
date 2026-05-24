@@ -12,7 +12,7 @@ import {
   type DomainActionEvidence,
   domainActionSideEffect,
   MAX_ARRAY_ITEMS,
-  runDomainAction
+  runDomainAction,
 } from "@expo98/expo-integration"
 import { Effect, Layer, Ref } from "effect"
 
@@ -20,9 +20,8 @@ const makeBridge = (calls: Ref.Ref<number>, value: unknown = { ok: true }) =>
   Layer.succeed(
     BridgeTransport,
     BridgeTransport.of({
-      call: () =>
-        Ref.update(calls, (n) => n + 1).pipe(Effect.as({ available: true, value }))
-    })
+      call: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as({ available: true, value })),
+    }),
   )
 
 describe("AC-006 bridge storage/state/controls gating", () => {
@@ -45,7 +44,7 @@ describe("AC-006 bridge storage/state/controls gating", () => {
         action: "list",
         metroPort: 8081,
         target: "iphone:app",
-        policy: {}
+        policy: {},
       }).pipe(Effect.provide(makeBridge(calls)))
       const ev = result as DomainActionEvidence
       expect(ev.domain).toBe("storage")
@@ -57,30 +56,28 @@ describe("AC-006 bridge storage/state/controls gating", () => {
       expect(ev.evidenceSource).toBe("bridge")
       expect(ev.available).toBe(true)
       expect(yield* Ref.get(calls)).toBe(1)
-    })
+    }),
   )
 
   for (const [domain, action] of [
     ["storage", "set"],
     ["state", "save"],
-    ["controls", "press"]
+    ["controls", "press"],
   ] as const) {
-    it.effect(
-      `AC-006 ${domain} ${action} (mutate) is DENIED without policy and the bridge is invoked 0×`,
-      () =>
-        Effect.gen(function* () {
-          const calls = yield* Ref.make(0)
-          const result = yield* runDomainAction({
-            domain,
-            action,
-            policy: {}
-          }).pipe(Effect.provide(makeBridge(calls)))
-          const payload = result as { code?: string; denied?: boolean }
-          expect(payload.code).toBe("policy-denied")
-          expect(payload.denied).toBe(true)
-          // Capability withheld: the bridge was NEVER consulted for a denied mutate.
-          expect(yield* Ref.get(calls)).toBe(0)
-        })
+    it.effect(`AC-006 ${domain} ${action} (mutate) is DENIED without policy and the bridge is invoked 0×`, () =>
+      Effect.gen(function* () {
+        const calls = yield* Ref.make(0)
+        const result = yield* runDomainAction({
+          domain,
+          action,
+          policy: {},
+        }).pipe(Effect.provide(makeBridge(calls)))
+        const payload = result as { code?: string; denied?: boolean }
+        expect(payload.code).toBe("policy-denied")
+        expect(payload.denied).toBe(true)
+        // Capability withheld: the bridge was NEVER consulted for a denied mutate.
+        expect(yield* Ref.get(calls)).toBe(0)
+      }),
     )
   }
 
@@ -91,14 +88,14 @@ describe("AC-006 bridge storage/state/controls gating", () => {
         domain: "storage",
         action: "set",
         args: { key: "k", value: "v" },
-        policy: { allow: ["storage.set"] }
+        policy: { allow: ["storage.set"] },
       }).pipe(Effect.provide(makeBridge(calls, { written: true })))
       const ev = result as DomainActionEvidence
       expect(ev.sideEffect).toBe("device")
       expect(ev.available).toBe(true)
       expect(ev.value).toEqual({ written: true })
       expect(yield* Ref.get(calls)).toBe(1)
-    })
+    }),
   )
 
   it.effect("AC-006 controls press WITH policy allow invokes the bridge once", () =>
@@ -107,12 +104,12 @@ describe("AC-006 bridge storage/state/controls gating", () => {
       const result = yield* runDomainAction({
         domain: "controls",
         action: "press",
-        policy: { allow: ["controls.press"] }
+        policy: { allow: ["controls.press"] },
       }).pipe(Effect.provide(makeBridge(calls, { pressed: "ok" })))
       const ev = result as DomainActionEvidence
       expect(ev.available).toBe(true)
       expect(yield* Ref.get(calls)).toBe(1)
-    })
+    }),
   )
 
   it.effect("AC-006 allowed value is size-bounded — arrays capped to MAX_ARRAY_ITEMS", () =>
@@ -122,7 +119,7 @@ describe("AC-006 bridge storage/state/controls gating", () => {
       const result = yield* runDomainAction({
         domain: "storage",
         action: "list",
-        policy: {}
+        policy: {},
       }).pipe(Effect.provide(makeBridge(calls, big)))
       const ev = result as DomainActionEvidence
       const bounded = ev.value as { _bounded: string; kept: number; dropped: number; total: number }
@@ -130,7 +127,7 @@ describe("AC-006 bridge storage/state/controls gating", () => {
       expect(bounded.kept).toBe(MAX_ARRAY_ITEMS)
       expect(bounded.dropped).toBe(50)
       expect(bounded.total).toBe(MAX_ARRAY_ITEMS + 50)
-    })
+    }),
   )
 
   it.effect("AC-006 the surfaced evidence is REDACTABLE at core's boundary (secret keys stripped)", () =>
@@ -139,13 +136,13 @@ describe("AC-006 bridge storage/state/controls gating", () => {
       const result = yield* runDomainAction({
         domain: "storage",
         action: "get",
-        policy: {}
+        policy: {},
       }).pipe(Effect.provide(makeBridge(calls, { authToken: "super-secret", id: 7 })))
       // Core's redactor (the single output boundary dispatch applies) strips secrets.
       const redacted = redact(result) as DomainActionEvidence & { value: { authToken: string; id: number } }
       expect(redacted.value.authToken).toBe(REDACTED)
       expect(redacted.value.id).toBe(7)
-    })
+    }),
   )
 
   it.effect(
@@ -165,14 +162,14 @@ describe("AC-006 bridge storage/state/controls gating", () => {
               Ref.update(calls, (n) => n + 1).pipe(
                 // Mutate the shared policy object so the SECOND gate check sees no allow.
                 Effect.tap(() => Effect.sync(() => (policy.allow = []))),
-                Effect.as({ available: true, value: { leaked: "secret-value" } })
-              )
-          })
+                Effect.as({ available: true, value: { leaked: "secret-value" } }),
+              ),
+          }),
         )
         const result = yield* runDomainAction({
           domain: "storage",
           action: "set",
-          policy
+          policy,
         }).pipe(Effect.provide(revoking))
 
         // The bridge WAS consulted (first gate passed), but the defense-in-depth
@@ -182,6 +179,6 @@ describe("AC-006 bridge storage/state/controls gating", () => {
         expect(payload.code).toBe("policy-denied")
         expect(payload.denied).toBe(true)
         expect(payload.value).toBeUndefined()
-      })
+      }),
   )
 })

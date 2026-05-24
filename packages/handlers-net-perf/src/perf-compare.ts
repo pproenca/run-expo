@@ -52,7 +52,7 @@ export const HIGHER_IS_BETTER_NAMES: ReadonlySet<string> = new Set([
   "requestsPerSecond",
   "reqPerSec",
   "goodFrameCount",
-  "goodCount"
+  "goodCount",
 ])
 
 /**
@@ -83,14 +83,10 @@ const higherIsBetterByShape = (name: string): boolean => {
  * Higher-is-better when in the exact set OR matched by shape; else lower-is-better.
  */
 export const metricDirection = (name: string): MetricDirection =>
-  HIGHER_IS_BETTER_NAMES.has(name) || higherIsBetterByShape(name)
-    ? "higher-is-better"
-    : "lower-is-better"
+  HIGHER_IS_BETTER_NAMES.has(name) || higherIsBetterByShape(name) ? "higher-is-better" : "lower-is-better"
 
 /** Build a name→metric map, last-wins on duplicate names (legacy `metricMap`). PURE. */
-const metricMap = (
-  metrics: ReadonlyArray<PerfMetricLike>
-): ReadonlyMap<string, PerfMetricLike> => {
+const metricMap = (metrics: ReadonlyArray<PerfMetricLike>): ReadonlyMap<string, PerfMetricLike> => {
   const map = new Map<string, PerfMetricLike>()
   for (const metric of metrics) {
     map.set(metric.name, metric)
@@ -114,7 +110,7 @@ const metricMap = (
  */
 export const comparePerfMetrics = (
   baseline: ReadonlyArray<PerfMetricLike>,
-  candidate: ReadonlyArray<PerfMetricLike>
+  candidate: ReadonlyArray<PerfMetricLike>,
 ): ReadonlyArray<ComparisonDelta> => {
   const candidateMetrics = metricMap(candidate)
   const deltas: Array<ComparisonDelta> = []
@@ -127,8 +123,7 @@ export const comparePerfMetrics = (
       continue
     }
     const direction = metricDirection(base.name)
-    const improved =
-      direction === "higher-is-better" ? next.value > base.value : next.value < base.value
+    const improved = direction === "higher-is-better" ? next.value > base.value : next.value < base.value
     deltas.push({
       metric: base.name,
       baseline: base.value,
@@ -137,7 +132,7 @@ export const comparePerfMetrics = (
       unit: next.unit ?? base.unit ?? null,
       direction,
       improved,
-      confidence: lowerConfidence(base.confidence, next.confidence)
+      confidence: lowerConfidence(base.confidence, next.confidence),
     })
   }
   return deltas

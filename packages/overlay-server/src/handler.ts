@@ -1,14 +1,8 @@
 import { Id } from "@expo98/core"
 import { type OverlayEvent } from "@expo98/domain"
 import { Effect, Schema } from "effect"
+import { BodyTooLarge, MalformedBody, OriginRejected, type RequestRejection, TokenRejected } from "./errors.js"
 import { type EventsStore, EventsStoreTag } from "./events-store.js"
-import {
-  BodyTooLarge,
-  MalformedBody,
-  OriginRejected,
-  type RequestRejection,
-  TokenRejected
-} from "./errors.js"
 import {
   byteLength,
   checkOrigin,
@@ -21,7 +15,7 @@ import {
   splitUrl,
   TOKEN_HEADER,
   tokensMatch,
-  validateEndpointPath
+  validateEndpointPath,
 } from "./request.js"
 
 /**
@@ -57,13 +51,13 @@ import {
  */
 export const OverlayComment = Schema.Struct({
   kind: Schema.optional(Schema.String),
-  payload: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown }))
+  payload: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
 })
 export type OverlayComment = Schema.Schema.Type<typeof OverlayComment>
 
 /** The accepted POST body shape: a non-empty `comments[]` array (AC-014). */
 export const OverlayPostBody = Schema.Struct({
-  comments: Schema.Array(OverlayComment).pipe(Schema.minItems(1))
+  comments: Schema.Array(OverlayComment).pipe(Schema.minItems(1)),
 })
 export type OverlayPostBody = Schema.Schema.Type<typeof OverlayPostBody>
 
@@ -83,11 +77,11 @@ export interface HandlerConfig {
 /** Build a `HandlerConfig` with the per-session token, applying defaults. */
 export const makeHandlerConfig = (
   token: string,
-  options?: { readonly endpointPath?: string; readonly maxBodyBytes?: number }
+  options?: { readonly endpointPath?: string; readonly maxBodyBytes?: number },
 ): HandlerConfig => ({
   token,
   endpointPath: options?.endpointPath ?? DEFAULT_ENDPOINT_PATH,
-  maxBodyBytes: options?.maxBodyBytes ?? MAX_BODY_BYTES
+  maxBodyBytes: options?.maxBodyBytes ?? MAX_BODY_BYTES,
 })
 
 // ===========================================================================
@@ -108,7 +102,7 @@ const rejectionToResponse = (rejection: RequestRejection): OverlayResponse => {
       return json(413, {
         ok: false,
         error: "request body too large",
-        limitBytes: rejection.limitBytes
+        limitBytes: rejection.limitBytes,
       })
     case "MalformedBody":
       return json(422, { ok: false, error: rejection.reason })
@@ -131,18 +125,15 @@ const extractToken = (req: OverlayRequest): string | null => {
  * Run the four AC-014 checks in order, short-circuiting on the first failure.
  * Returns the parsed body on success. NEVER mutates the store.
  */
-const hardenPost = (
-  req: OverlayRequest,
-  config: HandlerConfig
-): Effect.Effect<OverlayPostBody, RequestRejection> =>
+const hardenPost = (req: OverlayRequest, config: HandlerConfig): Effect.Effect<OverlayPostBody, RequestRejection> =>
   Effect.gen(function* () {
     // (a) token
     const received = extractToken(req)
     if (!tokensMatch(config.token, received)) {
       return yield* Effect.fail(
         new TokenRejected({
-          reason: received === null ? "Missing session token." : "Invalid session token."
-        })
+          reason: received === null ? "Missing session token." : "Invalid session token.",
+        }),
       )
     }
 
@@ -150,42 +141,32 @@ const hardenPost = (
     const origin = req.headers["origin"] ?? null
     const originCheck = checkOrigin(origin)
     if (!originCheck.ok) {
-      return yield* Effect.fail(
-        new OriginRejected({ origin, reason: originCheck.reason ?? "Origin rejected." })
-      )
+      return yield* Effect.fail(new OriginRejected({ origin, reason: originCheck.reason ?? "Origin rejected." }))
     }
 
     // (c) hard body-size cap
     const actualBytes = byteLength(req.body)
     if (actualBytes > config.maxBodyBytes) {
-      return yield* Effect.fail(
-        new BodyTooLarge({ limitBytes: config.maxBodyBytes, actualBytes })
-      )
+      return yield* Effect.fail(new BodyTooLarge({ limitBytes: config.maxBodyBytes, actualBytes }))
     }
 
     // (d) JSON parse + comments[] schema validation
     const parsed = yield* Effect.try({
       try: () => JSON.parse(req.body) as unknown,
-      catch: () => new MalformedBody({ reason: "Request body is not valid JSON." })
+      catch: () => new MalformedBody({ reason: "Request body is not valid JSON." }),
     })
     const body = yield* Schema.decodeUnknown(OverlayPostBody)(parsed).pipe(
-      Effect.mapError(
-        (e) => new MalformedBody({ reason: `comments[] schema validation failed: ${e.message}` })
-      )
+      Effect.mapError((e) => new MalformedBody({ reason: `comments[] schema validation failed: ${e.message}` })),
     )
     return body
   })
 
 /** Map one validated inbound comment to a persisted, provenance-stamped event. */
-const commentToEvent = (
-  comment: OverlayComment,
-  id: string,
-  now: string
-): OverlayEvent => ({
+const commentToEvent = (comment: OverlayComment, id: string, now: string): OverlayEvent => ({
   id,
   createdAt: now,
   kind: comment.kind ?? "comment",
-  payload: comment.payload ?? {}
+  payload: comment.payload ?? {},
 })
 
 // ===========================================================================
@@ -199,7 +180,7 @@ const commentToEvent = (
  */
 export const handleRequest = (
   req: OverlayRequest,
-  config: HandlerConfig
+  config: HandlerConfig,
 ): Effect.Effect<OverlayResponse, never, EventsStoreTag | Id> =>
   Effect.gen(function* () {
     const store: EventsStore = yield* EventsStoreTag
@@ -242,9 +223,5 @@ export const handleRequest = (
     // An events-store I/O fault is a genuine infra failure → surface as a 500
     // value rather than crashing the listener. The dispatcher classifies the
     // overall command's exit code; the listener itself never dies on one request.
-    Effect.catchAll((e) =>
-      Effect.succeed(
-        json(500, { ok: false, error: "events store failure", reason: e.reason })
-      )
-    )
+    Effect.catchAll((e) => Effect.succeed(json(500, { ok: false, error: "events store failure", reason: e.reason }))),
   )

@@ -14,23 +14,10 @@
  */
 
 // Global flags + the AC-015/016 pre-parse guard (architecture finding N2).
-export {
-  assertUsage,
-  type CliGlobals,
-  globalOptions,
-  VALUE_FLAGS,
-  type ValueFlag
-} from "./globals.js"
+export { assertUsage, type CliGlobals, globalOptions, VALUE_FLAGS, type ValueFlag } from "./globals.js"
 
 // Output envelope (AC-003/012 redaction + AC-041 truncation at the boundary).
-export {
-  formatJson,
-  formatPlain,
-  type JsonEnvelope,
-  ndjsonEnvelope,
-  type OutputMode,
-  selectMode
-} from "./envelope.js"
+export { formatJson, formatPlain, type JsonEnvelope, ndjsonEnvelope, type OutputMode, selectMode } from "./envelope.js"
 
 // Command registry + composition wiring.
 export {
@@ -40,7 +27,7 @@ export {
   registration,
   registerCommands,
   type Registry,
-  runRegistered
+  runRegistered,
 } from "./registry.js"
 
 // The proof READ commands wired end-to-end through dispatch.
@@ -53,13 +40,7 @@ export { handlerCommands } from "./all-commands.js"
 export { resolvePolicy } from "./policy-resolve.js"
 
 // The node-backed Layer stack (composition root).
-export {
-  AppLayer,
-  MetroHttpClientLayer,
-  NodeFsLayer,
-  NodeSubprocessLayer,
-  PlatformLayer
-} from "./layers.js"
+export { AppLayer, MetroHttpClientLayer, NodeFsLayer, NodeSubprocessLayer, PlatformLayer } from "./layers.js"
 
 // The runnable program.
 export { CLI_NAME, main, runProgram } from "./main.js"

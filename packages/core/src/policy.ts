@@ -29,9 +29,7 @@ export interface CommandDescriptor {
  * where an untyped caller smuggles an unrecognised value in — that resolves to
  * `device`, never `read`.
  */
-export const classify = (descriptor: {
-  readonly sideEffect: SideEffect | (string & {})
-}): SideEffect =>
+export const classify = (descriptor: { readonly sideEffect: SideEffect | (string & {}) }): SideEffect =>
   Match.value(descriptor.sideEffect as SideEffect).pipe(
     Match.when("read", () => "read" as const),
     Match.when("device", () => "device" as const),
@@ -39,7 +37,7 @@ export const classify = (descriptor: {
     Match.when("source-write", () => "source-write" as const),
     // Unknown / unclassified ⇒ device (fail-closed). Unreachable for a
     // well-typed descriptor; present so an untyped value can never become `read`.
-    Match.orElse(() => "device" as const)
+    Match.orElse(() => "device" as const),
   )
 
 /**
@@ -68,17 +66,14 @@ export interface PolicyDeniedPayload {
   readonly policy: PolicyDocument
 }
 
-export const policyDeniedPayload = (
-  reason: string,
-  policy: PolicyDocument
-): PolicyDeniedPayload => ({
+export const policyDeniedPayload = (reason: string, policy: PolicyDocument): PolicyDeniedPayload => ({
   available: false,
   source: "policy",
   evidenceSource: "policy",
   code: "policy-denied",
   denied: true,
   reason,
-  policy
+  policy,
 })
 
 export const DENIED_REASON = "Policy denied action." as const
@@ -106,28 +101,21 @@ const policyAllowsAction = (policy: PolicyDocument, action: string): boolean => 
  *   confirmation token is present.
  * - anything else ⇒ denied (fail closed).
  */
-export const gate = (
-  descriptor: CommandDescriptor,
-  policy: PolicyDocument
-): GateDecision => {
+export const gate = (descriptor: CommandDescriptor, policy: PolicyDocument): GateDecision => {
   const sideEffect = classify(descriptor)
   const action = descriptor.action
 
   const deny = (reason: string): GateDecision => ({
     _tag: "deny",
-    payload: policyDeniedPayload(reason, policy)
+    payload: policyDeniedPayload(reason, policy),
   })
   const allow = (): GateDecision => ({ _tag: "allow", sideEffect })
 
   return Match.value(sideEffect).pipe(
     Match.when("read", allow),
-    Match.when("device", () =>
-      policyAllowsAction(policy, action) ? allow() : deny(DENIED_REASON)
-    ),
+    Match.when("device", () => (policyAllowsAction(policy, action) ? allow() : deny(DENIED_REASON))),
     Match.when("runtime-eval", () =>
-      policy.allowRuntimeEval === true || policyAllowsAction(policy, action)
-        ? allow()
-        : deny(DENIED_REASON)
+      policy.allowRuntimeEval === true || policyAllowsAction(policy, action) ? allow() : deny(DENIED_REASON),
     ),
     Match.when("source-write", () => {
       if (!policyAllowsAction(policy, action)) {
@@ -136,10 +124,8 @@ export const gate = (
       // SAFETY: source-write needs an EXACT confirmation token in addition to
       // policy allow — the AC-008 second factor for file-mutating actions.
       const confirmed = policy.confirmations?.includes(action) === true
-      return confirmed
-        ? allow()
-        : deny(`Action "${action}" requires confirmation token "${action}".`)
+      return confirmed ? allow() : deny(`Action "${action}" requires confirmation token "${action}".`)
     }),
-    Match.exhaustive
+    Match.exhaustive,
   )
 }

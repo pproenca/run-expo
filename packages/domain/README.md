@@ -35,21 +35,21 @@ test/               Executable acceptance tests (named by AC id)
 
 ## Acceptance criteria → tests
 
-| AC | What | Test | Status |
-|----|------|------|--------|
-| **AC-024** | Session lifecycle new→close→clean; corrupt `session.json` skipped on list; missing `createdAt` not deleted; default `7d` clean age | `test/ac-024-session-lifecycle.test.ts` | PASS |
-| **AC-017** | Ref validity: no-cache / missing / stale / lacks-action / lacks-bounds → unavailable; valid → dry-run plan; ref format `^@e\d+$` | `test/ac-017-018-019-decisions.test.ts` | PASS |
-| **AC-018** | Target staleness: rediscovered → `selected:true,stale:false`; not rediscovered → `stale:true`; `targetId` composition + fallbacks | `test/ac-017-018-019-decisions.test.ts` | PASS |
-| **AC-019** | Snapshot prereqs: no session / no active target / missing `device.id` → unavailable with reason; **no artifacts written** | `test/ac-017-018-019-decisions.test.ts` | PASS |
-| **AC-026** | Snapshot persist + the **3 pointer invariants** hold after capture; refs rewritten `@e1..@eN`, `stale:false` | `test/ac-026-snapshot-persist.test.ts` | PASS |
-| **AC-043** | Session-name normalisation (lowercase → `[^a-z0-9_.-]+`→`-` → trim → throw-if-empty → slice(0,48)); duration parse `^(\d+)([smhd])$` | `test/ac-043-034-naming.test.ts` | PASS |
-| **AC-034** | Id format: `<prefix>-<timestamp>-<suffix>`, single canonical timestamp, collision-resistant suffix | `test/ac-043-034-naming.test.ts` | PASS |
-| **Round-trip** | encode→decode === original for every entity; lenient shim normalises a legacy-loose `SessionRecord` to strict | `test/schema-roundtrip.test.ts` | PASS |
+| AC             | What                                                                                                                                 | Test                                    | Status |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | ------ |
+| **AC-024**     | Session lifecycle new→close→clean; corrupt `session.json` skipped on list; missing `createdAt` not deleted; default `7d` clean age   | `test/ac-024-session-lifecycle.test.ts` | PASS   |
+| **AC-017**     | Ref validity: no-cache / missing / stale / lacks-action / lacks-bounds → unavailable; valid → dry-run plan; ref format `^@e\d+$`     | `test/ac-017-018-019-decisions.test.ts` | PASS   |
+| **AC-018**     | Target staleness: rediscovered → `selected:true,stale:false`; not rediscovered → `stale:true`; `targetId` composition + fallbacks    | `test/ac-017-018-019-decisions.test.ts` | PASS   |
+| **AC-019**     | Snapshot prereqs: no session / no active target / missing `device.id` → unavailable with reason; **no artifacts written**            | `test/ac-017-018-019-decisions.test.ts` | PASS   |
+| **AC-026**     | Snapshot persist + the **3 pointer invariants** hold after capture; refs rewritten `@e1..@eN`, `stale:false`                         | `test/ac-026-snapshot-persist.test.ts`  | PASS   |
+| **AC-043**     | Session-name normalisation (lowercase → `[^a-z0-9_.-]+`→`-` → trim → throw-if-empty → slice(0,48)); duration parse `^(\d+)([smhd])$` | `test/ac-043-034-naming.test.ts`        | PASS   |
+| **AC-034**     | Id format: `<prefix>-<timestamp>-<suffix>`, single canonical timestamp, collision-resistant suffix                                   | `test/ac-043-034-naming.test.ts`        | PASS   |
+| **Round-trip** | encode→decode === original for every entity; lenient shim normalises a legacy-loose `SessionRecord` to strict                        | `test/schema-roundtrip.test.ts`         | PASS   |
 
 ### Skipped (out of this package's scope — `it.skip` with AC id)
 
-| Skip | Why |
-|------|-----|
+| Skip                                                                                                              | Why                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AC-026 semantic-bridge capture path — needs @expo98/protocols + bridge` (`test/ac-026-snapshot-persist.test.ts`) | Live capture = CDP `Runtime.evaluate` → bridge refs; lands in `@expo98/protocols` + the C7 bridge handler. This package only persists an **already-captured** `SnapshotResult`. |
 
 ## Schema-drift tightenings (vs legacy)
@@ -85,13 +85,13 @@ source) are:
 1. **Clock / Id (S3).** `PersistenceClock` (`persist.ts`) — `nowIso()` +
    collision-resistant `suffix()` — is injected. Production wiring replaces the
    `defaultClock` with core's S3 Clock/Id service so timestamps + suffixes come
-   from the one canonical generator (AC-034). *(`src/persist.ts` `layer` / `defaultClock`.)*
+   from the one canonical generator (AC-034). _(`src/persist.ts` `layer` / `defaultClock`.)_
 2. **Error → exit-code mapping.** The tagged persistence errors (`errors.ts`)
    are adapted to core's `DomainError` / `exitCodeForError` at the dispatch
-   boundary; none is a usage error, so all map to exit 1. *(`src/errors.ts` header.)*
+   boundary; none is a usage error, so all map to exit 1. _(`src/errors.ts` header.)_
 3. **Redaction (S5).** `RefRecord.raw` and `RunRecord.args` carry untyped
    passthrough that must be redacted by core's single redactor (AC-003) at the
-   output boundary — this package stores, it does not redact. *(`src/value-objects.ts` `RefRecord.raw`.)*
+   output boundary — this package stores, it does not redact. _(`src/value-objects.ts` `RefRecord.raw`.)_
 4. **Filesystem port (deferred platform-node adapter).** `Fs` (`fs-port.ts`) is
    a narrow subset of `@effect/platform` `FileSystem` + `Path`; the deferred CLI
    shell package provides a node-backed `Layer`. Tests use the in-memory impl.

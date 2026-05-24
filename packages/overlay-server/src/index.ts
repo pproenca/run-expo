@@ -27,7 +27,7 @@ export {
   MalformedBody,
   OriginRejected,
   type RequestRejection,
-  TokenRejected
+  TokenRejected,
 } from "./errors.js"
 
 // Synthetic request/response model + PURE hardening primitives (AC-014)
@@ -54,17 +54,11 @@ export {
   splitUrl,
   TOKEN_HEADER,
   tokensMatch,
-  validateEndpointPath
+  validateEndpointPath,
 } from "./request.js"
 
 // The hardened request handler + config + inbound `comments[]` schema (AC-014)
-export {
-  handleRequest,
-  type HandlerConfig,
-  makeHandlerConfig,
-  OverlayComment,
-  OverlayPostBody
-} from "./handler.js"
+export { handleRequest, type HandlerConfig, makeHandlerConfig, OverlayComment, OverlayPostBody } from "./handler.js"
 
 // Events-file store port + lifecycle (AC-032)
 export {
@@ -77,7 +71,7 @@ export {
   memoryEventsStoreLayer,
   NO_EVENTS_FILE_REASON,
   type PrepareOptions,
-  type RawEventsBackend
+  type RawEventsBackend,
 } from "./events-store.js"
 
 // Sidecar lifecycle state machine (AC-033)
@@ -88,13 +82,8 @@ export {
   registerSidecar,
   SIDECAR_NAME,
   type SidecarProbe,
-  stopSidecar
+  stopSidecar,
 } from "./sidecar.js"
 
 // Real-server seam (the `server` action) — live bind is it.skip'd
-export {
-  findAvailablePort,
-  overlayHttpApp,
-  overlayServerLayer,
-  type ServerOptions
-} from "./server.js"
+export { findAvailablePort, overlayHttpApp, overlayServerLayer, type ServerOptions } from "./server.js"

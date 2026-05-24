@@ -27,7 +27,7 @@ import {
   RECORD_LIST_CAP,
   resolveRnMaxDepth,
   resolveRnMaxNodes,
-  round
+  round,
 } from "./support.js"
 
 export type RnVerb = "tree" | "refs" | "renders" | "inspect"
@@ -124,19 +124,14 @@ export interface RnInspectResultEnvelope {
   readonly element: RnInspectResult
 }
 
-export type RnResult =
-  | RnUnavailable
-  | RnTreeResult
-  | RnRefsResult
-  | RnRendersResult
-  | RnInspectResultEnvelope
+export type RnResult = RnUnavailable | RnTreeResult | RnRefsResult | RnRendersResult | RnInspectResultEnvelope
 
 // ───────────────────────────────────────────────────────────────────────────
 // AC-055 helpers (PURE — exported for direct assertions)
 // ───────────────────────────────────────────────────────────────────────────
 
 const roundBox = (
-  layout: RnNode["layout"]
+  layout: RnNode["layout"],
 ): { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null =>
   layout === undefined
     ? null
@@ -144,7 +139,7 @@ const roundBox = (
         x: round(layout.x),
         y: round(layout.y),
         width: round(layout.width),
-        height: round(layout.height)
+        height: round(layout.height),
       }
 
 /** Element actions capped to 10 (AC-055). */
@@ -155,12 +150,8 @@ export const capActions = (actions: ReadonlyArray<string> | undefined): Readonly
  * Ancestor path cap (AC-055): take at most the first 40 ancestors, then
  * `slice(16, 24)` of that capped path.
  */
-export const capAncestors = (
-  ancestors: ReadonlyArray<string> | undefined
-): ReadonlyArray<string> =>
-  (ancestors ?? [])
-    .slice(0, ANCESTOR_PATH_DEPTH_CAP)
-    .slice(ANCESTOR_SLICE_HEAD, ANCESTOR_SLICE_TAIL)
+export const capAncestors = (ancestors: ReadonlyArray<string> | undefined): ReadonlyArray<string> =>
+  (ancestors ?? []).slice(0, ANCESTOR_PATH_DEPTH_CAP).slice(ANCESTOR_SLICE_HEAD, ANCESTOR_SLICE_TAIL)
 
 /**
  * Apply the depth + node caps to the graph: keep nodes with `depth <= maxDepth`,
@@ -169,9 +160,8 @@ export const capAncestors = (
 export const applyTraversalCaps = (
   graph: ReadonlyArray<RnNode>,
   maxDepth: number,
-  maxNodes: number
-): ReadonlyArray<RnNode> =>
-  graph.filter((n) => n.depth <= maxDepth).slice(0, maxNodes)
+  maxNodes: number,
+): ReadonlyArray<RnNode> => graph.filter((n) => n.depth <= maxDepth).slice(0, maxNodes)
 
 // ───────────────────────────────────────────────────────────────────────────
 // Per-verb projections
@@ -182,7 +172,7 @@ const buildTree = (capped: ReadonlyArray<RnNode>): ReadonlyArray<RnTreeRow> =>
     id: n.id,
     name: n.name,
     depth: n.depth,
-    actions: capActions(n.actions)
+    actions: capActions(n.actions),
   }))
 
 /** `refs` ⇒ the control list, capped at 80 (AC-055). */
@@ -191,7 +181,7 @@ const buildRefs = (capped: ReadonlyArray<RnNode>): ReadonlyArray<RnRefRow> =>
     id: n.id,
     name: n.name,
     box: roundBox(n.layout),
-    actions: capActions(n.actions)
+    actions: capActions(n.actions),
   }))
 
 /** `renders` ⇒ the render record list, capped at 60 with rounded ms (AC-055). */
@@ -206,7 +196,7 @@ const buildInspect = (node: RnNode): RnInspectResult => ({
   name: node.name,
   box: roundBox(node.layout),
   actions: capActions(node.actions),
-  ancestors: capAncestors(node.ancestors)
+  ancestors: capAncestors(node.ancestors),
 })
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -238,7 +228,7 @@ export const rnResult = (verb: RnVerb, input: RnInput): RnResult => {
         action: "rn.tree",
         maxDepth,
         maxNodes,
-        nodes: buildTree(capped)
+        nodes: buildTree(capped),
       }
     case "refs":
       return {
@@ -246,7 +236,7 @@ export const rnResult = (verb: RnVerb, input: RnInput): RnResult => {
         action: "rn.refs",
         maxDepth,
         maxNodes,
-        controls: buildRefs(capped)
+        controls: buildRefs(capped),
       }
     case "renders":
       return {
@@ -254,7 +244,7 @@ export const rnResult = (verb: RnVerb, input: RnInput): RnResult => {
         action: "rn.renders",
         maxDepth,
         maxNodes,
-        records: buildRenders(capped)
+        records: buildRenders(capped),
       }
     case "inspect": {
       const found = capped.find((n) => n.id === input.elementId)
@@ -262,7 +252,7 @@ export const rnResult = (verb: RnVerb, input: RnInput): RnResult => {
         return {
           available: false,
           action: "rn.inspect",
-          reason: `Element "${input.elementId ?? ""}" not found in the capped graph.`
+          reason: `Element "${input.elementId ?? ""}" not found in the capped graph.`,
         }
       }
       return { available: true, action: "rn.inspect", element: buildInspect(found) }

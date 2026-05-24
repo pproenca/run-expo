@@ -25,7 +25,7 @@ export {
   bridgeMetadata,
   bridgeMetadataContents,
   bridgeSourceContents,
-  EXPO98_BRIDGE_VERSION
+  EXPO98_BRIDGE_VERSION,
 } from "./bridge-files.js"
 
 // Bridge install / remove (AC-008)
@@ -42,16 +42,11 @@ export {
   installPlan,
   installWriteCommand,
   removePlan,
-  removeWriteCommand
+  removeWriteCommand,
 } from "./install.js"
 
 // Bridge install-state (AC-027)
-export {
-  type InstallIssue,
-  type InstallStateResult,
-  type InstallStatus,
-  readInstallState
-} from "./install-state.js"
+export { type InstallIssue, type InstallStateResult, type InstallStatus, readInstallState } from "./install-state.js"
 
 // Bridge runtime-health state machine (AC-028, AC-009)
 export {
@@ -62,7 +57,7 @@ export {
   type HealthStep,
   type HealthUnavailable,
   type HealthUnavailableCode,
-  REGISTRATION_PROBE_EXPRESSION
+  REGISTRATION_PROBE_EXPRESSION,
 } from "./health.js"
 
 // Bridge transport SEAM (Expo DevTools Plugins SDK in production)
@@ -70,7 +65,7 @@ export {
   BridgeTransport,
   type BridgeCallResult,
   type BridgeTransportService,
-  type BridgeUnavailableCode
+  type BridgeUnavailableCode,
 } from "./bridge-transport.js"
 
 // Bridge domain actions (AC-006)
@@ -81,7 +76,7 @@ export {
   domainActionKey,
   domainActionSideEffect,
   type DomainName,
-  runDomainAction
+  runDomainAction,
 } from "./domain-actions.js"
 
 // Size-bounding (AC-006)
@@ -95,21 +90,11 @@ export {
   type CompatResult,
   DEFAULT_COMPAT_MAP,
   parseVersion,
-  UNRESOLVED_PREFIXES
+  UNRESOLVED_PREFIXES,
 } from "./compat.js"
 
 // Expo / RN introspection (D5; Expo SDK seam + static fallback)
-export {
-  classifyProjectCompat,
-  type DeclaredVersions,
-  extractDeclaredVersions
-} from "./introspect.js"
+export { classifyProjectCompat, type DeclaredVersions, extractDeclaredVersions } from "./introspect.js"
 
 // Expo Router sitemap normalization (AC-044)
-export {
-  buildSitemap,
-  formatSegment,
-  normalizeRoutePath,
-  type SitemapEntry,
-  type SitemapKind
-} from "./sitemap.js"
+export { buildSitemap, formatSegment, normalizeRoutePath, type SitemapEntry, type SitemapKind } from "./sitemap.js"

@@ -46,15 +46,10 @@ export const extractDeclaredVersions = (pkg: unknown): DeclaredVersions => {
  * compatibility (AC-020). The `map` defaults to the bundled data file; pass a
  * fetched manifest to re-classify with no code change.
  */
-export const classifyProjectCompat = (
-  root: string,
-  map?: CompatMap
-): Effect.Effect<CompatResult, never, Fs> =>
+export const classifyProjectCompat = (root: string, map?: CompatMap): Effect.Effect<CompatResult, never, Fs> =>
   Effect.gen(function* () {
     const fs = yield* Fs
-    const text = yield* fs
-      .readFile(`${root.replace(/\/+$/, "")}/package.json`)
-      .pipe(Effect.orElseSucceed(() => ""))
+    const text = yield* fs.readFile(`${root.replace(/\/+$/, "")}/package.json`).pipe(Effect.orElseSucceed(() => ""))
     let pkg: unknown
     try {
       pkg = text.length > 0 ? (JSON.parse(text) as unknown) : undefined

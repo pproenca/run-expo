@@ -51,12 +51,7 @@ export const TOKEN_HEADER = "x-expo98-overlay-token" as const
 export const ENDPOINT_PATH_PATTERN = /^\/[A-Za-z0-9_./-]+$/
 
 /** The four canonical loopback host spellings (mirrors `@expo98/protocols`). */
-export const LOOPBACK_HOSTS: ReadonlySet<string> = new Set([
-  "127.0.0.1",
-  "localhost",
-  "[::1]",
-  "::1"
-])
+export const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]", "::1"])
 
 // ===========================================================================
 // Request / Response value model
@@ -122,8 +117,7 @@ export const validateEndpointPath = (path: string): boolean => ENDPOINT_PATH_PAT
  * Is `host` an allowlisted loopback spelling? Mirrors the protocols allowlist.
  * `localhost` is case-folded; IP-literals compared verbatim.
  */
-export const isLoopbackHost = (host: string): boolean =>
-  LOOPBACK_HOSTS.has(host) || host.toLowerCase() === "localhost"
+export const isLoopbackHost = (host: string): boolean => LOOPBACK_HOSTS.has(host) || host.toLowerCase() === "localhost"
 
 /** Result of the strict Origin check (AC-014). */
 export interface OriginCheck {
@@ -157,7 +151,7 @@ export const checkOrigin = (origin: string | null | undefined): OriginCheck => {
   return {
     ok: false,
     host,
-    reason: `Refusing cross-origin POST from non-loopback Origin '${host}'.`
+    reason: `Refusing cross-origin POST from non-loopback Origin '${host}'.`,
   }
 }
 
@@ -183,8 +177,7 @@ export const tokensMatch = (expected: string, received: string | null | undefine
 export const byteLength = (s: string): number => Buffer.byteLength(s, "utf8")
 
 /** Clamp a value into [lo, hi]. PURE. */
-export const clamp = (value: number, lo: number, hi: number): number =>
-  Math.min(Math.max(value, lo), hi)
+export const clamp = (value: number, lo: number, hi: number): number => Math.min(Math.max(value, lo), hi)
 
 /**
  * Resolve a server port: `clamp(port ?? DEFAULT_PORT, 1, 65535)`.

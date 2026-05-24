@@ -21,16 +21,10 @@ export {
   clamp,
   resolveMetroPort,
   loopbackMetroBaseUrl,
-} from "./loopback.js";
+} from "./loopback.js"
 
 // Typed failures.
-export {
-  LoopbackViolation,
-  HttpTransportError,
-  CdpSocketError,
-  CdpMalformedFrame,
-  CdpProtocolError,
-} from "./errors.js";
+export { LoopbackViolation, HttpTransportError, CdpSocketError, CdpMalformedFrame, CdpProtocolError } from "./errors.js"
 
 // S8 — Metro Probe.
 export {
@@ -45,7 +39,7 @@ export {
   type MetroStatusResult,
   type MetroVersionResult,
   type MetroSymbolicateResult,
-} from "./metro.js";
+} from "./metro.js"
 
 // S9 — Hermes CDP (split surface).
 export {
@@ -64,15 +58,11 @@ export {
   type CdpEvaluateResult,
   type CdpUnavailable,
   type CdpFailureDiagnostics,
-} from "./cdp.js";
+} from "./cdp.js"
 
 // S9 — the CDP socket port (the dependency-agnostic seam) + the `ws` adapter (the spike decision).
-export {
-  CdpSocketFactory,
-  type CdpSocket,
-  type CdpConnectOptions,
-} from "./cdp-socket.js";
-export { WsCdpSocketFactoryLayer } from "./ws-adapter.js";
+export { CdpSocketFactory, type CdpSocket, type CdpConnectOptions } from "./cdp-socket.js"
+export { WsCdpSocketFactoryLayer } from "./ws-adapter.js"
 
 // Network evidence shape validation (AC-022) — pure.
 export {
@@ -86,4 +76,4 @@ export {
   type NetworkEvidenceValidated,
   type NetworkEvidenceUnavailable,
   type NetworkUnavailableCode,
-} from "./network-evidence.js";
+} from "./network-evidence.js"

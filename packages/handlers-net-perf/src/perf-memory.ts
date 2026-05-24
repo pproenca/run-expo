@@ -53,7 +53,7 @@ export const evaluateMemoryEvidence = (input: MemoryEvidenceInput): MemoryEviden
     confidence: allowed ? "medium" : "low",
     leakClaim: {
       allowed,
-      reason: allowed ? ALLOWED_REASON : DENIED_REASON
-    }
+      reason: allowed ? ALLOWED_REASON : DENIED_REASON,
+    },
   }
 }

@@ -67,7 +67,7 @@ export const reportFindings = (input: ReportInput): ReadonlyArray<PerfFinding> =
     findings.push({
       type: "network-latency",
       severity: Number(worstRequest.durationMs) >= NETWORK_HIGH_MS ? "high" : "medium",
-      summary: "Slow network request exceeded the 500ms latency threshold."
+      summary: "Slow network request exceeded the 500ms latency threshold.",
     })
   }
 
@@ -83,7 +83,7 @@ export const reportFindings = (input: ReportInput): ReadonlyArray<PerfFinding> =
     findings.push({
       type: "render-cost",
       severity: worstCommitMs >= RENDER_HIGH_MS ? "high" : "medium",
-      summary: "React render commit exceeded one frame budget."
+      summary: "React render commit exceeded one frame budget.",
     })
   }
 
@@ -96,7 +96,7 @@ export const reportFindings = (input: ReportInput): ReadonlyArray<PerfFinding> =
     findings.push({
       type: "frame-jank",
       severity: droppedFrames >= FRAME_HIGH_COUNT ? "high" : "medium",
-      summary: "Frame samples include dropped or long frames."
+      summary: "Frame samples include dropped or long frames.",
     })
   }
 
@@ -105,8 +105,8 @@ export const reportFindings = (input: ReportInput): ReadonlyArray<PerfFinding> =
       {
         type: "insufficient-evidence",
         severity: "info",
-        summary: "No bottleneck can be ranked from the available evidence."
-      }
+        summary: "No bottleneck can be ranked from the available evidence.",
+      },
     ]
   }
   return findings

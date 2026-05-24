@@ -1,18 +1,18 @@
 # expo98 — AI-Native Specification (reimagine source-of-truth)
 
-*Consolidated 2026-05-24 by `/modernize-reimagine expo98 "<Effect-TS rewrite>"` (Phase A).*
-*The legacy `src/**` (HEAD `77fc1a6`) is the **specification source**, not a port target.*
-*This file is the spec the greenfield Effect-TS build implements against. It consolidates — and does not replace — the deeper artifacts it cites:*
+_Consolidated 2026-05-24 by `/modernize-reimagine expo98 "<Effect-TS rewrite>"` (Phase A)._
+_The legacy `src/**` (HEAD `77fc1a6`) is the **specification source**, not a port target._
+_This file is the spec the greenfield Effect-TS build implements against. It consolidates — and does not replace — the deeper artifacts it cites:_
 
-| Artifact | Role |
-|---|---|
-| `reimagine/rules-gwt.md` | the 58 Given/When/Then acceptance criteria (**the behavior contract / acceptance tests**) |
-| `reimagine/interfaces.md` | full inbound/outbound interface catalog |
-| `reimagine/entities.md` | full domain/entity model + aggregate boundaries |
-| `BUSINESS_RULES.md` | RULE-001..058 with line-cited source evidence |
-| `DATA_OBJECTS.md` | DTO field types + persistence map |
-| `ASSESSMENT.md` | inventory, debt, security findings, COCOMO |
-| `MODERNIZATION_BRIEF.md` | approved target stack, 5-phase plan, **18 resolved open questions** |
+| Artifact                  | Role                                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| `reimagine/rules-gwt.md`  | the 58 Given/When/Then acceptance criteria (**the behavior contract / acceptance tests**) |
+| `reimagine/interfaces.md` | full inbound/outbound interface catalog                                                   |
+| `reimagine/entities.md`   | full domain/entity model + aggregate boundaries                                           |
+| `BUSINESS_RULES.md`       | RULE-001..058 with line-cited source evidence                                             |
+| `DATA_OBJECTS.md`         | DTO field types + persistence map                                                         |
+| `ASSESSMENT.md`           | inventory, debt, security findings, COCOMO                                                |
+| `MODERNIZATION_BRIEF.md`  | approved target stack, 5-phase plan, **18 resolved open questions**                       |
 
 > **Provenance note.** Phase A spec-mining was already complete and consolidated in `reimagine/*` against the current HEAD; the four FIX-driving structural claims (no centralized gate; `trace` ungated; weak generic redactor; 75/79 command count) were re-verified live on 2026-05-24 before this consolidation. No re-mining was performed because the source tree is unchanged.
 
@@ -29,43 +29,54 @@ A **local-first evidence CLI for Expo / React Native iOS work**. It inspects a r
 Derived from the 58 rules + the 75-command inbound surface. Grouped by capability, each tagged with the acceptance criteria (AC) that define "done". Default priority is the rule's own; **P0 = the 10 invariants that may never regress** (§5).
 
 ### C1 — Safety spine (the reason the tool exists) · **P0**
-- **C1.1 Fail-closed gate** — classify every action's side-effect (`read` / `device` / `runtime-eval`), deny non-reads unless policy/flag/token allows; unknown action ⇒ `device`. *(AC-001, AC-002, AC-005, AC-006, AC-007)*
-- **C1.2 Single redactor at the output boundary** — one strongest-superset redactor runs on every payload before stdout or disk. *(AC-003, AC-012)*
-- **C1.3 Runtime-eval is gated** — injected-JS paths (`wait --fn`, `trace`, mutating `inspector`) require policy or `--allow-runtime-eval`. *(AC-004, AC-010 FIX, AC-011 FIX)*
-- **C1.4 Loopback-only networking** — CDP WS and Metro probes only ever talk to `127.0.0.1|localhost|[::1]|::1`. *(AC-021, AC-030 FIX)*
-- **C1.5 Artifact-path confinement** — `--output-path` (HAR/screenshot/recording) must resolve under the artifacts root; reject `../`/absolute. *(AC-013 FIX)*
-- **C1.6 Run-record integrity** — persisting a run record is observational and may never change a command's exit code. *(AC-025 FIX)*
-- **C1.7 Confirmation tokens for source-writing actions** — bridge install/remove and overlay scaffold gate behind `--confirm-actions` tokens. *(AC-008)*
+
+- **C1.1 Fail-closed gate** — classify every action's side-effect (`read` / `device` / `runtime-eval`), deny non-reads unless policy/flag/token allows; unknown action ⇒ `device`. _(AC-001, AC-002, AC-005, AC-006, AC-007)_
+- **C1.2 Single redactor at the output boundary** — one strongest-superset redactor runs on every payload before stdout or disk. _(AC-003, AC-012)_
+- **C1.3 Runtime-eval is gated** — injected-JS paths (`wait --fn`, `trace`, mutating `inspector`) require policy or `--allow-runtime-eval`. _(AC-004, AC-010 FIX, AC-011 FIX)_
+- **C1.4 Loopback-only networking** — CDP WS and Metro probes only ever talk to `127.0.0.1|localhost|[::1]|::1`. _(AC-021, AC-030 FIX)_
+- **C1.5 Artifact-path confinement** — `--output-path` (HAR/screenshot/recording) must resolve under the artifacts root; reject `../`/absolute. _(AC-013 FIX)_
+- **C1.6 Run-record integrity** — persisting a run record is observational and may never change a command's exit code. _(AC-025 FIX)_
+- **C1.7 Confirmation tokens for source-writing actions** — bridge install/remove and overlay scaffold gate behind `--confirm-actions` tokens. _(AC-008)_
 
 ### C2 — Stable machine output contract (the agent/POSIX surface)
-- `--json` → `{ ok:true, data }` | `{ ok:false, error }`; `--plain` → stable line output; the two are mutually exclusive (else exit 2). `available:false`+`code`+`reason` for designed-unavailable evidence (exit 0). Exit codes `0/1/2`. Value flags require a value (exit 2). Output truncated at one canonical budget with one overflow marker. *(AC-015, AC-016, AC-041)*
+
+- `--json` → `{ ok:true, data }` | `{ ok:false, error }`; `--plain` → stable line output; the two are mutually exclusive (else exit 2). `available:false`+`code`+`reason` for designed-unavailable evidence (exit 0). Exit codes `0/1/2`. Value flags require a value (exit 2). Output truncated at one canonical budget with one overflow marker. _(AC-015, AC-016, AC-041)_
 - **New for the rewrite:** NDJSON **streaming progress** channel for long-running evidence commands (still redacted/truncated; final payload still capped). `--no-input` never-prompt guarantee. `--content-boundaries` untrusted-output wrapping.
 
 ### C3 — Discovery & project introspection (read-only)
-- Doctor/capability checks, dependency + Expo↔RN compatibility classification, Expo Router sitemap normalization, device listing, Expo/RN module + component-tree introspection. *(AC-020, AC-044, AC-055)*
+
+- Doctor/capability checks, dependency + Expo↔RN compatibility classification, Expo Router sitemap normalization, device listing, Expo/RN module + component-tree introspection. _(AC-020, AC-044, AC-055)_
 
 ### C4 — Evidence sessions (the stateful spine)
-- Session lifecycle (`new→close→clean`) owning an artifact namespace; stable device/app/Metro **target** identity with staleness on rediscovery; **snapshot** capture (semantic-bridge → native `axe` fallback) persisting addressable refs `@e1..@eN`; ref/get/find/wait over the latest snapshot. *(AC-017, AC-018, AC-019, AC-024, AC-026, AC-035, AC-036)*
+
+- Session lifecycle (`new→close→clean`) owning an artifact namespace; stable device/app/Metro **target** identity with staleness on rediscovery; **snapshot** capture (semantic-bridge → native `axe` fallback) persisting addressable refs `@e1..@eN`; ref/get/find/wait over the latest snapshot. _(AC-017, AC-018, AC-019, AC-024, AC-026, AC-035, AC-036)_
 
 ### C5 — App & simulator lifecycle (gated device mutations)
-- boot / open-url / launch / terminate / reload / install / uninstall / open-route / set-environment, each policy-gated; launch/reload attach crash evidence and fail closed on a post-launch crash within a non-zero grace window. *(AC-005, AC-029, AC-056 FIX)*
+
+- boot / open-url / launch / terminate / reload / install / uninstall / open-route / set-environment, each policy-gated; launch/reload attach crash evidence and fail closed on a post-launch crash within a non-zero grace window. _(AC-005, AC-029, AC-056 FIX)_
 
 ### C6 — Interaction & gestures (gated device mutations)
-- tap / gesture / ref-actions / keyboard / clipboard / screenshot, with signed-delta scroll/gesture plans, element-center targeting, and scroll-and-stitch full-page screenshots. *(AC-036, AC-037, AC-054)*
+
+- tap / gesture / ref-actions / keyboard / clipboard / screenshot, with signed-delta scroll/gesture plans, element-center targeting, and scroll-and-stitch full-page screenshots. _(AC-036, AC-037, AC-054)_
 
 ### C7 — In-app devtools bridge (dev-only, token+policy gated)
-- Install/remove a dev-only bridge; report install state (absent/present/stale/incompatible) and a real runtime-health state machine; gated storage/state/controls domain actions with redacted, size-bounded returns. *(AC-006, AC-008, AC-009, AC-027, AC-028 build-out)*
+
+- Install/remove a dev-only bridge; report install state (absent/present/stale/incompatible) and a real runtime-health state machine; gated storage/state/controls domain actions with redacted, size-bounded returns. _(AC-006, AC-008, AC-009, AC-027, AC-028 build-out)_
 
 ### C8 — Runtime & DevTools evidence
-- DevTools capabilities, bounded console/errors, navigation state (read) + nav mutations (gated), inspect/highlight, dev-menu, and the (now-gated) `trace`/`inspector`. *(AC-007, AC-010, AC-011, AC-039)*
+
+- DevTools capabilities, bounded console/errors, navigation state (read) + nav mutations (gated), inspect/highlight, dev-menu, and the (now-gated) `trace`/`inspector`. _(AC-007, AC-010, AC-011, AC-039)_
 
 ### C9 — Network & performance evidence
-- Metadata-only network waterfall + duplicates + redacted HAR + derived `ok`; perf summary/interaction/report/compare/budget/memgraph with fixed thresholds, direction-aware comparison, confidence rollup, and native `sample`/Instruments parsing. *(AC-022, AC-045, AC-046, AC-047, AC-048, AC-049 FIX, AC-050, AC-051, AC-052)*
+
+- Metadata-only network waterfall + duplicates + redacted HAR + derived `ok`; perf summary/interaction/report/compare/budget/memgraph with fixed thresholds, direction-aware comparison, confidence rollup, and native `sample`/Instruments parsing. _(AC-022, AC-045, AC-046, AC-047, AC-048, AC-049 FIX, AC-050, AC-051, AC-052)_
 
 ### C10 — Artifacts, review, observability & orchestration
-- record/diff/ux-context/annotate/review-overlay (+ hardened loopback HTTP server)/review-next/review/dashboard; **batch** fan-out (serial, bail-on-first-failure, exit-code-isolated) and **live-backlog** (source-derived command matrix, project-config inputs not baked fixtures). *(AC-014 FIX, AC-031, AC-032, AC-057, AC-058 FIX)*
+
+- record/diff/ux-context/annotate/review-overlay (+ hardened loopback HTTP server)/review-next/review/dashboard; **batch** fan-out (serial, bail-on-first-failure, exit-code-isolated) and **live-backlog** (source-derived command matrix, project-config inputs not baked fixtures). _(AC-014 FIX, AC-031, AC-032, AC-057, AC-058 FIX)_
 
 ### Capability priority rollup
+
 - **P0 (10):** the C1 safety-spine invariants → AC-001/002/003/005/006/007/010/011/012/013 (+ supporting AC-021/025/030).
 - **P1 (26) / P2 (22):** C3–C10 functional behaviors. Full mapping in `rules-gwt.md`.
 
@@ -76,6 +87,7 @@ Derived from the 58 rules + the 75-command inbound surface. Grouped by capabilit
 No database. Durable state is JSON under a per-invocation **state root** (default `<cwd>/.scratch/expo98`); `BridgeMetadata` is the one project-scoped exception (`<projectRoot>/.expo98/`). Target shape for the rewrite: **Effect `Schema` tagged structs**. Full field tables in `reimagine/entities.md` / `DATA_OBJECTS.md`.
 
 **Four independent aggregates** (cross-links by ID only):
+
 1. **Session** (root) — owns its active **Target**, all **Snapshots**, the latest **RefCache**, and embedded value objects (Ref, ScreenBox, SnapshotNode, SnapshotFilters, SemanticBridgeSnapshot, DeviceSummary, SidecarRecord). Invariants: `activeTargetId`→`target.json`, `lastSnapshotId`→an existing snapshot, `refs.json` mirrors `lastSnapshotId`.
 2. **RunRecord** — `running→completed|failed` audit of one invocation, keyed `<stateDir>/<runId>.json`, decoupled from sessions; write is observational.
 3. **BridgeMetadata** — project-scoped install marker + declared domains.
@@ -114,8 +126,9 @@ erDiagram
 expo98 is an **interactive local CLI** — "frequency" is per-invocation; latency is bounded by simulator/Metro/Hermes round-trips, not throughput. Full catalog in `reimagine/interfaces.md`.
 
 ### 3.1 Inbound — the two bins + global flags
+
 - Bins: `expo98` (primary) and `expo-ios` (pure re-export, no behavioral fork). Node ≥20.19.0 ESM, shebang `#!/usr/bin/env node`. Both names **preserved** in the rewrite.
-- Global flags (every command): `--json`, `--plain` (mutually exclusive→2), `--quiet`, `--root <dir>`, `--state-dir <dir>` *(legacy `runs`-parent quirk DROPPED — treated literally)*, `--action-policy <path>`, `--max-output <chars>`, `--allow-runtime-eval <bool>`, `--confirm-actions <list>`, `--record`, `--content-boundaries`, `--debug`, `--no-color`, `--no-input`, `--version`, `--help/-h`.
+- Global flags (every command): `--json`, `--plain` (mutually exclusive→2), `--quiet`, `--root <dir>`, `--state-dir <dir>` _(legacy `runs`-parent quirk DROPPED — treated literally)_, `--action-policy <path>`, `--max-output <chars>`, `--allow-runtime-eval <bool>`, `--confirm-actions <list>`, `--record`, `--content-boundaries`, `--debug`, `--no-color`, `--no-input`, `--version`, `--help/-h`.
 - Exit: `0` success · `1` runtime_failure · `2` invalid_usage.
 
 ### 3.2 Inbound — CLI command API (OpenAPI-style fragment)
@@ -161,7 +174,8 @@ envelope:
   designedUnavailable: { available: false, code, reason }  # exit 0
   streaming(--ndjson): "<one redacted JSON event per line; final payload still capped>"  # NEW
 ```
-*(Full 75-command table with output DTOs per command in `reimagine/interfaces.md §1.3`.)*
+
+_(Full 75-command table with output DTOs per command in `reimagine/interfaces.md §1.3`.)_
 
 ### 3.3 Inbound — overlay HTTP server (AsyncAPI/OpenAPI fragment)
 
@@ -177,7 +191,8 @@ paths:
       requestBody: application/json (validated comments[] schema)
       responses: { 200: { ok:true, eventsPath, eventCount }, 401|403: token/Origin reject, 404: not-found, 413: body too large }
 ```
-*This is the only inbound network listener (`annotation-server` is a dead tombstone; `dashboard` does not listen).*
+
+_This is the only inbound network listener (`annotation-server` is a dead tombstone; `dashboard` does not listen)._
 
 ### 3.4 Outbound — integration contracts
 
@@ -208,18 +223,18 @@ expo-integration:  # NEW — official Expo plugin SDK + @expo/config-plugins
 
 ## 4. Non-Functional Requirements (inferred from legacy)
 
-| NFR | Requirement | Source / rationale |
-|---|---|---|
-| **Workload shape** | Interactive, per-invocation; **no batch window, no throughput SLA, no p50/p95 corpus**. Tail latency = simulator/Metro/Hermes round-trips. | ASSESSMENT "Production Runtime Profile" (no telemetry; not a hosted/batch service). |
-| **Concurrency** | Single command per process; `batch` fans out **serially** (rewrite: in-process Effect fibers, still ordered, bail-on-first-failure, exit-code-isolated). | AC-031. |
-| **Latency bounds** | Every outbound call is time-bounded: CDP open `≤min(timeoutMs,2500)ms`; subprocess timeouts 2.5–120 s per call; WS/Metro per-fetch AbortController. | AC-053, AC-030. |
-| **Output bounds** | One canonical payload budget **40,000 chars** + one overflow marker; subprocess `maxBuffer` set **well above** the truncation limit (never clips legitimate output). | AC-041 (resolved Q#8). |
-| **Memory safety** | Overlay server hard body-size cap; bridge returns size-bounded (`MAX_OUTPUT=40000`, `MAX_ARRAY_ITEMS=1000`). | AC-014, AC-006. |
-| **Determinism** | JSON/plain/snapshot/package output is order-stable; ids collision-resistant + single timestamp format (rewrite). | AC-034 (resolved Q#16). |
-| **Portability / POSIX** | Node ≥20.19.0 ESM; exit codes 0/1/2; `--no-input` never prompts; both `expo98`+`expo-ios` bins. POSIX-compliant flag/exit semantics. | §3.1, command vision. |
-| **Dependency surface** | Target: **zero non-Effect runtime deps** (`ws` dropped → CDP over `@effect/platform`). Published `files`: `cli/`, `README.md`. | BRIEF Q#9. |
-| **Security posture** | Local-only tool; blast radius = operator machine/project. The 6 FIX items (AC-002/003/010/011/013/025 + AC-030) are the security-hardening floor and must be **structural**, not by-convention. | ASSESSMENT security findings. |
-| **Supply chain** | `pnpm minimumReleaseAge` delay preserved; pinned versions; argv-only subprocess (no shell ⇒ no CWE-78). | ASSESSMENT. |
+| NFR                     | Requirement                                                                                                                                                                                     | Source / rationale                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Workload shape**      | Interactive, per-invocation; **no batch window, no throughput SLA, no p50/p95 corpus**. Tail latency = simulator/Metro/Hermes round-trips.                                                      | ASSESSMENT "Production Runtime Profile" (no telemetry; not a hosted/batch service). |
+| **Concurrency**         | Single command per process; `batch` fans out **serially** (rewrite: in-process Effect fibers, still ordered, bail-on-first-failure, exit-code-isolated).                                        | AC-031.                                                                             |
+| **Latency bounds**      | Every outbound call is time-bounded: CDP open `≤min(timeoutMs,2500)ms`; subprocess timeouts 2.5–120 s per call; WS/Metro per-fetch AbortController.                                             | AC-053, AC-030.                                                                     |
+| **Output bounds**       | One canonical payload budget **40,000 chars** + one overflow marker; subprocess `maxBuffer` set **well above** the truncation limit (never clips legitimate output).                            | AC-041 (resolved Q#8).                                                              |
+| **Memory safety**       | Overlay server hard body-size cap; bridge returns size-bounded (`MAX_OUTPUT=40000`, `MAX_ARRAY_ITEMS=1000`).                                                                                    | AC-014, AC-006.                                                                     |
+| **Determinism**         | JSON/plain/snapshot/package output is order-stable; ids collision-resistant + single timestamp format (rewrite).                                                                                | AC-034 (resolved Q#16).                                                             |
+| **Portability / POSIX** | Node ≥20.19.0 ESM; exit codes 0/1/2; `--no-input` never prompts; both `expo98`+`expo-ios` bins. POSIX-compliant flag/exit semantics.                                                            | §3.1, command vision.                                                               |
+| **Dependency surface**  | Target: **zero non-Effect runtime deps** (`ws` dropped → CDP over `@effect/platform`). Published `files`: `cli/`, `README.md`.                                                                  | BRIEF Q#9.                                                                          |
+| **Security posture**    | Local-only tool; blast radius = operator machine/project. The 6 FIX items (AC-002/003/010/011/013/025 + AC-030) are the security-hardening floor and must be **structural**, not by-convention. | ASSESSMENT security findings.                                                       |
+| **Supply chain**        | `pnpm minimumReleaseAge` delay preserved; pinned versions; argv-only subprocess (no shell ⇒ no CWE-78).                                                                                         | ASSESSMENT.                                                                         |
 
 ---
 
@@ -229,22 +244,23 @@ expo-integration:  # NEW — official Expo plugin SDK + @expo/config-plugins
 
 ### P0 — the 10 invariants that may never regress
 
-| AC | Invariant | Decision |
-|---|---|---|
-| AC-001 | State-changing actions denied unless policy allows the exact action; reads always pass | PRESERVE |
-| AC-002 | ONE side-effect classifier (read/device/runtime-eval); unknown ⇒ device | **FIX** (unify 3 copies) |
-| AC-003 | ONE redactor (strongest key superset) at the single output boundary | **FIX** (3 → 1) |
-| AC-005 | boot/launch/terminate/reload/install/uninstall gated; denial does zero `xcrun`/`simctl` | PRESERVE |
-| AC-006 | storage/state/controls writes gated; return redacted + bounded; defense-in-depth re-check | PRESERVE |
-| AC-007 | nav `state` ungated read; back/pop-to-root/tab/deep-link gated | PRESERVE |
-| AC-010 | `trace` (injects JS) classified `runtime-eval` and gated | **FIX** (legacy ungated) |
-| AC-011 | `inspector` mutating actions gated; reads classified read | **FIX** (legacy gates only open-dev-menu) |
-| AC-012 | auth headers / cookies / secret query stripped before network evidence / HAR / route URL leaves | PRESERVE (fold into AC-003) |
-| AC-013 | `--output-path` resolves under artifacts root; reject `../`/absolute | **FIX** (legacy unconfined) |
+| AC     | Invariant                                                                                       | Decision                                  |
+| ------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| AC-001 | State-changing actions denied unless policy allows the exact action; reads always pass          | PRESERVE                                  |
+| AC-002 | ONE side-effect classifier (read/device/runtime-eval); unknown ⇒ device                         | **FIX** (unify 3 copies)                  |
+| AC-003 | ONE redactor (strongest key superset) at the single output boundary                             | **FIX** (3 → 1)                           |
+| AC-005 | boot/launch/terminate/reload/install/uninstall gated; denial does zero `xcrun`/`simctl`         | PRESERVE                                  |
+| AC-006 | storage/state/controls writes gated; return redacted + bounded; defense-in-depth re-check       | PRESERVE                                  |
+| AC-007 | nav `state` ungated read; back/pop-to-root/tab/deep-link gated                                  | PRESERVE                                  |
+| AC-010 | `trace` (injects JS) classified `runtime-eval` and gated                                        | **FIX** (legacy ungated)                  |
+| AC-011 | `inspector` mutating actions gated; reads classified read                                       | **FIX** (legacy gates only open-dev-menu) |
+| AC-012 | auth headers / cookies / secret query stripped before network evidence / HAR / route URL leaves | PRESERVE (fold into AC-003)               |
+| AC-013 | `--output-path` resolves under artifacts root; reject `../`/absolute                            | **FIX** (legacy unconfined)               |
 
 **Promoted into the regression floor (release-gating):** AC-021 (loopback Metro), AC-030 (loopback CDP, FIX), AC-025 (run-record observational, FIX).
 
 ### FIX vs PRESERVE summary
+
 - **FIX (intentional divergence — new assertion tests, not equivalence):** AC-002, AC-003, AC-010, AC-011, AC-013, AC-014, AC-025, AC-030, AC-049, AC-056, AC-058 (+ AC-008 consistency, AC-020 data-location, AC-028 build-out, AC-047 exact frame budgets, AC-034 ids).
 - **PRESERVE (faithful re-spec — equivalence vs legacy):** everything else, notably AC-001/005/006/007/012 and the calculation rules AC-035–055.
 

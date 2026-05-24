@@ -24,16 +24,8 @@
  */
 
 // AC-042 — payload summaries (run-record slice(0,40) + backlog slice(0,20)).
-export {
-  type BacklogSummary,
-  summarizeBacklogPayload,
-  summarizeRunRecordPayload
-} from "./summary.js"
-export {
-  BACKLOG_SUMMARY_KEY_CAP,
-  descriptor,
-  RUN_RECORD_SUMMARY_KEY_CAP
-} from "./support.js"
+export { type BacklogSummary, summarizeBacklogPayload, summarizeRunRecordPayload } from "./summary.js"
+export { BACKLOG_SUMMARY_KEY_CAP, descriptor, RUN_RECORD_SUMMARY_KEY_CAP } from "./support.js"
 
 // AC-057 / AC-058 — live-backlog (generate / matrix / run).
 export {
@@ -69,39 +61,20 @@ export {
   RUNTIME_REQUIREMENTS,
   type RuntimeRequirement,
   type SubstitutionMap,
-  type SubstitutionResolution
+  type SubstitutionResolution,
 } from "./live-backlog.js"
 
 // diff (snapshot / screenshot, --baseline) — read.
-export {
-  diffCommand,
-  type DiffArgs,
-  type DiffKind,
-  type DiffResult
-} from "./diff.js"
+export { diffCommand, type DiffArgs, type DiffKind, type DiffResult } from "./diff.js"
 
 // ux-context (--include-screenshot/-runtime/-hierarchy/-logs) — read.
-export {
-  type UxContextArgs,
-  uxContextCommand,
-  type UxContextResult,
-  type UxFacet
-} from "./ux-context.js"
+export { type UxContextArgs, uxContextCommand, type UxContextResult, type UxFacet } from "./ux-context.js"
 
 // review-next (--surface / --stage / --issue) — read.
-export {
-  type ReviewNextArgs,
-  reviewNextCommand,
-  type ReviewNextResult
-} from "./review-next.js"
+export { type ReviewNextArgs, reviewNextCommand, type ReviewNextResult } from "./review-next.js"
 
 // review (report / matrix) — read.
-export {
-  type ReviewArgs,
-  reviewCommand,
-  type ReviewResult,
-  type ReviewVerb
-} from "./review.js"
+export { type ReviewArgs, reviewCommand, type ReviewResult, type ReviewVerb } from "./review.js"
 
 // dashboard (start / stop / report — file/state only, NO network listener) — read.
 export {
@@ -109,5 +82,5 @@ export {
   dashboardCommand,
   type DashboardResult,
   type DashboardStatus,
-  type DashboardVerb
+  type DashboardVerb,
 } from "./dashboard.js"

@@ -43,9 +43,7 @@ interface MemState {
 const normalize = (p: string): string => {
   // Collapse duplicate slashes and strip a trailing slash (except root).
   const collapsed = p.replace(/\/+/g, "/")
-  return collapsed.length > 1 && collapsed.endsWith("/")
-    ? collapsed.slice(0, -1)
-    : collapsed
+  return collapsed.length > 1 && collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed
 }
 
 const parentOf = (p: string): string => {
@@ -80,9 +78,7 @@ export const makeMemoryFs = (): Effect.Effect<FsPort> =>
         const s = yield* Ref.get(state)
         const c = s.files.get(normalize(path))
         if (c === undefined) {
-          return yield* Effect.fail(
-            new StorageFailure({ op: "read", path, reason: "ENOENT" })
-          )
+          return yield* Effect.fail(new StorageFailure({ op: "read", path, reason: "ENOENT" }))
         }
         return c
       })
@@ -116,9 +112,7 @@ export const makeMemoryFs = (): Effect.Effect<FsPort> =>
         const s = yield* Ref.get(state)
         const dir = normalize(path)
         if (!s.dirs.has(dir)) {
-          return yield* Effect.fail(
-            new StorageFailure({ op: "list", path, reason: "ENOENT" })
-          )
+          return yield* Effect.fail(new StorageFailure({ op: "list", path, reason: "ENOENT" }))
         }
         const prefix = dir === "/" ? "/" : dir + "/"
         const children = new Set<string>()

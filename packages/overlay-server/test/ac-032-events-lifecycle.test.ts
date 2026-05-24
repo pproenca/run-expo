@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest"
 /**
  * AC-032 — Review-overlay events file is created/reset then appended.
  *
@@ -12,14 +13,8 @@
  * fs-backed store over the domain `Fs` port (in-memory `MemoryFsLayer`).
  */
 import { Fs, MemoryFsLayer } from "@expo98/domain"
-import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import {
-  EventsStoreTag,
-  makeFsEventsStore,
-  memoryEventsStoreLayer,
-  NO_EVENTS_FILE_REASON
-} from "../src/index.js"
+import { EventsStoreTag, makeFsEventsStore, memoryEventsStoreLayer, NO_EVENTS_FILE_REASON } from "../src/index.js"
 
 const event = (id: string) => ({ id, createdAt: "2026-05-24T00:00:00.000Z", kind: "comment", payload: {} })
 
@@ -30,15 +25,15 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       const file = yield* store.prepare({
         title: "My Review",
         reset: false,
-        now: "2026-05-24T10:00:00.000Z"
+        now: "2026-05-24T10:00:00.000Z",
       })
       expect(file).toEqual({
         version: 1,
         title: "My Review",
         createdAt: "2026-05-24T10:00:00.000Z",
-        events: []
+        events: [],
       })
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("prepare with reset → rewrites a fresh file even when one exists", () =>
@@ -50,12 +45,12 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       const reset = yield* store.prepare({
         title: "Second",
         reset: true,
-        now: "2026-05-24T11:00:00.000Z"
+        now: "2026-05-24T11:00:00.000Z",
       })
       expect(reset.title).toBe("Second")
       expect(reset.createdAt).toBe("2026-05-24T11:00:00.000Z")
       expect(reset.events).toHaveLength(0)
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("prepare WITHOUT reset on an existing file → leaves events untouched", () =>
@@ -66,13 +61,13 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       const again = yield* store.prepare({
         title: "Ignored",
         reset: false,
-        now: "2026-05-24T12:00:00.000Z"
+        now: "2026-05-24T12:00:00.000Z",
       })
       // No reset → original title/createdAt + the appended event are preserved.
       expect(again.title).toBe("Keep")
       expect(again.createdAt).toBe("2026-05-24T10:00:00.000Z")
       expect(again.events).toHaveLength(1)
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("append → pushes to events[] and sets updatedAt", () =>
@@ -86,7 +81,7 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       expect(r2.eventCount).toBe(2)
       expect(r2.file.updatedAt).toBe("2026-05-24T10:06:00.000Z")
       expect(r2.file.events.map((e) => e.id)).toEqual(["evt-1", "evt-2"])
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("read with NO file → unavailable with the exact reason", () =>
@@ -98,7 +93,7 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
         expect(r.reason).toBe(NO_EVENTS_FILE_REASON)
         expect(r.reason).toBe("No review overlay events file exists.")
       }
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("read after prepare → available with the file", () =>
@@ -108,7 +103,7 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       const r = yield* store.read
       expect(r.available).toBe(true)
       if (r.available) expect(r.file.title).toBe("Readable")
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("clear → removes the file; subsequent read is unavailable", () =>
@@ -119,7 +114,7 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       yield* store.clear
       const r = yield* store.read
       expect(r.available).toBe(false)
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 
   it.effect("clear when no file exists → idempotent no-op", () =>
@@ -128,7 +123,7 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       yield* store.clear // does not fail
       const r = yield* store.read
       expect(r.available).toBe(false)
-    }).pipe(Effect.provide(memoryEventsStoreLayer))
+    }).pipe(Effect.provide(memoryEventsStoreLayer)),
   )
 })
 
@@ -160,7 +155,7 @@ describe("AC-032 events lifecycle (fs-backed store over the domain Fs port)", ()
       // clear removes it from the Fs
       yield* store.clear
       expect(yield* fs.exists(eventsPath)).toBe(false)
-    }).pipe(Effect.provide(MemoryFsLayer))
+    }).pipe(Effect.provide(MemoryFsLayer)),
   )
 
   it.effect("a corrupt events.json on disk → read fails with CorruptEventsFile", () =>
@@ -170,7 +165,7 @@ describe("AC-032 events lifecycle (fs-backed store over the domain Fs port)", ()
       const store = yield* makeFsEventsStore(eventsPath)
       const failure = yield* store.read.pipe(Effect.flip)
       expect(failure._tag).toBe("CorruptEventsFile")
-    }).pipe(Effect.provide(MemoryFsLayer))
+    }).pipe(Effect.provide(MemoryFsLayer)),
   )
 })
 

@@ -2,7 +2,7 @@
 
 **Question (from REIMAGINED_ARCHITECTURE.md §4 / S9):** can `@effect/platform`'s `Socket`
 (its WebSocket client) set a **connect-time `Origin` request header** on the outbound
-handshake? AC-030 requires the CDP client to send `Origin: http://127.0.0.1[:port]` *at connect*.
+handshake? AC-030 requires the CDP client to send `Origin: http://127.0.0.1[:port]` _at connect_.
 
 ## Method
 
@@ -21,20 +21,23 @@ File: `node_modules/.pnpm/@effect+platform@0.96.1_effect@3.21.2/node_modules/@ef
 export declare const WebSocketConstructor: Context.Tag<
   WebSocketConstructor,
   (url: string, protocols?: string | Array<string> | undefined) => globalThis.WebSocket
->;
+>
 
 // The high-level constructor — options have NO headers/Origin field:
-export declare const makeWebSocket: (url: string | Effect.Effect<string>, options?: {
-  readonly closeCodeIsError?: ((code: number) => boolean) | undefined;
-  readonly openTimeout?: DurationInput | undefined;     // <-- bounded-open lives here
-  readonly protocols?: string | Array<string> | undefined;
-}) => Effect.Effect<Socket, never, WebSocketConstructor>;
+export declare const makeWebSocket: (
+  url: string | Effect.Effect<string>,
+  options?: {
+    readonly closeCodeIsError?: ((code: number) => boolean) | undefined
+    readonly openTimeout?: DurationInput | undefined // <-- bounded-open lives here
+    readonly protocols?: string | Array<string> | undefined
+  },
+) => Effect.Effect<Socket, never, WebSocketConstructor>
 
 // The escape hatch still yields a globalThis.WebSocket (browser WebSocket API — no header ctor):
 export declare const fromWebSocket: <RO>(
   acquire: Effect.Effect<globalThis.WebSocket, SocketError, RO>,
-  options?: { readonly closeCodeIsError?: (code: number) => boolean; readonly openTimeout?: DurationInput }
-) => Effect.Effect<Socket, never, Exclude<RO, Scope.Scope>>;
+  options?: { readonly closeCodeIsError?: (code: number) => boolean; readonly openTimeout?: DurationInput },
+) => Effect.Effect<Socket, never, Exclude<RO, Scope.Scope>>
 ```
 
 `grep -ni "origin\|header" Socket.d.ts` → **zero matches.**
@@ -42,7 +45,7 @@ export declare const fromWebSocket: <RO>(
 The `WebSocketConstructor` tag's value type is `(url, protocols?) => globalThis.WebSocket`. The
 standard `globalThis.WebSocket` (WHATWG/browser API) has **no constructor mechanism for arbitrary
 connect-time request headers** — `Origin` is forbidden to set on the browser API and is not a ctor
-parameter. So even though you can swap the constructor, the *type contract* of the seam can't carry
+parameter. So even though you can swap the constructor, the _type contract_ of the seam can't carry
 an `Origin` header.
 
 ### 2. `@effect/platform-node` — same surface, no header escape
@@ -50,10 +53,13 @@ an `Origin` header.
 File: `node_modules/.pnpm/@effect+platform-node@0.106.0_.../@effect/platform-node/dist/dts/NodeSocket.d.ts`
 
 ```ts
-export declare const layerWebSocket: (url: string, options?: {
-  readonly closeCodeIsError?: (code: number) => boolean;
-}) => Layer.Layer<Socket.Socket>;
-export declare const layerWebSocketConstructor: Layer.Layer<Socket.WebSocketConstructor>;
+export declare const layerWebSocket: (
+  url: string,
+  options?: {
+    readonly closeCodeIsError?: (code: number) => boolean
+  },
+) => Layer.Layer<Socket.Socket>
+export declare const layerWebSocketConstructor: Layer.Layer<Socket.WebSocketConstructor>
 ```
 
 `platform-node-shared/NodeSocket.d.ts` adds `makeNet` / `fromDuplex` (raw TCP sockets) — these speak

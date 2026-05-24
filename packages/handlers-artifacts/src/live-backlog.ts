@@ -30,17 +30,13 @@ import { descriptor } from "./support.js"
 // ──────────────────────────────────────────────────────────────────────────
 
 /** The matrix placeholders the runner substitutes (AC-058). */
-export type BacklogPlaceholder =
-  | "__METRO_PORT__"
-  | "__BUNDLE_ID__"
-  | "__DEVICE__"
-  | "__DEV_CLIENT_URL__"
+export type BacklogPlaceholder = "__METRO_PORT__" | "__BUNDLE_ID__" | "__DEVICE__" | "__DEV_CLIENT_URL__"
 
 export const BACKLOG_PLACEHOLDERS: ReadonlyArray<BacklogPlaceholder> = [
   "__METRO_PORT__",
   "__BUNDLE_ID__",
   "__DEVICE__",
-  "__DEV_CLIENT_URL__"
+  "__DEV_CLIENT_URL__",
 ]
 
 /**
@@ -64,13 +60,10 @@ export class MissingBacklogInput extends Error {
   readonly _tag = "MissingBacklogInput" as const
   readonly placeholder: BacklogPlaceholder
   readonly inputName: "bundleId" | "device" | "devClientUrl"
-  constructor(
-    placeholder: BacklogPlaceholder,
-    inputName: "bundleId" | "device" | "devClientUrl"
-  ) {
+  constructor(placeholder: BacklogPlaceholder, inputName: "bundleId" | "device" | "devClientUrl") {
     super(
       `Live-backlog placeholder ${placeholder} requires the project input "${inputName}". ` +
-        `Provide it via project config — there is no baked default.`
+        `Provide it via project config — there is no baked default.`,
     )
     this.placeholder = placeholder
     this.inputName = inputName
@@ -94,16 +87,13 @@ export type ResolvedSubstitution =
   | { readonly _tag: "resolved"; readonly placeholder: BacklogPlaceholder; readonly value: string }
   | { readonly _tag: "missing"; readonly error: MissingBacklogInput }
 
-export const resolveSubstitution = (
-  placeholder: BacklogPlaceholder,
-  inputs: BacklogInputs
-): ResolvedSubstitution => {
+export const resolveSubstitution = (placeholder: BacklogPlaceholder, inputs: BacklogInputs): ResolvedSubstitution => {
   switch (placeholder) {
     case "__METRO_PORT__":
       return {
         _tag: "resolved",
         placeholder,
-        value: String(resolveMetroPort(inputs.metroPort))
+        value: String(resolveMetroPort(inputs.metroPort)),
       }
     case "__BUNDLE_ID__":
       return inputs.bundleId === undefined || inputs.bundleId === ""
@@ -133,9 +123,7 @@ export type SubstitutionResolution =
   | { readonly _tag: "ok"; readonly map: SubstitutionMap }
   | { readonly _tag: "missing"; readonly errors: ReadonlyArray<MissingBacklogInput> }
 
-export const resolveSubstitutions = (
-  inputs: BacklogInputs
-): SubstitutionResolution => {
+export const resolveSubstitutions = (inputs: BacklogInputs): SubstitutionResolution => {
   const values: Partial<Record<BacklogPlaceholder, string>> = {}
   const errors: Array<MissingBacklogInput> = []
   for (const placeholder of BACKLOG_PLACEHOLDERS) {
@@ -156,10 +144,7 @@ export const resolveSubstitutions = (
  * Apply a resolved substitution map to a single template argv token. Every
  * occurrence of every placeholder is replaced; non-placeholder text is untouched.
  */
-export const applySubstitutions = (
-  token: string,
-  map: SubstitutionMap
-): string => {
+export const applySubstitutions = (token: string, map: SubstitutionMap): string => {
   let out = token
   for (const placeholder of BACKLOG_PLACEHOLDERS) {
     out = out.split(placeholder).join(map.values[placeholder])
@@ -172,17 +157,13 @@ export const applySubstitutions = (
 // ──────────────────────────────────────────────────────────────────────────
 
 /** The runtime requirements a row can declare (AC-057 requirement set). */
-export type RuntimeRequirement =
-  | "metro"
-  | "metro-message"
-  | "hermes-target"
-  | "app-bridge"
+export type RuntimeRequirement = "metro" | "metro-message" | "hermes-target" | "app-bridge"
 
 export const RUNTIME_REQUIREMENTS: ReadonlyArray<RuntimeRequirement> = [
   "metro",
   "metro-message",
   "hermes-target",
-  "app-bridge"
+  "app-bridge",
 ]
 
 /** The AC-057 classification labels. */
@@ -217,10 +198,7 @@ export interface LiveEvidenceSignal {
 
 /** Does the signal indicate ANY live evidence? (AC-057 parameter set.) */
 export const hasLiveEvidence = (signal: LiveEvidenceSignal): boolean =>
-  signal.hasTargets ||
-  signal.hasCdpCalls ||
-  signal.hasWsUrls ||
-  signal.hasRunningPackager
+  signal.hasTargets || signal.hasCdpCalls || signal.hasWsUrls || signal.hasRunningPackager
 
 /** The evidence a single executed backlog row produces. */
 export interface RowEvidence {
@@ -243,7 +221,7 @@ export interface RowEvidence {
 const DESIGNED_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   "policy-denied",
   "external-annotation-server-removed",
-  "designed-unavailable"
+  "designed-unavailable",
 ])
 
 /** Codes whose `available:false` reflects a missing live environment. */
@@ -255,7 +233,7 @@ const ENVIRONMENT_CODES: ReadonlySet<string> = new Set([
   "incompatible-project",
   "unavailable-bridge",
   "version-mismatch",
-  "missing-domain"
+  "missing-domain",
 ])
 
 /**
@@ -335,32 +313,32 @@ export const BACKLOG_TEMPLATE: ReadonlyArray<BacklogTemplateRow> = [
     id: "metro-status",
     command: "metro",
     argv: ["status", "--metro-port", "__METRO_PORT__"],
-    requirements: ["metro"]
+    requirements: ["metro"],
   },
   {
     id: "launch-app",
     command: "launch-app",
     argv: ["--bundle-id", "__BUNDLE_ID__", "--device", "__DEVICE__", "--crash-check-ms", "1000"],
-    requirements: ["app-bridge"]
+    requirements: ["app-bridge"],
   },
   {
     id: "open-route",
     command: "open-route",
     argv: ["--dev-client-url", "__DEV_CLIENT_URL__"],
-    requirements: ["metro-message"]
+    requirements: ["metro-message"],
   },
   {
     id: "routes",
     command: "routes",
     argv: ["--cwd", "."],
-    requirements: []
+    requirements: [],
   },
   {
     id: "console",
     command: "console",
     argv: ["--metro-port", "__METRO_PORT__"],
-    requirements: ["hermes-target"]
-  }
+    requirements: ["hermes-target"],
+  },
 ]
 
 /** A fully-substituted matrix row, ready to execute. */
@@ -390,8 +368,8 @@ export const buildMatrix = (inputs: BacklogInputs): BacklogMatrixResult => {
       id: row.id,
       command: row.command,
       argv: row.argv.map((token) => applySubstitutions(token, map)),
-      requirements: row.requirements
-    })
+      requirements: row.requirements,
+    }),
   )
   return { _tag: "ok", rows }
 }
@@ -453,18 +431,15 @@ export interface BacklogRunResult {
  * `live-backlog generate` — emit the source-derived template (read). No project
  * inputs needed: the template carries placeholders, not values.
  */
-export const liveBacklogGenerateCommand = (): Command<
-  "read",
-  BacklogGenerateResult
-> =>
+export const liveBacklogGenerateCommand = (): Command<"read", BacklogGenerateResult> =>
   command(
     descriptor("live-backlog.generate", "read"),
     Effect.succeed<BacklogGenerateResult>({
       action: "live-backlog.generate",
       verb: "generate",
       template: BACKLOG_TEMPLATE,
-      placeholders: BACKLOG_PLACEHOLDERS
-    })
+      placeholders: BACKLOG_PLACEHOLDERS,
+    }),
   )
 
 /**
@@ -472,9 +447,7 @@ export const liveBacklogGenerateCommand = (): Command<
  * AC-058). A missing required input yields `available:false` with the list of
  * missing inputs — never a baked fixture.
  */
-export const liveBacklogMatrixCommand = (
-  inputs: BacklogInputs
-): Command<"read", BacklogMatrixCommandResult> =>
+export const liveBacklogMatrixCommand = (inputs: BacklogInputs): Command<"read", BacklogMatrixCommandResult> =>
   command(
     descriptor("live-backlog.matrix", "read"),
     Effect.sync<BacklogMatrixCommandResult>(() => {
@@ -486,7 +459,7 @@ export const liveBacklogMatrixCommand = (
           available: false,
           rows: [],
           missing: result.errors.map((e) => e.inputName),
-          reason: result.errors.map((e) => e.message).join(" ")
+          reason: result.errors.map((e) => e.message).join(" "),
         }
       }
       return {
@@ -494,9 +467,9 @@ export const liveBacklogMatrixCommand = (
         verb: "matrix",
         available: true,
         rows: result.rows,
-        missing: []
+        missing: [],
       }
-    })
+    }),
   )
 
 /**
@@ -514,7 +487,7 @@ export type RowEvidenceMap = Readonly<Record<string, RowEvidence>>
  */
 export const liveBacklogRunCommand = (
   inputs: BacklogInputs,
-  evidence: RowEvidenceMap
+  evidence: RowEvidenceMap,
 ): Command<"read", BacklogRunResult> =>
   command(
     descriptor("live-backlog.run", "read"),
@@ -529,7 +502,7 @@ export const liveBacklogRunCommand = (
           rows: [],
           missing: result.errors.map((e) => e.inputName),
           reason: result.errors.map((e) => e.message).join(" "),
-          summary: summarizeBacklogPayload(empty)
+          summary: summarizeBacklogPayload(empty),
         }
       }
       const rows = result.rows.map((row): BacklogRunRowResult => {
@@ -547,7 +520,7 @@ export const liveBacklogRunCommand = (
           command: row.command,
           argv: row.argv,
           classification,
-          exitCode: rowEvidence?.exitCode ?? 0
+          exitCode: rowEvidence?.exitCode ?? 0,
         }
       })
       const payload = { action: "live-backlog.run", verb: "run" as const, rows }
@@ -557,7 +530,7 @@ export const liveBacklogRunCommand = (
         available: true,
         rows,
         missing: [],
-        summary: summarizeBacklogPayload(payload)
+        summary: summarizeBacklogPayload(payload),
       }
-    })
+    }),
   )

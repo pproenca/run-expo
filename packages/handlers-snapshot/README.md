@@ -7,12 +7,12 @@ or device, so no handler ever needs one of core's dangerous capability tags in `
 
 ## What it owns
 
-| Area | Verbs | AC |
-|---|---|---|
-| `snapshot` | capture orchestration | AC-019, AC-026 |
-| `snapshot` | depth filter | AC-040 |
-| `accessibility` | `tree` · `audit` | AC-023 |
-| `rn` | `tree` · `refs` · `renders` · `inspect` | AC-055 |
+| Area            | Verbs                                   | AC             |
+| --------------- | --------------------------------------- | -------------- |
+| `snapshot`      | capture orchestration                   | AC-019, AC-026 |
+| `snapshot`      | depth filter                            | AC-040         |
+| `accessibility` | `tree` · `audit`                        | AC-023         |
+| `rn`            | `tree` · `refs` · `renders` · `inspect` | AC-055         |
 
 ## The capture capability seam (read-only, injected)
 
@@ -54,18 +54,18 @@ invariants** (`activeTargetId`→target.json, `lastSnapshotId`→snapshot file,
 
 ## AC → test map
 
-| AC | Test file | What it proves |
-|---|---|---|
-| **AC-019** | `test/snapshot.test.ts` | each prerequisite miss (no session / no active target / missing `device.id`) → `available:false` with the matching reason and **zero artifacts on the in-memory fs**; semantic path persists; native `axe` fallback persists when the bridge is absent; `axe` absent → `no-axe` (no artifacts); native run failure → `transport-failure`. |
-| **AC-026** | `test/snapshot.test.ts` | end-to-end capture via domain's real `PersistenceService` + in-memory fs persists `snapshots/<id>.json` + `refs.json`, sets `lastSnapshotId` (asserted on the returned AND reloaded session), refs are `@e1..@eN` with `stale:false`, and **`verifyInvariants` succeeds — confirming the 3 Session pointer invariants hold** for both the semantic and native paths. |
-| **AC-040** | `test/depth-filter.test.ts` | `resolveDepth`: `null`/`undefined` → unbounded, else `clamp(1,100)`; `filterByDepth`: `null` keeps all, depth 0 keeps only the root, depth N prunes deeper (root depth 0). |
-| **AC-023** | `test/accessibility.test.ts` | `interactive-name` flags refs with `actions.length>0 && !label && !text` (incl. empty-string label/text); does NOT flag named or non-interactive refs; emits the exact `{ref, rule, message}`; no ref cache → `available:false`; verified both as a pure projection and END-TO-END through `dispatch` (read path, ungated). |
-| **AC-055** | `test/rn.test.ts` | depth/node caps, ancestor `slice(0,40)→slice(16,24)`, control `slice(0,80)`, record `slice(0,60)`, action `slice(0,10)`, `round` (incl. `0.1+0.2`); per-verb `tree`/`refs`/`renders`/`inspect` projections; missing element / no graph → `available:false`. |
+| AC         | Test file                    | What it proves                                                                                                                                                                                                                                                                                                                                                       |
+| ---------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-019** | `test/snapshot.test.ts`      | each prerequisite miss (no session / no active target / missing `device.id`) → `available:false` with the matching reason and **zero artifacts on the in-memory fs**; semantic path persists; native `axe` fallback persists when the bridge is absent; `axe` absent → `no-axe` (no artifacts); native run failure → `transport-failure`.                            |
+| **AC-026** | `test/snapshot.test.ts`      | end-to-end capture via domain's real `PersistenceService` + in-memory fs persists `snapshots/<id>.json` + `refs.json`, sets `lastSnapshotId` (asserted on the returned AND reloaded session), refs are `@e1..@eN` with `stale:false`, and **`verifyInvariants` succeeds — confirming the 3 Session pointer invariants hold** for both the semantic and native paths. |
+| **AC-040** | `test/depth-filter.test.ts`  | `resolveDepth`: `null`/`undefined` → unbounded, else `clamp(1,100)`; `filterByDepth`: `null` keeps all, depth 0 keeps only the root, depth N prunes deeper (root depth 0).                                                                                                                                                                                           |
+| **AC-023** | `test/accessibility.test.ts` | `interactive-name` flags refs with `actions.length>0 && !label && !text` (incl. empty-string label/text); does NOT flag named or non-interactive refs; emits the exact `{ref, rule, message}`; no ref cache → `available:false`; verified both as a pure projection and END-TO-END through `dispatch` (read path, ungated).                                          |
+| **AC-055** | `test/rn.test.ts`            | depth/node caps, ancestor `slice(0,40)→slice(16,24)`, control `slice(0,80)`, record `slice(0,60)`, action `slice(0,10)`, `round` (incl. `0.1+0.2`); per-verb `tree`/`refs`/`renders`/`inspect` projections; missing element / no graph → `available:false`.                                                                                                          |
 
 ### Skipped (require a live device)
 
 - `test/snapshot.test.ts` — `it.skip("AC-019 live capture against a running app /
-  Hermes / axe ...")`. Needs a running Metro + Hermes target OR an installed `axe`
+Hermes / axe ...")`. Needs a running Metro + Hermes target OR an installed `axe`
   CLI against a booted simulator. All pure orchestration + persistence is covered
   above with the in-memory fs and the injected semantic/native SEAM fakes.
 

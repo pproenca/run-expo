@@ -12,12 +12,7 @@
  */
 import { command, type Command, RuntimeEvalCapability } from "@expo98/core"
 import { Effect, Match } from "effect"
-import {
-  descriptor,
-  EVAL_TIMEOUT_MS,
-  resolveMaxEvents,
-  resolveMetroPort
-} from "./support.js"
+import { descriptor, EVAL_TIMEOUT_MS, resolveMaxEvents, resolveMetroPort } from "./support.js"
 
 /** The trace verbs. */
 export type TraceVerb = "start" | "read" | "clear" | "stop"
@@ -32,7 +27,7 @@ export const traceSideEffect = (verb: TraceVerb): "runtime-eval" =>
     Match.when("read", () => "runtime-eval" as const),
     Match.when("clear", () => "runtime-eval" as const),
     Match.when("stop", () => "runtime-eval" as const),
-    Match.exhaustive
+    Match.exhaustive,
   )
 
 export interface TraceArgs {
@@ -59,10 +54,7 @@ export interface TraceResult {
  * and the gate passed; a `read` descriptor would make the `.evaluate(...)` call
  * a compile error (proven in `trace.type-test.ts`).
  */
-export const traceCommand = (
-  verb: TraceVerb,
-  args: TraceArgs = {}
-): Command<"runtime-eval", TraceResult> => {
+export const traceCommand = (verb: TraceVerb, args: TraceArgs = {}): Command<"runtime-eval", TraceResult> => {
   const maxEvents = resolveMaxEvents(args.maxEvents)
   const metroPort = resolveMetroPort(args.metroPort)
   const action = `trace.${verb}`
@@ -78,9 +70,9 @@ export const traceCommand = (
           maxEvents,
           metroPort,
           timeoutMs: EVAL_TIMEOUT_MS,
-          value
-        })
-      )
-    )
+          value,
+        }),
+      ),
+    ),
   )
 }

@@ -5,7 +5,7 @@ import {
   makeSessionId,
   makeSnapshotId,
   normalizeSessionName,
-  parseDuration
+  parseDuration,
 } from "../src/naming.js"
 
 // ===========================================================================
@@ -18,30 +18,26 @@ describe("AC-043 session-name normalisation", () => {
       expect(yield* normalizeSessionName("  Hello   World  ")).toBe("hello-world")
       expect(yield* normalizeSessionName("a__b.c-d")).toBe("a__b.c-d") // _ . - kept
       expect(yield* normalizeSessionName("---trim---")).toBe("trim")
-    }).pipe(Effect.runPromise)
-  )
+    }).pipe(Effect.runPromise))
 
   it("defaults to 'review' when undefined", () =>
     Effect.gen(function* () {
       expect(yield* normalizeSessionName(undefined)).toBe("review")
-    }).pipe(Effect.runPromise)
-  )
+    }).pipe(Effect.runPromise))
 
   it("caps at 48 chars", () =>
     Effect.gen(function* () {
       const long = "a".repeat(100)
       const out = yield* normalizeSessionName(long)
       expect(out.length).toBe(48)
-    }).pipe(Effect.runPromise)
-  )
+    }).pipe(Effect.runPromise))
 
   it("throws (fails) when the normalised name is empty", () =>
     Effect.gen(function* () {
       const result = yield* normalizeSessionName("!!!@@@###").pipe(Effect.either)
       expect(result._tag).toBe("Left")
       if (result._tag === "Left") expect(result.left._tag).toBe("EmptySessionName")
-    }).pipe(Effect.runPromise)
-  )
+    }).pipe(Effect.runPromise))
 })
 
 describe("AC-043 duration parse ^(\\d+)([smhd])$", () => {
@@ -51,8 +47,7 @@ describe("AC-043 duration parse ^(\\d+)([smhd])$", () => {
       expect(yield* parseDuration("5m")).toBe(300_000)
       expect(yield* parseDuration("2h")).toBe(7_200_000)
       expect(yield* parseDuration("7d")).toBe(604_800_000)
-    }).pipe(Effect.runPromise)
-  )
+    }).pipe(Effect.runPromise))
 
   it("rejects malformed durations", () =>
     Effect.gen(function* () {
@@ -61,8 +56,7 @@ describe("AC-043 duration parse ^(\\d+)([smhd])$", () => {
         expect(r._tag).toBe("Left")
         if (r._tag === "Left") expect(r.left._tag).toBe("InvalidDuration")
       }
-    }).pipe(Effect.runPromise)
-  )
+    }).pipe(Effect.runPromise))
 })
 
 // ===========================================================================

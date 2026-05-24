@@ -4,7 +4,7 @@
 Effect-TS `expo98` rebuild.
 
 The official Expo SDK (live `expo config` parsing, in-app bridge delivery) is a
-**documented seam** — it needs the *target* project's Expo install, not ours — so
+**documented seam** — it needs the _target_ project's Expo install, not ours — so
 this package implements the contracts/logic over file reads, the
 subprocess/CDP capability seams, and a **data-file compatibility map**. The
 Expo→RN map lives in `src/data/expo-rn-compat.json` so it updates **without a code
@@ -12,17 +12,17 @@ release** (brief Q#10).
 
 ## What it does
 
-| Area | Module | Side-effect class | AC |
-|---|---|---|---|
-| Bridge install / remove | `install.ts` | `source-write` (token-gated, via core dispatch) | AC-008 |
-| Bridge install-state | `install-state.ts` | `read` (over the `Fs` port) | AC-027 |
-| Bridge runtime-health | `health.ts` | `read` (ordered state machine) | AC-028, AC-009 |
-| Bridge storage/state/controls | `domain-actions.ts` | `read` / `device` per action | AC-006 |
-| Expo↔RN compat | `compat.ts` + `introspect.ts` | `read` (pure classifier + Fs read) | AC-020 |
-| Expo Router sitemap | `sitemap.ts` | pure | AC-044 |
-| Bridge artifacts / layout | `bridge-files.ts` | — | AC-008/009/027/028 |
-| Size-bounding | `bound.ts` | — | AC-006 |
-| Bridge transport tag (Expo SDK seam) | `bridge-transport.ts` | — | AC-006/028 |
+| Area                                 | Module                        | Side-effect class                               | AC                 |
+| ------------------------------------ | ----------------------------- | ----------------------------------------------- | ------------------ |
+| Bridge install / remove              | `install.ts`                  | `source-write` (token-gated, via core dispatch) | AC-008             |
+| Bridge install-state                 | `install-state.ts`            | `read` (over the `Fs` port)                     | AC-027             |
+| Bridge runtime-health                | `health.ts`                   | `read` (ordered state machine)                  | AC-028, AC-009     |
+| Bridge storage/state/controls        | `domain-actions.ts`           | `read` / `device` per action                    | AC-006             |
+| Expo↔RN compat                       | `compat.ts` + `introspect.ts` | `read` (pure classifier + Fs read)              | AC-020             |
+| Expo Router sitemap                  | `sitemap.ts`                  | pure                                            | AC-044             |
+| Bridge artifacts / layout            | `bridge-files.ts`             | —                                               | AC-008/009/027/028 |
+| Size-bounding                        | `bound.ts`                    | —                                               | AC-006             |
+| Bridge transport tag (Expo SDK seam) | `bridge-transport.ts`         | —                                               | AC-006/028         |
 
 ## The design rule (capability injection)
 
@@ -42,15 +42,15 @@ Mutating surfaces never import a protocol's eval/device/write API directly.
 
 ## AC → test map
 
-| AC | Test file | Asserts |
-|---|---|---|
-| AC-008 | `test/install.test.ts` | no token → 0 file writes/deletes + `requiredConfirmation`/`status`/`plan` (**SourceWriteCapability invoked 0×**); token+allow → writes `.expo98/bridge.json` + `src/expo98-devtools-bridge.ts`; remove deletes both + legacy `.expo-ios` fallback |
-| AC-027 | `test/install-state.test.ts` | every branch: missing-expo / absent / partial-install / version-mismatch / not-development-only / present + legacy metadata fallback |
-| AC-028 | `test/health.test.ts` | each unavailable code at the right step (install-state→transport→registration→version), ordering (install short-circuits before the probe), all-pass `ready` payload |
-| AC-009 | `test/health.test.ts` | not-development-only → incompatible-project; runtime refusals `development-mode-required` (`__DEV__` undefined) + `production-build` (`__DEV__` false); single registration path |
-| AC-006 | `test/domain-actions.test.ts` | classifier; read ungated; mutate denied without policy (**bridge invoked 0×**); allowed → bounded evidence; redaction at boundary; defense-in-depth re-check re-denies after the call |
-| AC-020 | `test/compat.test.ts` | all five classes from the data file; first-`\d+\.\d+(\.\d+)?` parse; **adds an Expo 55 row to a manifest object to prove no-code-change extensibility** |
-| AC-044 | `test/sitemap.test.ts` | extension strip, `_layout`→layout, `+`→special, index/group drop, `[...rest]`/`[[opt]]`/`[param]`/literal |
+| AC     | Test file                     | Asserts                                                                                                                                                                                                                                           |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-008 | `test/install.test.ts`        | no token → 0 file writes/deletes + `requiredConfirmation`/`status`/`plan` (**SourceWriteCapability invoked 0×**); token+allow → writes `.expo98/bridge.json` + `src/expo98-devtools-bridge.ts`; remove deletes both + legacy `.expo-ios` fallback |
+| AC-027 | `test/install-state.test.ts`  | every branch: missing-expo / absent / partial-install / version-mismatch / not-development-only / present + legacy metadata fallback                                                                                                              |
+| AC-028 | `test/health.test.ts`         | each unavailable code at the right step (install-state→transport→registration→version), ordering (install short-circuits before the probe), all-pass `ready` payload                                                                              |
+| AC-009 | `test/health.test.ts`         | not-development-only → incompatible-project; runtime refusals `development-mode-required` (`__DEV__` undefined) + `production-build` (`__DEV__` false); single registration path                                                                  |
+| AC-006 | `test/domain-actions.test.ts` | classifier; read ungated; mutate denied without policy (**bridge invoked 0×**); allowed → bounded evidence; redaction at boundary; defense-in-depth re-check re-denies after the call                                                             |
+| AC-020 | `test/compat.test.ts`         | all five classes from the data file; first-`\d+\.\d+(\.\d+)?` parse; **adds an Expo 55 row to a manifest object to prove no-code-change extensibility**                                                                                           |
+| AC-044 | `test/sitemap.test.ts`        | extension strip, `_layout`→layout, `+`→special, index/group drop, `[...rest]`/`[[opt]]`/`[param]`/literal                                                                                                                                         |
 
 ## Expo SDK seams (documented, not implemented)
 

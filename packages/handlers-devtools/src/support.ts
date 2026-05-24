@@ -46,8 +46,7 @@ export const resolveMaxEvents = (maxEvents: number | undefined): number =>
   clamp(maxEvents ?? DEFAULT_MAX_EVENTS, MIN_MAX_EVENTS, MAX_MAX_EVENTS)
 
 /** Clamp `limit ?? 100` into [1, 1000] (AC-039). */
-export const resolveLimit = (limit: number | undefined): number =>
-  clamp(limit ?? DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT)
+export const resolveLimit = (limit: number | undefined): number => clamp(limit ?? DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT)
 
 /** Take the LAST `n` entries of a list (AC-039). */
 export const takeLast = <A>(items: ReadonlyArray<A>, n: number): ReadonlyArray<A> =>
@@ -60,5 +59,5 @@ export const takeLast = <A>(items: ReadonlyArray<A>, n: number): ReadonlyArray<A
  */
 export const descriptor = <S extends SideEffect>(
   action: string,
-  sideEffect: S
+  sideEffect: S,
 ): CommandDescriptor & { readonly sideEffect: S } => ({ action, sideEffect })

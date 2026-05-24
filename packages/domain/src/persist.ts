@@ -1,33 +1,11 @@
 import { Context, Effect, Layer, Schema } from "effect"
-import {
-  RefCache,
-  RunRecord,
-  SCHEMA_VERSION,
-  SessionRecord,
-  SnapshotResult,
-  TargetRecord
-} from "./entities.js"
-import {
-  CorruptRecord,
-  InvariantViolation,
-  NotFound,
-  StorageFailure
-} from "./errors.js"
+import { RefCache, RunRecord, SCHEMA_VERSION, SessionRecord, SnapshotResult, TargetRecord } from "./entities.js"
+import { CorruptRecord, InvariantViolation, NotFound, StorageFailure } from "./errors.js"
 import { Fs } from "./fs-port.js"
 import type { FsPort } from "./fs-port.js"
 import type { SessionId } from "./ids.js"
-import {
-  DEFAULT_CLEAN_AGE,
-  makeSessionId,
-  normalizeSessionName,
-  parseDuration
-} from "./naming.js"
-import {
-  readRefCacheLenient,
-  readSessionLenient,
-  readSnapshotLenient,
-  readTargetLenient
-} from "./migration.js"
+import { readRefCacheLenient, readSessionLenient, readSnapshotLenient, readTargetLenient } from "./migration.js"
+import { DEFAULT_CLEAN_AGE, makeSessionId, normalizeSessionName, parseDuration } from "./naming.js"
 import * as P from "./paths.js"
 
 /**
@@ -74,90 +52,76 @@ export interface CleanInput {
 export interface Persistence {
   // -- Session lifecycle (AC-024) -----------------------------------------
   readonly sessionNew: (
-    input: NewSessionInput
+    input: NewSessionInput,
   ) => Effect.Effect<SessionRecord, StorageFailure | import("./errors.js").EmptySessionName>
 
   readonly sessionShow: (
     stateRoot: string,
-    sessionId: string
+    sessionId: string,
   ) => Effect.Effect<SessionRecord, NotFound | CorruptRecord | StorageFailure>
 
   /** Corrupt `session.json` is SKIPPED, not fatal (AC-024). */
-  readonly sessionList: (
-    stateRoot: string
-  ) => Effect.Effect<ReadonlyArray<SessionListEntry>, StorageFailure>
+  readonly sessionList: (stateRoot: string) => Effect.Effect<ReadonlyArray<SessionListEntry>, StorageFailure>
 
   readonly sessionClose: (
     stateRoot: string,
-    sessionId: string
+    sessionId: string,
   ) => Effect.Effect<SessionRecord, NotFound | CorruptRecord | StorageFailure>
 
   /** Delete dirs of sessions whose createdAt < now − olderThan (AC-024). */
   readonly sessionClean: (
-    input: CleanInput
+    input: CleanInput,
   ) => Effect.Effect<ReadonlyArray<string>, StorageFailure | import("./errors.js").InvalidDuration>
 
   // -- Target (AC-018) ----------------------------------------------------
   readonly targetSave: (
     stateRoot: string,
     sessionId: string,
-    target: TargetRecord
+    target: TargetRecord,
   ) => Effect.Effect<SessionRecord, NotFound | CorruptRecord | StorageFailure>
 
   readonly targetCurrent: (
     stateRoot: string,
-    sessionId: string
+    sessionId: string,
   ) => Effect.Effect<TargetRecord, NotFound | CorruptRecord | StorageFailure>
 
   // -- Snapshot + RefCache (AC-026) ---------------------------------------
   readonly snapshotPersist: (
     stateRoot: string,
     sessionId: string,
-    snapshot: SnapshotResult
-  ) => Effect.Effect<
-    SessionRecord,
-    NotFound | CorruptRecord | StorageFailure | InvariantViolation
-  >
+    snapshot: SnapshotResult,
+  ) => Effect.Effect<SessionRecord, NotFound | CorruptRecord | StorageFailure | InvariantViolation>
 
   readonly snapshotShow: (
     stateRoot: string,
     sessionId: string,
-    snapshotId: string
+    snapshotId: string,
   ) => Effect.Effect<SnapshotResult, NotFound | CorruptRecord | StorageFailure>
 
   readonly refCacheRead: (
     stateRoot: string,
-    sessionId: string
+    sessionId: string,
   ) => Effect.Effect<RefCache, NotFound | CorruptRecord | StorageFailure>
 
   // -- Invariant verification (AC-026) ------------------------------------
   /** Assert the three Session pointer invariants hold for a session on disk. */
   readonly verifyInvariants: (
     stateRoot: string,
-    sessionId: string
+    sessionId: string,
   ) => Effect.Effect<void, NotFound | CorruptRecord | StorageFailure | InvariantViolation>
 
   // -- RunRecord (AC-025) -------------------------------------------------
-  readonly runStart: (
-    stateDir: string,
-    record: RunRecord
-  ) => Effect.Effect<void, StorageFailure>
+  readonly runStart: (stateDir: string, record: RunRecord) => Effect.Effect<void, StorageFailure>
 
-  readonly runFinish: (
-    stateDir: string,
-    record: RunRecord
-  ) => Effect.Effect<void, StorageFailure>
+  readonly runFinish: (stateDir: string, record: RunRecord) => Effect.Effect<void, StorageFailure>
 
   readonly runShow: (
     stateDir: string,
-    runId: string
+    runId: string,
   ) => Effect.Effect<RunRecord, NotFound | CorruptRecord | StorageFailure>
 }
 
-export class PersistenceService extends Context.Tag("@expo98/domain/Persistence")<
-  PersistenceService,
-  Persistence
->() {}
+export class PersistenceService extends Context.Tag("@expo98/domain/Persistence")<PersistenceService, Persistence>() {}
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -182,9 +146,9 @@ const readJson =
       Effect.flatMap((raw) =>
         Effect.try({
           try: () => JSON.parse(raw) as unknown,
-          catch: (e) => new CorruptRecord({ path, reason: `JSON.parse: ${String(e)}` })
-        })
-      )
+          catch: (e) => new CorruptRecord({ path, reason: `JSON.parse: ${String(e)}` }),
+        }),
+      ),
     )
 
 /**
@@ -199,7 +163,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
   // -- session helpers ----------------------------------------------------
   const loadSession = (
     layout: P.Layout,
-    sessionId: string
+    sessionId: string,
   ): Effect.Effect<SessionRecord, NotFound | CorruptRecord | StorageFailure> =>
     Effect.gen(function* () {
       const path = P.sessionFile(layout, sessionId)
@@ -209,19 +173,16 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       return yield* readSessionLenient(raw, path)
     })
 
-  const writeSession = (
-    layout: P.Layout,
-    record: SessionRecord
-  ): Effect.Effect<void, StorageFailure> =>
+  const writeSession = (layout: P.Layout, record: SessionRecord): Effect.Effect<void, StorageFailure> =>
     encodeSession(record).pipe(
       Effect.orDie,
-      Effect.flatMap((encoded) => write(P.sessionFile(layout, record.sessionId), encoded))
+      Effect.flatMap((encoded) => write(P.sessionFile(layout, record.sessionId), encoded)),
     )
 
   // -- invariants (AC-026) ------------------------------------------------
   const checkInvariants = (
     layout: P.Layout,
-    session: SessionRecord
+    session: SessionRecord,
   ): Effect.Effect<void, StorageFailure | CorruptRecord | InvariantViolation> =>
     Effect.gen(function* () {
       const sid = session.sessionId
@@ -234,8 +195,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
             new InvariantViolation({
               invariant: "activeTargetId-points-at-target",
               sessionId: sid,
-              detail: `activeTargetId=${session.activeTargetId} but ${targetPath} is missing`
-            })
+              detail: `activeTargetId=${session.activeTargetId} but ${targetPath} is missing`,
+            }),
           )
         }
       }
@@ -248,8 +209,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
             new InvariantViolation({
               invariant: "lastSnapshotId-points-at-snapshot",
               sessionId: sid,
-              detail: `lastSnapshotId=${session.lastSnapshotId} but ${snapPath} is missing`
-            })
+              detail: `lastSnapshotId=${session.lastSnapshotId} but ${snapPath} is missing`,
+            }),
           )
         }
         // Invariant 3: refs.json mirrors lastSnapshotId.
@@ -260,8 +221,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
             new InvariantViolation({
               invariant: "refcache-mirrors-lastSnapshotId",
               sessionId: sid,
-              detail: `refs.json missing while lastSnapshotId=${session.lastSnapshotId}`
-            })
+              detail: `refs.json missing while lastSnapshotId=${session.lastSnapshotId}`,
+            }),
           )
         }
         const refsRaw = yield* read(refsPath)
@@ -271,8 +232,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
             new InvariantViolation({
               invariant: "refcache-mirrors-lastSnapshotId",
               sessionId: sid,
-              detail: `refs.json.snapshotId=${cache.snapshotId} != lastSnapshotId=${session.lastSnapshotId}`
-            })
+              detail: `refs.json.snapshotId=${cache.snapshotId} != lastSnapshotId=${session.lastSnapshotId}`,
+            }),
           )
         }
       }
@@ -295,7 +256,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
         updatedAt: nowIso,
         activeTargetId: null,
         lastSnapshotId: null,
-        sidecars: []
+        sidecars: [],
       }
       yield* fs.mkdirp(P.artifactsDir(layout, sessionId))
       yield* writeSession(layout, record)
@@ -319,8 +280,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
           Effect.map((record) => ({ sessionId: id, record })),
           Effect.catchTags({
             NotFound: () => Effect.succeed(null),
-            CorruptRecord: () => Effect.succeed(null)
-          })
+            CorruptRecord: () => Effect.succeed(null),
+          }),
         )
         if (maybe !== null) out.push(maybe)
       }
@@ -337,7 +298,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
         closedAt,
         updatedAt: closedAt,
         // AC-024: clear sidecars on close (record retained).
-        sidecars: []
+        sidecars: [],
       }
       yield* writeSession(layout, updated)
       return updated
@@ -358,8 +319,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
           Effect.map((r): SessionRecord | null => r),
           Effect.catchTags({
             NotFound: () => Effect.succeed(null),
-            CorruptRecord: () => Effect.succeed(null)
-          })
+            CorruptRecord: () => Effect.succeed(null),
+          }),
         )
         // Corrupt/unreadable → not deleted. Missing createdAt → not deleted.
         if (loaded === null) continue
@@ -383,7 +344,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       const updated: SessionRecord = {
         ...session,
         activeTargetId: target.targetId,
-        updatedAt: clock.nowIso()
+        updatedAt: clock.nowIso(),
       }
       yield* writeSession(layout, updated)
       return updated
@@ -414,10 +375,8 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
         snapshotId: snapshot.snapshotId,
         targetId: snapshot.targetId,
         source: snapshot.source,
-        ...(snapshot.semanticBridge !== undefined
-          ? { semanticBridge: snapshot.semanticBridge }
-          : {}),
-        refs: snapshot.refs
+        ...(snapshot.semanticBridge !== undefined ? { semanticBridge: snapshot.semanticBridge } : {}),
+        refs: snapshot.refs,
       }
       const cacheEncoded = yield* Effect.orDie(encodeRefCache(cache))
       yield* write(P.refsFile(layout, sessionId), cacheEncoded)
@@ -426,7 +385,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       const updated: SessionRecord = {
         ...session,
         lastSnapshotId: snapshot.snapshotId,
-        updatedAt: snapshot.generatedAt
+        updatedAt: snapshot.generatedAt,
       }
       yield* writeSession(layout, updated)
       yield* checkInvariants(layout, updated)
@@ -464,13 +423,13 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
   const runStart: Persistence["runStart"] = (stateDir, record) =>
     encodeRun(record).pipe(
       Effect.orDie,
-      Effect.flatMap((encoded) => write(P.runRecordFile(stateDir, record.runId), encoded))
+      Effect.flatMap((encoded) => write(P.runRecordFile(stateDir, record.runId), encoded)),
     )
 
   const runFinish: Persistence["runFinish"] = (stateDir, record) =>
     encodeRun(record).pipe(
       Effect.orDie,
-      Effect.flatMap((encoded) => write(P.runRecordFile(stateDir, record.runId), encoded))
+      Effect.flatMap((encoded) => write(P.runRecordFile(stateDir, record.runId), encoded)),
     )
 
   const runShow: Persistence["runShow"] = (stateDir, runId) =>
@@ -480,7 +439,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       if (!ok) return yield* Effect.fail(new NotFound({ entity: "run", id: runId }))
       const raw = yield* read(path)
       return yield* decodeRun(raw).pipe(
-        Effect.mapError((e) => new CorruptRecord({ path, reason: `run: ${String(e)}` }))
+        Effect.mapError((e) => new CorruptRecord({ path, reason: `run: ${String(e)}` })),
       )
     })
 
@@ -498,7 +457,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
     verifyInvariants,
     runStart,
     runFinish,
-    runShow
+    runShow,
   }
 }
 
@@ -511,10 +470,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
  * // collision-resistant suffixes come from the one canonical generator.
  */
 export const layer = (clock: PersistenceClock): Layer.Layer<PersistenceService, never, Fs> =>
-  Layer.effect(
-    PersistenceService,
-    Fs.pipe(Effect.map((fs) => makePersistence(fs, clock)))
-  )
+  Layer.effect(PersistenceService, Fs.pipe(Effect.map((fs) => makePersistence(fs, clock))))
 
 let monotonic = 0
 export const defaultClock: PersistenceClock = {
@@ -522,5 +478,5 @@ export const defaultClock: PersistenceClock = {
   suffix: () => {
     monotonic += 1
     return `${Date.now().toString(36)}${monotonic.toString(36).padStart(4, "0")}`
-  }
+  },
 }

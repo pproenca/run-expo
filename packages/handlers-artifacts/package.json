@@ -2,10 +2,17 @@
   "name": "@expo98/handlers-artifacts",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "expo98 reimagined — D12 handlers: diff, ux-context, review-next, review, dashboard, and live-backlog (source-derived command matrix with project-config inputs, row classification). Video record + in-app HTML overlay scaffold are intentionally dropped (Phase B).",
-  "exports": { ".": { "types": "./src/index.ts", "import": "./src/index.ts" } },
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@expo98/core": "workspace:*",
     "@expo98/domain": "workspace:*",

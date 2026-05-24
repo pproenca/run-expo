@@ -5,13 +5,13 @@ import {
   EXIT_INVALID_USAGE,
   EXIT_RUNTIME_FAILURE,
   exitCodeForError,
-  PathEscape
+  PathEscape,
 } from "@expo98/core"
 
 describe("Error classification → exit codes (AC-015, AC-016)", () => {
   it("AC-015 CliUsageError maps to exit 2 (invalid usage)", () => {
     const err = new CliUsageError({
-      message: "--json and --plain are mutually exclusive."
+      message: "--json and --plain are mutually exclusive.",
     })
     expect(exitCodeForError(err)).toBe(EXIT_INVALID_USAGE)
   })

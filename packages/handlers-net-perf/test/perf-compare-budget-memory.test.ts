@@ -13,14 +13,14 @@ import {
   evaluateBudget,
   evaluateMemoryEvidence,
   metricDirection,
-  type PerfMetricLike
+  type PerfMetricLike,
 } from "@expo98/handlers-net-perf"
 
 const metric = (
   name: string,
   value: unknown,
   confidence: unknown = "medium",
-  unit: string | null = null
+  unit: string | null = null,
 ): PerfMetricLike => ({ name, value, confidence, unit })
 
 describe("AC-049 direction-aware comparison (FIX)", () => {
@@ -59,20 +59,14 @@ describe("AC-049 direction-aware comparison (FIX)", () => {
   })
 
   it("AC-049 a latency DROP is improved:true (lower-is-better)", () => {
-    const [delta] = comparePerfMetrics(
-      [metric("network.latencyMs", 800)],
-      [metric("network.latencyMs", 300)]
-    )
+    const [delta] = comparePerfMetrics([metric("network.latencyMs", 800)], [metric("network.latencyMs", 300)])
     expect(delta?.direction).toBe("lower-is-better")
     expect(delta?.improved).toBe(true)
     expect(delta?.delta).toBe(-500)
   })
 
   it("AC-049 a latency INCREASE is improved:false", () => {
-    const [delta] = comparePerfMetrics(
-      [metric("network.latencyMs", 300)],
-      [metric("network.latencyMs", 800)]
-    )
+    const [delta] = comparePerfMetrics([metric("network.latencyMs", 300)], [metric("network.latencyMs", 800)])
     expect(delta?.improved).toBe(false)
   })
 
@@ -86,7 +80,7 @@ describe("AC-049 direction-aware comparison (FIX)", () => {
   it("AC-049 delta = candidate − baseline; confidence = lowerConfidence", () => {
     const [delta] = comparePerfMetrics(
       [metric("network.latencyMs", 100, "high")],
-      [metric("network.latencyMs", 70, "low")]
+      [metric("network.latencyMs", 70, "low")],
     )
     expect(delta?.delta).toBe(-30)
     expect(delta?.confidence).toBe("low") // weaker of high/low
@@ -95,7 +89,7 @@ describe("AC-049 direction-aware comparison (FIX)", () => {
   it("AC-049 only metrics present in BOTH with numeric values are compared", () => {
     const deltas = comparePerfMetrics(
       [metric("avgFps", 30), metric("only.baseline", 1), metric("nonNumeric", "x")],
-      [metric("avgFps", 40), metric("only.candidate", 2), metric("nonNumeric", "y")]
+      [metric("avgFps", 40), metric("only.candidate", 2), metric("nonNumeric", "y")],
     )
     expect(deltas.map((d) => d.metric)).toEqual(["avgFps"])
   })
@@ -103,10 +97,7 @@ describe("AC-049 direction-aware comparison (FIX)", () => {
 
 describe("AC-050 budget fail-closed", () => {
   it("AC-050 passes when value within [min, max]", () => {
-    const result = evaluateBudget(
-      [{ metric: "avgFps", min: 50 }],
-      [metric("avgFps", 60)]
-    )
+    const result = evaluateBudget([{ metric: "avgFps", min: 50 }], [metric("avgFps", 60)])
     expect(result.passed).toBe(true)
     expect(result.checks[0]?.passed).toBe(true)
     expect(result.checks[0]?.value).toBe(60)
@@ -139,9 +130,9 @@ describe("AC-050 budget fail-closed", () => {
     const result = evaluateBudget(
       [
         { metric: "avgFps", min: 50 },
-        { metric: "absent", max: 1 }
+        { metric: "absent", max: 1 },
       ],
-      [metric("avgFps", 60)]
+      [metric("avgFps", 60)],
     )
     expect(result.checks[0]?.passed).toBe(true)
     expect(result.checks[1]?.passed).toBe(false)

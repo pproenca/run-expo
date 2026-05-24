@@ -79,10 +79,7 @@ describe("AC-052 native sample parse (PRESERVE)", () => {
   })
 
   it("AC-052 top symbols capped at 30", () => {
-    const manyFrames = Array.from(
-      { length: 40 },
-      (_, i) => `      ${i + 1} symbol_${i}  (in Lib) + 4`
-    ).join("\n")
+    const manyFrames = Array.from({ length: 40 }, (_, i) => `      ${i + 1} symbol_${i}  (in Lib) + 4`).join("\n")
     const text = `Call graph:\n    900 Thread_1: Main Thread\n${manyFrames}\nPhysical footprint:        10.0M\n`
     expect(parseNativeSample(text).topSymbols.length).toBe(30)
   })

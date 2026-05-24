@@ -2,8 +2,8 @@
   "name": "@expo98/core",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "expo98 reimagined — safety spine: 4-tier policy classifier, single redactor, capability-injection dispatch, subprocess + path-confinement + clock/id foundation.",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./src/index.ts",

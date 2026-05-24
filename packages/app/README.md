@@ -21,7 +21,7 @@ stays platform-free and property-testable.
   invalid_usage — reusing core's `exitCodeForError`. A custom `NodeRuntime`
   teardown applies the resolved code (NOT `defaultTeardown`, the N2 root cause).
 - **Output envelope** (`src/envelope.ts`): `--json` → `{ ok, data }` / `{ ok,
-  error }`; `--plain` → stable sorted `key=value` lines; `--ndjson` → a
+error }`; `--plain` → stable sorted `key=value` lines; `--ndjson` → a
   `Stream<string>` of one redacted JSON event per line. Redaction + the canonical
   40,000-char truncation (running-total for streams) applied at THIS boundary via
   core (AC-003/012/041).
@@ -38,7 +38,7 @@ stays platform-free and property-testable.
     (argv-only, no shell).
   - `RuntimeEvalCapability` → protocols' Hermes CDP (`ws`-adapter, loopback-enforced).
   - `SourceWriteCapability` → `@effect/platform-node` `FileSystem` (confined writes).
-  The live device / Hermes / Metro transport is the documented seam (skipped UAT).
+    The live device / Hermes / Metro transport is the documented seam (skipped UAT).
 - **Both bin names preserved conceptually** (`expo98` + `expo-ios`, identical
   impl). The bundle/bin step (esbuild → committed `cli/*.mjs`) is **deferred**;
   no `bin` is declared in `package.json` yet.
@@ -51,14 +51,15 @@ stays platform-free and property-testable.
 **Determined empirically by reading the installed sources** (effect 3.21.2,
 `@effect/cli` 0.75.1, `@effect/platform(-node)` 0.96.1/0.106.0):
 
-| Contract | What `@effect/cli` does natively | Verdict |
-|---|---|---|
-| **AC-015** `--json` + `--plain` → exit 2 | Models the two as INDEPENDENT booleans — both individually valid, the conflict raises **no error at all**. | NOT enforced |
+| Contract                                     | What `@effect/cli` does natively                                                                                                                                                           | Verdict         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| **AC-015** `--json` + `--plain` → exit 2     | Models the two as INDEPENDENT booleans — both individually valid, the conflict raises **no error at all**.                                                                                 | NOT enforced    |
 | **AC-016** value flag with no value → exit 2 | Raises `ValidationError.MissingValue` — but `@effect/platform`'s `defaultTeardown` maps EVERY failure cause to exit **1** (`Exit.isFailure(exit) && !isInterruptedOnly ? 1 : 0`), never 2. | Wrong exit code |
 
 So `@effect/cli` does **NOT** give exit 2 for either AC.
 
 **Decision: a thin pre-parse guard + a custom teardown.**
+
 1. `assertUsage(argv)` (`src/globals.ts`) — a PURE function over the user-facing
    argv slice — runs FIRST, detecting both AC-015 and AC-016 and failing with
    core's `CliUsageError`, which `exitCodeForError` maps to **exit 2**. It runs
@@ -76,16 +77,16 @@ fully unit-testable without booting the CLI.
 
 ### Implemented (pass)
 
-| AC | What | Test file · case |
-|---|---|---|
-| **AC-015** | `--json` + `--plain` → exit 2 | `test/usage-guard.test.ts` · "AC-015 …" · `test/program.test.ts` (integration) |
-| **AC-016** | value flag without value → exit 2 | `test/usage-guard.test.ts` · "AC-016 …" · `test/program.test.ts` (integration) |
-| exit 0/1/2 | mapping via core's `exitCodeForError` | `test/usage-guard.test.ts` (mapping) · `test/program.test.ts` (0/1/2 end-to-end) |
-| envelope | `{ ok, data }` / `{ ok, error }` | `test/envelope.test.ts` (json) · `test/commands.test.ts` (through dispatch) |
-| `--plain` | stable sorted line output | `test/envelope.test.ts` (plain) |
-| **AC-041** | `--ndjson` per-event redaction + running-total truncation | `test/envelope.test.ts` (ndjson) |
-| AC-003/012 | redaction at the boundary (json/plain/ndjson) | `test/envelope.test.ts` · `test/commands.test.ts` (redact) |
-| AC-001 | `policy`/`redact`/`doctor` read commands return correct envelopes through dispatch | `test/commands.test.ts` |
+| AC         | What                                                                               | Test file · case                                                                 |
+| ---------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **AC-015** | `--json` + `--plain` → exit 2                                                      | `test/usage-guard.test.ts` · "AC-015 …" · `test/program.test.ts` (integration)   |
+| **AC-016** | value flag without value → exit 2                                                  | `test/usage-guard.test.ts` · "AC-016 …" · `test/program.test.ts` (integration)   |
+| exit 0/1/2 | mapping via core's `exitCodeForError`                                              | `test/usage-guard.test.ts` (mapping) · `test/program.test.ts` (0/1/2 end-to-end) |
+| envelope   | `{ ok, data }` / `{ ok, error }`                                                   | `test/envelope.test.ts` (json) · `test/commands.test.ts` (through dispatch)      |
+| `--plain`  | stable sorted line output                                                          | `test/envelope.test.ts` (plain)                                                  |
+| **AC-041** | `--ndjson` per-event redaction + running-total truncation                          | `test/envelope.test.ts` (ndjson)                                                 |
+| AC-003/012 | redaction at the boundary (json/plain/ndjson)                                      | `test/envelope.test.ts` · `test/commands.test.ts` (redact)                       |
+| AC-001     | `policy`/`redact`/`doctor` read commands return correct envelopes through dispatch | `test/commands.test.ts`                                                          |
 
 ### Final integration + DAG guard
 

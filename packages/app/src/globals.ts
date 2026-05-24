@@ -1,5 +1,5 @@
-import { CliUsageError } from "@expo98/core"
 import { Options } from "@effect/cli"
+import { CliUsageError } from "@expo98/core"
 import { Effect, Option } from "effect"
 
 /**
@@ -76,7 +76,7 @@ export const VALUE_FLAGS = [
   "--action-policy",
   "--max-output",
   "--allow-runtime-eval",
-  "--confirm-actions"
+  "--confirm-actions",
 ] as const
 
 export type ValueFlag = (typeof VALUE_FLAGS)[number]
@@ -95,16 +95,12 @@ const isFlagLike = (token: string): boolean => token.startsWith("-")
  *   value) ⇒ usage error. `--flag=value` forms always carry their value, so
  *   they pass. `--json`/`--plain` etc. are NOT value flags and are exempt.
  */
-export const assertUsage = (
-  argv: ReadonlyArray<string>
-): Effect.Effect<void, CliUsageError> =>
+export const assertUsage = (argv: ReadonlyArray<string>): Effect.Effect<void, CliUsageError> =>
   Effect.suspend(() => {
     const hasJson = argv.includes("--json")
     const hasPlain = argv.includes("--plain")
     if (hasJson && hasPlain) {
-      return Effect.fail(
-        new CliUsageError({ message: "--json and --plain are mutually exclusive." })
-      )
+      return Effect.fail(new CliUsageError({ message: "--json and --plain are mutually exclusive." }))
     }
 
     for (let i = 0; i < argv.length; i++) {
@@ -134,11 +130,9 @@ export const assertUsage = (
     return Effect.void
   })
 
-const isValueFlag = (name: string): name is ValueFlag =>
-  (VALUE_FLAGS as ReadonlyArray<string>).includes(name)
+const isValueFlag = (name: string): name is ValueFlag => (VALUE_FLAGS as ReadonlyArray<string>).includes(name)
 
-const requiresValue = (name: string): CliUsageError =>
-  new CliUsageError({ message: `${name} requires a value.` })
+const requiresValue = (name: string): CliUsageError => new CliUsageError({ message: `${name} requires a value.` })
 
 // ──────────────────────────────────────────────────────────────────────────
 // @effect/cli Options — declarative parsing of the global flags. The guard
@@ -146,8 +140,7 @@ const requiresValue = (name: string): CliUsageError =>
 // shell completion, and produce the typed CliGlobals struct on a valid argv.
 // ──────────────────────────────────────────────────────────────────────────
 
-const boolFlag = (name: string): Options.Options<boolean> =>
-  Options.boolean(name).pipe(Options.withDefault(false))
+const boolFlag = (name: string): Options.Options<boolean> => Options.boolean(name).pipe(Options.withDefault(false))
 
 /** The composed global Options, producing a `CliGlobals` struct. */
 export const globalOptions: Options.Options<CliGlobals> = Options.all({
@@ -159,21 +152,19 @@ export const globalOptions: Options.Options<CliGlobals> = Options.all({
   stateDir: Options.optional(Options.text("state-dir")),
   actionPolicy: Options.optional(Options.text("action-policy")),
   maxOutput: Options.optional(Options.integer("max-output")),
-  allowRuntimeEval: Options.boolean("allow-runtime-eval").pipe(
-    Options.withDefault(false)
-  ),
+  allowRuntimeEval: Options.boolean("allow-runtime-eval").pipe(Options.withDefault(false)),
   confirmActions: Options.text("confirm-actions").pipe(
     Options.map((csv) =>
       csv
         .split(",")
         .map((t) => t.trim())
-        .filter((t) => t.length > 0)
+        .filter((t) => t.length > 0),
     ),
-    Options.withDefault<ReadonlyArray<string>>([])
+    Options.withDefault<ReadonlyArray<string>>([]),
   ),
   record: boolFlag("record"),
   contentBoundaries: boolFlag("content-boundaries"),
   debug: boolFlag("debug"),
   noColor: boolFlag("no-color"),
-  noInput: boolFlag("no-input")
+  noInput: boolFlag("no-input"),
 })

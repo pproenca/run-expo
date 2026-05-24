@@ -75,9 +75,7 @@ export type ExitCode = 0 | 1 | 2
  */
 export const exitCodeForError = (error: unknown): 1 | 2 => {
   if (typeof error === "object" && error !== null && "_tag" in error) {
-    return (error as { readonly _tag: unknown })._tag === "CliUsageError"
-      ? EXIT_INVALID_USAGE
-      : EXIT_RUNTIME_FAILURE
+    return (error as { readonly _tag: unknown })._tag === "CliUsageError" ? EXIT_INVALID_USAGE : EXIT_RUNTIME_FAILURE
   }
   return EXIT_RUNTIME_FAILURE
 }

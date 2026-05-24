@@ -15,14 +15,14 @@ export const ScreenBox = Schema.Struct({
   x: Schema.Number,
   y: Schema.Number,
   width: Schema.Number,
-  height: Schema.Number
+  height: Schema.Number,
 })
 export type ScreenBox = Schema.Schema.Type<typeof ScreenBox>
 
 /** Centre point of a box (AC-036). Derived, not persisted, but schema-typed. */
 export const ScreenPoint = Schema.Struct({
   x: Schema.Number,
-  y: Schema.Number
+  y: Schema.Number,
 })
 export type ScreenPoint = Schema.Schema.Type<typeof ScreenPoint>
 
@@ -35,7 +35,7 @@ export type DeviceState = Schema.Schema.Type<typeof DeviceState>
 export const DeviceSummary = Schema.Struct({
   id: Schema.String,
   name: Schema.NullOr(Schema.String),
-  state: DeviceState
+  state: DeviceState,
 })
 export type DeviceSummary = Schema.Schema.Type<typeof DeviceSummary>
 
@@ -50,7 +50,7 @@ export const SidecarRecord = Schema.Struct({
   name: Schema.String,
   pid: Schema.NullOr(Schema.Number),
   port: Schema.NullOr(Schema.Number),
-  status: SidecarStatus
+  status: SidecarStatus,
 })
 export type SidecarRecord = Schema.Schema.Type<typeof SidecarRecord>
 
@@ -63,7 +63,7 @@ export const SnapshotFilters = Schema.Struct({
   // depth: null (unbounded) or clamped 1..100 (AC-040).
   depth: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.between(1, 100))),
   includeSource: Schema.Boolean,
-  includeBounds: Schema.Boolean
+  includeBounds: Schema.Boolean,
 })
 export type SnapshotFilters = Schema.Schema.Type<typeof SnapshotFilters>
 
@@ -88,7 +88,7 @@ export const RefRecord = Schema.Struct({
   // `raw` is the untyped passthrough of the source accessibility node; kept as
   // an unknown record so we never lose provenance, but it is always redacted at
   // the output boundary (AC-003, owned by @expo98/core).
-  raw: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown }))
+  raw: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
 })
 export type RefRecord = Schema.Schema.Type<typeof RefRecord>
 
@@ -103,7 +103,7 @@ export const SnapshotNode = Schema.Struct({
   testID: Schema.NullOr(Schema.String),
   source: Schema.String,
   box: Schema.NullOr(ScreenBox),
-  actions: Schema.Array(Schema.String)
+  actions: Schema.Array(Schema.String),
 })
 export type SnapshotNode = Schema.Schema.Type<typeof SnapshotNode>
 
@@ -122,15 +122,15 @@ export const SemanticBridgeRef = Schema.partial(
     testID: Schema.NullOr(Schema.String),
     nativeID: Schema.NullOr(Schema.String),
     box: Schema.NullOr(ScreenBox),
-    actions: Schema.Array(Schema.String)
-  })
+    actions: Schema.Array(Schema.String),
+  }),
 )
 export type SemanticBridgeRef = Schema.Schema.Type<typeof SemanticBridgeRef>
 
 export const SemanticBridgeSnapshot = Schema.Struct({
   routeHint: Schema.optional(Schema.NullOr(Schema.String)),
   refs: Schema.Array(SemanticBridgeRef),
-  limitations: Schema.Array(Schema.String)
+  limitations: Schema.Array(Schema.String),
 })
 export type SemanticBridgeSnapshot = Schema.Schema.Type<typeof SemanticBridgeSnapshot>
 
@@ -141,6 +141,6 @@ export const RunPayloadSummary = Schema.Struct({
   keys: Schema.Array(Schema.String),
   available: Schema.optional(Schema.Boolean),
   routeCount: Schema.optional(Schema.Number),
-  eventCount: Schema.optional(Schema.Number)
+  eventCount: Schema.optional(Schema.Number),
 })
 export type RunPayloadSummary = Schema.Schema.Type<typeof RunPayloadSummary>

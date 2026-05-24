@@ -12,9 +12,9 @@ Running every handler **through core's `dispatch`** means the dangerous
 `DeviceCapability` / `RuntimeEvalCapability` is provided into a handler's `R`
 **only on the gate-pass branch** for its declared class. So a denied lifecycle /
 interaction command never even builds the handler and the device capability is
-**never invoked** — the *behavioural* proof, asserted as zero capability calls in
+**never invoked** — the _behavioural_ proof, asserted as zero capability calls in
 the denial tests (AC-005). `wait --fn` is the only `runtime-eval`-classed verb,
-so it is gated identically (AC-004: denial invokes eval 0×). The *structural*
+so it is gated identically (AC-004: denial invokes eval 0×). The _structural_
 proof is the type system: a `device`-classed handler cannot name the eval
 capability, and a `read`-classed handler (`wait` without `--fn`) cannot name
 either — verified by the `@ts-expect-error` lines in
@@ -28,12 +28,12 @@ impossible to re-introduce here.
 
 ## Side-effect classification
 
-| Command(s) | Class | AC |
-|---|---|---|
-| `boot-simulator` · `open-url` · `launch-app` · `terminate-app` · `reload-app` · `install-app` · `uninstall-app` · `open-route` · `set` | `device` | AC-005 |
-| `tap` · `gesture` · the 11 ref-actions · `type`/`press`/`keyboard` · `clipboard` · `screenshot` | `device` | AC-005/013/036/037/054 |
-| `wait` (no `--fn`: `--ms` / predicate) | `read` | AC-035 |
-| `wait --fn` | `runtime-eval` | AC-004 |
+| Command(s)                                                                                                                             | Class          | AC                     |
+| -------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---------------------- |
+| `boot-simulator` · `open-url` · `launch-app` · `terminate-app` · `reload-app` · `install-app` · `uninstall-app` · `open-route` · `set` | `device`       | AC-005                 |
+| `tap` · `gesture` · the 11 ref-actions · `type`/`press`/`keyboard` · `clipboard` · `screenshot`                                        | `device`       | AC-005/013/036/037/054 |
+| `wait` (no `--fn`: `--ms` / predicate)                                                                                                 | `read`         | AC-035                 |
+| `wait --fn`                                                                                                                            | `runtime-eval` | AC-004                 |
 
 The per-verb → class maps (`lifecycleSideEffect`, `waitSideEffect`) and the
 verb→argv mappings use `Match.exhaustive`, so adding a verb without a class is a
@@ -63,18 +63,18 @@ verb→argv mappings use `Match.exhaustive`, so adding a verb without a class is
 
 ## AC → test map
 
-| AC | Test file | What it proves |
-|---|---|---|
-| **AC-005** | `test/lifecycle.test.ts`, `test/interaction.test.ts`, `test/screenshot.test.ts` | every lifecycle verb is `device`; **denied without policy → fake `DeviceCapability` invoked ZERO times**; allowed → invoked with the planned argv; `install-app`/`uninstall-app` `--dry-run` returns a plan and invokes the device **0×** (mutates nothing). |
-| **AC-029** | `test/lifecycle.test.ts`, `test/crash.test.ts` | `launch-app`/`reload-app` attach a `crashCheck`; a post-launch `.ips`/`.crash` report (mtime > `startedAt`) → `available:false` + verbatim reason + attached reports; pre-existing / non-crash reports ignored; a denied launch does zero device work (no scan). |
-| **AC-056** | `test/crash.test.ts` | crash grace defaults to **1000ms** and clamps to `0..30000`. |
-| **AC-036** | `test/gesture-plan.test.ts`, `test/interaction.test.ts` | `point = box centre`; missing box → `null`; ref-actions surface the point. |
-| **AC-037** | `test/gesture-plan.test.ts`, `test/interaction.test.ts` | scroll signed deltas + clamped `amount`; gesture clamps (repeat/interval/duration/maxEvents) + per-kind default durations (**PRESERVE** swipe→content). |
-| **AC-054** | `test/screenshot.test.ts` | `segmentCount` clamp; `390×844` fallback; `startX/startY/endY` swipe geometry. |
-| **AC-035** | `test/wait.test.ts` | cadence math (`timeoutMs`/`intervalMs`/`ms`/tick sleep) + TestClock-driven `--ms`, already-true, flips-true, and timeout cadence loops. |
-| **AC-004** | `test/wait.test.ts` | `wait --fn` is `runtime-eval`; **denied with no flag/policy → fake eval invoked ZERO times**; `--allow-runtime-eval` or `wait.fn` policy → runs + invokes eval once; **no runtime adapter → the unavailable shape, eval invoked 0×**. |
-| **AC-013** | `test/screenshot.test.ts` | in-root path accepted + resolved; `../` and absolute escapes rejected via `confinePath` BEFORE any device work (zero device calls, exit 1). |
-| AC-004/AC-005 (structural) | `test/interaction-capability.type-test.ts` | a `device`-classed handler cannot name the runtime-eval capability; a `read`-classed `wait` cannot name eval or device (`@ts-expect-error`). |
+| AC                         | Test file                                                                       | What it proves                                                                                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-005**                 | `test/lifecycle.test.ts`, `test/interaction.test.ts`, `test/screenshot.test.ts` | every lifecycle verb is `device`; **denied without policy → fake `DeviceCapability` invoked ZERO times**; allowed → invoked with the planned argv; `install-app`/`uninstall-app` `--dry-run` returns a plan and invokes the device **0×** (mutates nothing).     |
+| **AC-029**                 | `test/lifecycle.test.ts`, `test/crash.test.ts`                                  | `launch-app`/`reload-app` attach a `crashCheck`; a post-launch `.ips`/`.crash` report (mtime > `startedAt`) → `available:false` + verbatim reason + attached reports; pre-existing / non-crash reports ignored; a denied launch does zero device work (no scan). |
+| **AC-056**                 | `test/crash.test.ts`                                                            | crash grace defaults to **1000ms** and clamps to `0..30000`.                                                                                                                                                                                                     |
+| **AC-036**                 | `test/gesture-plan.test.ts`, `test/interaction.test.ts`                         | `point = box centre`; missing box → `null`; ref-actions surface the point.                                                                                                                                                                                       |
+| **AC-037**                 | `test/gesture-plan.test.ts`, `test/interaction.test.ts`                         | scroll signed deltas + clamped `amount`; gesture clamps (repeat/interval/duration/maxEvents) + per-kind default durations (**PRESERVE** swipe→content).                                                                                                          |
+| **AC-054**                 | `test/screenshot.test.ts`                                                       | `segmentCount` clamp; `390×844` fallback; `startX/startY/endY` swipe geometry.                                                                                                                                                                                   |
+| **AC-035**                 | `test/wait.test.ts`                                                             | cadence math (`timeoutMs`/`intervalMs`/`ms`/tick sleep) + TestClock-driven `--ms`, already-true, flips-true, and timeout cadence loops.                                                                                                                          |
+| **AC-004**                 | `test/wait.test.ts`                                                             | `wait --fn` is `runtime-eval`; **denied with no flag/policy → fake eval invoked ZERO times**; `--allow-runtime-eval` or `wait.fn` policy → runs + invokes eval once; **no runtime adapter → the unavailable shape, eval invoked 0×**.                            |
+| **AC-013**                 | `test/screenshot.test.ts`                                                       | in-root path accepted + resolved; `../` and absolute escapes rejected via `confinePath` BEFORE any device work (zero device calls, exit 1).                                                                                                                      |
+| AC-004/AC-005 (structural) | `test/interaction-capability.type-test.ts`                                      | a `device`-classed handler cannot name the runtime-eval capability; a `read`-classed `wait` cannot name eval or device (`@ts-expect-error`).                                                                                                                     |
 
 ## Skipped (require a live device — AC ids preserved)
 

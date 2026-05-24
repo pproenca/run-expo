@@ -15,13 +15,7 @@
  */
 
 // trace (AC-010) — all verbs runtime-eval
-export {
-  type TraceArgs,
-  type TraceResult,
-  type TraceVerb,
-  traceCommand,
-  traceSideEffect
-} from "./trace.js"
+export { type TraceArgs, type TraceResult, type TraceVerb, traceCommand, traceSideEffect } from "./trace.js"
 
 // inspector (AC-011) — verbs map to read / runtime-eval / device
 export {
@@ -33,7 +27,7 @@ export {
   type InspectorResult,
   type InspectorSideEffect,
   inspectorSideEffect,
-  type InspectorVerb
+  type InspectorVerb,
 } from "./inspector.js"
 
 // navigation (AC-007) — state read, mutations device
@@ -46,17 +40,11 @@ export {
   type NavigationResult,
   type NavigationSideEffect,
   navigationSideEffect,
-  type NavigationVerb
+  type NavigationVerb,
 } from "./navigation.js"
 
 // console / errors (AC-039) — read, clamped, last-N
-export {
-  type LogArgs,
-  type LogEntry,
-  type LogResult,
-  type LogStream,
-  logsCommand
-} from "./logs.js"
+export { type LogArgs, type LogEntry, type LogResult, type LogStream, logsCommand } from "./logs.js"
 
 // shared bounds (canonical clamp params for AC-010/038/039)
 export {
@@ -73,5 +61,5 @@ export {
   resolveLimit,
   resolveMaxEvents,
   resolveMetroPort,
-  takeLast
+  takeLast,
 } from "./support.js"

@@ -21,19 +21,14 @@ export {
   PolicyDenied,
   SubprocessFailed,
   SubprocessTimeout,
-  ToolNotFound
+  ToolNotFound,
 } from "./errors.js"
 
 // S5 Redaction (AC-003/012)
 export { redact, redactSecretsInString, REDACTED } from "./redaction.js"
 
 // Truncation (AC-041)
-export {
-  OUTPUT_BUDGET,
-  overflowMarker,
-  RunningTruncator,
-  truncate
-} from "./truncate.js"
+export { OUTPUT_BUDGET, overflowMarker, RunningTruncator, truncate } from "./truncate.js"
 
 // S2 Path confinement (AC-013)
 export { confinePath } from "./confine-path.js"
@@ -47,7 +42,7 @@ export {
   type IdService,
   RandomBytes,
   RandomBytesLive,
-  type RandomBytesService
+  type RandomBytesService,
 } from "./clock-id.js"
 
 // S1 Subprocess (AC-053)
@@ -60,7 +55,7 @@ export {
   type RunResult,
   Subprocess,
   SubprocessFake,
-  type SubprocessService
+  type SubprocessService,
 } from "./subprocess.js"
 
 // S4 Policy (AC-001/002/008)
@@ -73,7 +68,7 @@ export {
   policyDeniedPayload,
   type PolicyDeniedPayload,
   type PolicyDocument,
-  type SideEffect
+  type SideEffect,
 } from "./policy.js"
 
 // Capabilities — the three dangerous Context.Tags (the crux)
@@ -84,7 +79,7 @@ export {
   RuntimeEvalCapability,
   type RuntimeEvalCapabilityService,
   SourceWriteCapability,
-  type SourceWriteCapabilityService
+  type SourceWriteCapabilityService,
 } from "./capabilities.js"
 
 // S6 Dispatch Runtime (AC-001/015/016/025/031/041) — capability injection
@@ -101,5 +96,5 @@ export {
   ndjsonStream,
   NoopRecorder,
   runBatch,
-  type RunRecorder
+  type RunRecorder,
 } from "./dispatch.js"

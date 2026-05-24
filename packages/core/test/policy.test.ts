@@ -1,11 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import {
-  classify,
-  type CommandDescriptor,
-  DENIED_REASON,
-  gate,
-  type PolicyDocument
-} from "@expo98/core"
+import { classify, type CommandDescriptor, DENIED_REASON, gate, type PolicyDocument } from "@expo98/core"
 
 describe("S4 Policy classifier (AC-002)", () => {
   it("AC-002 classifies each of the four declared tiers", () => {
@@ -43,7 +37,7 @@ describe("S4 Policy fail-closed gate (AC-001)", () => {
         code: "policy-denied",
         denied: true,
         reason: DENIED_REASON,
-        policy: emptyPolicy
+        policy: emptyPolicy,
       })
     }
   })
@@ -82,7 +76,7 @@ describe("S4 Policy fail-closed gate (AC-001)", () => {
 describe("S4 source-write confirmation tier (AC-008)", () => {
   const cmd: CommandDescriptor = {
     action: "bridge-install",
-    sideEffect: "source-write"
+    sideEffect: "source-write",
   }
 
   it("AC-008 source-write denied when policy disallows the action", () => {
@@ -100,7 +94,7 @@ describe("S4 source-write confirmation tier (AC-008)", () => {
     // Policy allows AND matching token ⇒ allowed.
     const allowed = gate(cmd, {
       allow: ["bridge-install"],
-      confirmations: ["bridge-install"]
+      confirmations: ["bridge-install"],
     })
     expect(allowed._tag).toBe("allow")
   })

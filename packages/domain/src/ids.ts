@@ -26,10 +26,7 @@ export const RunId = Schema.String.pipe(Schema.brand("RunId"))
 export type RunId = Schema.Schema.Type<typeof RunId>
 
 /** A ref handle `@e1..@eN` (AC-017). */
-export const RefId = Schema.String.pipe(
-  Schema.pattern(/^@e\d+$/),
-  Schema.brand("RefId")
-)
+export const RefId = Schema.String.pipe(Schema.pattern(/^@e\d+$/), Schema.brand("RefId"))
 export type RefId = Schema.Schema.Type<typeof RefId>
 
 /**

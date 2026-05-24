@@ -34,15 +34,9 @@ export interface LogResult {
  * Build a `console`/`errors` read command. The clamp + take-last is applied at
  * construction time so the handler stays a pure `read` (R = never).
  */
-export const logsCommand = (
-  stream: LogStream,
-  args: LogArgs = {}
-): Command<"read", LogResult> => {
+export const logsCommand = (stream: LogStream, args: LogArgs = {}): Command<"read", LogResult> => {
   const limit = resolveLimit(args.limit)
   const entries = takeLast(args.entries ?? [], limit)
   const action = stream
-  return command(
-    descriptor(action, "read"),
-    Effect.succeed<LogResult>({ action, stream, limit, entries })
-  )
+  return command(descriptor(action, "read"), Effect.succeed<LogResult>({ action, stream, limit, entries }))
 }

@@ -28,7 +28,7 @@ const capArrays = (value: unknown): unknown => {
         items: kept,
         kept: kept.length,
         dropped: value.length - MAX_ARRAY_ITEMS,
-        total: value.length
+        total: value.length,
       }
     }
     return kept
@@ -64,6 +64,6 @@ export const boundBridgeValue = (value: unknown): unknown => {
     _bounded: "output",
     reason: "Bridge value exceeded the output size bound.",
     bytes: serialised.length,
-    limit: MAX_OUTPUT
+    limit: MAX_OUTPUT,
   }
 }

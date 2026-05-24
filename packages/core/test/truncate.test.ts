@@ -1,11 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import {
-  ndjsonStream,
-  OUTPUT_BUDGET,
-  overflowMarker,
-  RunningTruncator,
-  truncate
-} from "@expo98/core"
+import { ndjsonStream, OUTPUT_BUDGET, overflowMarker, RunningTruncator, truncate } from "@expo98/core"
 import { Chunk, Effect, Stream } from "effect"
 
 describe("Truncation — one canonical budget + one marker (AC-041)", () => {
@@ -41,10 +35,7 @@ describe("Streaming running-total truncation (AC-041, finding M2)", () => {
 
   it.effect("AC-041 ndjsonStream redacts whole values and caps the running total", () =>
     Effect.gen(function* () {
-      const events = Stream.fromIterable([
-        { msg: "tick", token: "SECRET" },
-        { msg: "tock" }
-      ])
+      const events = Stream.fromIterable([{ msg: "tick", token: "SECRET" }, { msg: "tock" }])
       const lines = yield* Stream.runCollect(ndjsonStream(events))
       const all = Chunk.toReadonlyArray(lines).join("")
       // secret redacted at WHOLE-value granularity before serialisation
@@ -52,6 +43,6 @@ describe("Streaming running-total truncation (AC-041, finding M2)", () => {
       expect(all).not.toContain("SECRET")
       expect(all).toContain("tick")
       expect(all).toContain("tock")
-    })
+    }),
   )
 })

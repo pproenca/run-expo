@@ -15,11 +15,11 @@ they never inject JS, drive the device, write source, or open a network port.
 
 ## What this package lands
 
-| AC | What |
-|---|---|
-| **AC-057** | live-backlog row classification from evidence (exit code + runtime requirements + an injected **live-evidence signal**). |
+| AC         | What                                                                                                                                                                                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-057** | live-backlog row classification from evidence (exit code + runtime requirements + an injected **live-evidence signal**).                                                                                                                                                  |
 | **AC-058** | live-backlog substitutions are **project inputs**, never baked fixtures. `__METRO_PORT__ → clamp(metroPort ?? 8081, 1, 65535)`; `__BUNDLE_ID__`/`__DEVICE__`/`__DEV_CLIENT_URL__` resolve from required inputs; a missing required input → a clear `MissingBacklogInput`. |
-| **AC-042** | backlog summary `keys.slice(0,20)` + classification rollups; run-record summary `keys.slice(0,40)` + `available`/`routeCount`/`eventCount`. |
+| **AC-042** | backlog summary `keys.slice(0,20)` + classification rollups; run-record summary `keys.slice(0,40)` + `available`/`routeCount`/`eventCount`.                                                                                                                               |
 
 The other commands (`diff`, `ux-context`, `review-next`, `review`, `dashboard`)
 have **no AC that pins their calculation**, so they are implemented as faithful,
@@ -28,13 +28,13 @@ for the envelope/shape.
 
 ## AC → test map
 
-| AC | Test file | What it proves |
-|---|---|---|
-| **AC-057** | `test/ac-057-classification.test.ts` | the FULL classification matrix — one case per branch (`expected-usage-error` / `environment-blocked` / `defect` / `live-pass` / `static-pass` / `designed-unavailable`), with a **fake `LiveEvidenceSignal`**; the live-evidence detector fires on each facet; `live-backlog run` classifies each substituted row end-to-end + rolls up the AC-042 summary. |
-| **AC-058** | `test/ac-058-substitutions.test.ts` | `__METRO_PORT__` default 8081 + clamp; the other three resolve from provided inputs; a **missing required input → a clear error, NOT a default**; and an explicit assertion that **no `com.maddie.console` / `exp+maddie://` / `booted`** appears in the template, the resolver, the errors, or the matrix output. |
-| **AC-042** | `test/ac-042-summary.test.ts` | backlog `keys.slice(0,20)` + classification rollups; run-record `keys.slice(0,40)` + `available`/`routeCount`/`eventCount` rollups (emitted only when present); the run-record summary decodes as a valid domain `RunPayloadSummary`. |
-| smoke (no-listener) | `test/dashboard-no-listener.test.ts` | `dashboard start/stop/report` reports `networkListener:false` and the dashboard **source imports no `http`/`net`/`ws`/`createServer`/`.listen(`** — it is file/state only. |
-| smoke (shape) | `test/read-commands.test.ts` | `diff`/`ux-context`/`review-next`/`review` run ungated (exit 0, `read`) and return their documented shapes. |
+| AC                  | Test file                            | What it proves                                                                                                                                                                                                                                                                                                                                              |
+| ------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-057**          | `test/ac-057-classification.test.ts` | the FULL classification matrix — one case per branch (`expected-usage-error` / `environment-blocked` / `defect` / `live-pass` / `static-pass` / `designed-unavailable`), with a **fake `LiveEvidenceSignal`**; the live-evidence detector fires on each facet; `live-backlog run` classifies each substituted row end-to-end + rolls up the AC-042 summary. |
+| **AC-058**          | `test/ac-058-substitutions.test.ts`  | `__METRO_PORT__` default 8081 + clamp; the other three resolve from provided inputs; a **missing required input → a clear error, NOT a default**; and an explicit assertion that **no `com.maddie.console` / `exp+maddie://` / `booted`** appears in the template, the resolver, the errors, or the matrix output.                                          |
+| **AC-042**          | `test/ac-042-summary.test.ts`        | backlog `keys.slice(0,20)` + classification rollups; run-record `keys.slice(0,40)` + `available`/`routeCount`/`eventCount` rollups (emitted only when present); the run-record summary decodes as a valid domain `RunPayloadSummary`.                                                                                                                       |
+| smoke (no-listener) | `test/dashboard-no-listener.test.ts` | `dashboard start/stop/report` reports `networkListener:false` and the dashboard **source imports no `http`/`net`/`ws`/`createServer`/`.listen(`** — it is file/state only.                                                                                                                                                                                  |
+| smoke (shape)       | `test/read-commands.test.ts`         | `diff`/`ux-context`/`review-next`/`review` run ungated (exit 0, `read`) and return their documented shapes.                                                                                                                                                                                                                                                 |
 
 ### Skipped (require a live environment)
 
@@ -70,4 +70,4 @@ live (skipped) `run` path.
   it (there is no behavioural builder in core/domain — only the persistence
   `Schema.Struct`).
 - `__METRO_PORT__` clamp reuses `@expo98/protocols`' `clamp` + `DEFAULT_METRO_PORT`
-  + `MIN_PORT`/`MAX_PORT` (the single AC-038 source).
+  - `MIN_PORT`/`MAX_PORT` (the single AC-038 source).

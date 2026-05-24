@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { Fs, makeMemoryFs } from "../src/fs-port.js"
-import { makePersistence } from "../src/persist.js"
 import * as P from "../src/paths.js"
+import { makePersistence } from "../src/persist.js"
 import { STATE_ROOT, TestClock } from "./helpers.js"
 
 /**
@@ -24,7 +24,7 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       const layout = P.makeLayout(STATE_ROOT)
       expect(yield* fs.exists(P.artifactsDir(layout, session.sessionId))).toBe(true)
       expect(yield* fs.exists(P.sessionFile(layout, session.sessionId))).toBe(true)
-    })
+    }),
   )
 
   it.effect("close sets closedAt = updatedAt and clears sidecars", () =>
@@ -43,7 +43,7 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       // record retained, not deleted
       const shown = yield* p.sessionShow(STATE_ROOT, created.sessionId)
       expect(shown.closedAt).toBe(closed.closedAt)
-    })
+    }),
   )
 
   it.effect("clean deletes sessions older than olderThan, keeps fresh ones", () =>
@@ -66,7 +66,7 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       const layout = P.makeLayout(STATE_ROOT)
       expect(yield* fs.exists(P.sessionDir(layout, old.sessionId))).toBe(false)
       expect(yield* fs.exists(P.sessionDir(layout, fresh.sessionId))).toBe(true)
-    })
+    }),
   )
 
   it.effect("list skips a corrupt session.json instead of failing", () =>
@@ -85,7 +85,7 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       const ids = list.map((e) => e.sessionId)
       expect(ids).toContain(good.sessionId)
       expect(ids).not.toContain("broken")
-    })
+    }),
   )
 
   it.effect("clean does NOT delete a session with missing/invalid createdAt", () =>
@@ -108,15 +108,15 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
           updatedAt: "not-a-date",
           activeTargetId: null,
           lastSnapshotId: null,
-          sidecars: []
-        })
+          sidecars: [],
+        }),
       )
 
       clock.advance(100 * 86_400_000)
       const deleted = yield* p.sessionClean({ stateRoot: STATE_ROOT, olderThan: "1d" })
       expect(deleted).not.toContain(id)
       expect(yield* fs.exists(P.sessionDir(layout, id))).toBe(true)
-    })
+    }),
   )
 
   it.effect("clean defaults to 7d when olderThan is omitted", () =>
@@ -128,7 +128,7 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       clock.advance(8 * 86_400_000)
       const deleted = yield* p.sessionClean({ stateRoot: STATE_ROOT })
       expect(deleted).toContain(old.sessionId)
-    })
+    }),
   )
 
   it.effect("Fs tag is resolvable through the layer (smoke)", () =>
@@ -136,6 +136,6 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       const fs = yield* Fs
       yield* fs.mkdirp(STATE_ROOT)
       expect(yield* fs.exists(STATE_ROOT)).toBe(true)
-    }).pipe(Effect.provide(Layer.effect(Fs, makeMemoryFs())))
+    }).pipe(Effect.provide(Layer.effect(Fs, makeMemoryFs()))),
   )
 })

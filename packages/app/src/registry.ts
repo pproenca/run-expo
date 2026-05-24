@@ -7,7 +7,7 @@ import {
   NoopRecorder,
   type PolicyDocument,
   type RunRecorder,
-  type SideEffect
+  type SideEffect,
 } from "@expo98/core"
 import { type FsPort } from "@expo98/domain"
 import { Effect } from "effect"
@@ -62,9 +62,7 @@ export interface CommandRegistration<S extends SideEffect = SideEffect> {
 }
 
 /** A helper that constructs a registration while pinning `S` from the descriptor. */
-export const registration = <S extends SideEffect>(
-  reg: CommandRegistration<S>
-): CommandRegistration<S> => reg
+export const registration = <S extends SideEffect>(reg: CommandRegistration<S>): CommandRegistration<S> => reg
 
 /**
  * Erase a per-class `CommandRegistration<S>` into the heterogeneous registry
@@ -84,9 +82,8 @@ export const registration = <S extends SideEffect>(
  * builder type is weakened: each `*Command(verb)` stays fully typed at its call
  * site; only the array element type is erased.
  */
-export const eraseRegistration = <S extends SideEffect>(
-  reg: CommandRegistration<S>
-): CommandRegistration => reg as unknown as CommandRegistration
+export const eraseRegistration = <S extends SideEffect>(reg: CommandRegistration<S>): CommandRegistration =>
+  reg as unknown as CommandRegistration
 
 /** The assembled registry: verb path → registration. */
 export interface Registry {
@@ -106,9 +103,7 @@ export interface Registry {
  * Duplicate paths throw at composition time (fail fast) so a handler package
  * cannot silently shadow a core command.
  */
-export const registerCommands = (
-  registrations: ReadonlyArray<CommandRegistration>
-): Registry => {
+export const registerCommands = (registrations: ReadonlyArray<CommandRegistration>): Registry => {
   const byPath = new Map<string, CommandRegistration>()
   for (const reg of registrations) {
     if (byPath.has(reg.path)) {
@@ -119,7 +114,7 @@ export const registerCommands = (
   return {
     get: (path) => byPath.get(path),
     paths: Array.from(byPath.keys()),
-    all: Array.from(byPath.values())
+    all: Array.from(byPath.values()),
   }
 }
 
@@ -133,9 +128,8 @@ export const registerCommands = (
 export const runRegistered = (
   reg: CommandRegistration,
   ctx: CommandContext,
-  recorder: RunRecorder = NoopRecorder
-): Effect.Effect<DispatchResult<unknown>, never, CapabilityEnv> =>
-  dispatch(reg.build(ctx), ctx.policy, recorder)
+  recorder: RunRecorder = NoopRecorder,
+): Effect.Effect<DispatchResult<unknown>, never, CapabilityEnv> => dispatch(reg.build(ctx), ctx.policy, recorder)
 
 /** Re-export the descriptor type so handler authors import one surface. */
 export type { CommandDescriptor }

@@ -19,9 +19,7 @@ export const DEFAULT_CLEAN_AGE = "7d"
  *   lowercase → replace `[^a-z0-9_.-]+` with `-` → trim leading/trailing `-`
  *   → throw if empty → slice(0, 48).
  */
-export const normalizeSessionName = (
-  raw: string | undefined
-): Effect.Effect<string, EmptySessionName> => {
+export const normalizeSessionName = (raw: string | undefined): Effect.Effect<string, EmptySessionName> => {
   const input = raw ?? DEFAULT_SESSION_NAME
   const normalized = input
     .toLowerCase()
@@ -37,7 +35,7 @@ const DURATION_UNITS: Record<string, number> = {
   s: 1000,
   m: 60_000,
   h: 3_600_000,
-  d: 86_400_000
+  d: 86_400_000,
 }
 
 /** AC-043 duration parse: `^(\d+)([smhd])$` × unit-ms, else fail. */
@@ -70,8 +68,7 @@ export interface IdParts {
 }
 
 /** Compact a canonical ISO timestamp into an id-safe segment (no `:`/`.`). */
-export const idTimestampSegment = (nowIso: string): string =>
-  nowIso.replace(/[:.]/g, "-")
+export const idTimestampSegment = (nowIso: string): string => nowIso.replace(/[:.]/g, "-")
 
 export const makeEvidenceId = ({ prefix, nowIso, suffix }: IdParts): string =>
   `${prefix}-${idTimestampSegment(nowIso)}-${suffix}`
@@ -95,11 +92,7 @@ export const composeTargetId = (input: {
   readonly metroTitle?: string | null
   readonly metroPort?: number | null
 }): string => {
-  const runtime =
-    input.appId || input.metroId || input.metroTitle || "no-runtime"
-  const port =
-    input.metroPort === null || input.metroPort === undefined
-      ? "no-metro"
-      : String(input.metroPort)
+  const runtime = input.appId || input.metroId || input.metroTitle || "no-runtime"
+  const port = input.metroPort === null || input.metroPort === undefined ? "no-metro" : String(input.metroPort)
   return [input.platform, input.deviceId, runtime, port].join(":")
 }

@@ -10,21 +10,15 @@
  *
  * This file is type-only; it is never executed.
  */
-import {
-  command,
-  DeviceCapability,
-  RuntimeEvalCapability
-} from "@expo98/core"
-import { descriptor } from "../src/support.js"
+import { command, DeviceCapability, RuntimeEvalCapability } from "@expo98/core"
 import { Effect } from "effect"
+import { descriptor } from "../src/support.js"
 
 // An effect that REQUIRES the runtime-eval capability in its R channel.
 const evalEffect = RuntimeEvalCapability.pipe(
-  Effect.flatMap((e) => e.evaluate("globalThis.__EXPO98_TRACE__.start(200)"))
+  Effect.flatMap((e) => e.evaluate("globalThis.__EXPO98_TRACE__.start(200)")),
 )
-const deviceEffect = DeviceCapability.pipe(
-  Effect.flatMap((d) => d.invoke("xcrun", ["simctl", "ui", "dev-menu"]))
-)
+const deviceEffect = DeviceCapability.pipe(Effect.flatMap((d) => d.invoke("xcrun", ["simctl", "ui", "dev-menu"])))
 
 // ── POSITIVE: a runtime-eval-classed devtools descriptor MAY pair with an
 //    eval-requiring handler (this is exactly what `traceCommand` does). ──
@@ -37,7 +31,7 @@ void traceLikeOk
 const readCannotEval = command(
   descriptor("inspector.probe", "read"),
   // @ts-expect-error read-classed devtools handler cannot require RuntimeEvalCapability
-  evalEffect
+  evalEffect,
 )
 void readCannotEval
 
@@ -45,7 +39,7 @@ void readCannotEval
 const readCannotDevice = command(
   descriptor("navigation.state", "read"),
   // @ts-expect-error read-classed devtools handler cannot require DeviceCapability
-  deviceEffect
+  deviceEffect,
 )
 void readCannotDevice
 
@@ -54,6 +48,6 @@ void readCannotDevice
 const deviceCannotEval = command(
   descriptor("inspector.open-dev-menu", "device"),
   // @ts-expect-error device-classed devtools handler cannot require RuntimeEvalCapability
-  evalEffect
+  evalEffect,
 )
 void deviceCannotEval

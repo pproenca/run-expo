@@ -24,14 +24,14 @@ import {
   rnResult,
   type RnTreeResult,
   type RnUnavailable,
-  round
+  round,
 } from "@expo98/handlers-snapshot"
 
 const node = (over: Omit<Partial<RnNode>, "id"> & { id: string }): RnNode => ({
   name: `Comp${over.id}`,
   depth: 0,
   ...over,
-  id: over.id
+  id: over.id,
 })
 
 describe("AC-055 depth + node caps", () => {
@@ -56,9 +56,7 @@ describe("AC-055 depth + node caps", () => {
   })
 
   it("AC-055 applyTraversalCaps prunes depth > maxDepth then slices to maxNodes", () => {
-    const graph: ReadonlyArray<RnNode> = Array.from({ length: 10 }, (_, i) =>
-      node({ id: `${i}`, depth: i })
-    )
+    const graph: ReadonlyArray<RnNode> = Array.from({ length: 10 }, (_, i) => node({ id: `${i}`, depth: i }))
     // maxDepth 5 keeps depths 0..5 (6 nodes), maxNodes 3 slices to first 3.
     const capped = applyTraversalCaps(graph, 5, 3)
     expect(capped.map((n) => n.id)).toEqual(["0", "1", "2"])
@@ -102,7 +100,7 @@ describe("AC-055 per-verb projections", () => {
     const graph: ReadonlyArray<RnNode> = [
       node({ id: "1", depth: 0, actions: Array.from({ length: 15 }, (_, i) => `a${i}`) }),
       node({ id: "2", depth: 1 }),
-      node({ id: "3", depth: 99 }) // pruned by default maxDepth 30
+      node({ id: "3", depth: 99 }), // pruned by default maxDepth 30
     ]
     const result = rnResult("tree", { graph }) as RnTreeResult
     expect(result.maxDepth).toBe(30)
@@ -116,8 +114,8 @@ describe("AC-055 per-verb projections", () => {
       node({
         id: `${i}`,
         depth: 0,
-        layout: { x: 1.239, y: 2.5, width: 3.001, height: 4.999 }
-      })
+        layout: { x: 1.239, y: 2.5, width: 3.001, height: 4.999 },
+      }),
     )
     const result = rnResult("refs", { graph }) as RnRefsResult
     expect(result.controls).toHaveLength(80)
@@ -126,7 +124,7 @@ describe("AC-055 per-verb projections", () => {
 
   it("AC-055 renders caps the record list at 60 and rounds renderMs", () => {
     const graph: ReadonlyArray<RnNode> = Array.from({ length: 100 }, (_, i) =>
-      node({ id: `${i}`, depth: 0, renderMs: 16.666 + i })
+      node({ id: `${i}`, depth: 0, renderMs: 16.666 + i }),
     )
     const result = rnResult("renders", { graph }) as RnRendersResult
     expect(result.records).toHaveLength(60)
@@ -136,7 +134,7 @@ describe("AC-055 per-verb projections", () => {
   it("AC-055 renders skips nodes without a renderMs measurement", () => {
     const graph: ReadonlyArray<RnNode> = [
       node({ id: "1", depth: 0, renderMs: 12.345 }),
-      node({ id: "2", depth: 0 }) // no renderMs
+      node({ id: "2", depth: 0 }), // no renderMs
     ]
     const result = rnResult("renders", { graph }) as RnRendersResult
     expect(result.records.map((r) => r.id)).toEqual(["1"])
@@ -150,14 +148,16 @@ describe("AC-055 per-verb projections", () => {
         depth: 0,
         layout: { x: 5.555, y: 6.5, width: 7.004, height: 8.996 },
         actions: Array.from({ length: 12 }, (_, i) => `a${i}`),
-        ancestors: Array.from({ length: 50 }, (_, i) => `anc${i}`)
-      })
+        ancestors: Array.from({ length: 50 }, (_, i) => `anc${i}`),
+      }),
     ]
     const result = rnResult("inspect", { graph, elementId: "target" }) as RnInspectResultEnvelope
     expect(result.available).toBe(true)
     expect(result.element.actions).toHaveLength(10)
     expect(result.element.ancestors).toEqual(
-      Array.from({ length: 50 }, (_, i) => `anc${i}`).slice(0, 40).slice(16, 24)
+      Array.from({ length: 50 }, (_, i) => `anc${i}`)
+        .slice(0, 40)
+        .slice(16, 24),
     )
     expect(result.element.box).toEqual({ x: 5.56, y: 6.5, width: 7, height: 9 })
   })
@@ -165,7 +165,7 @@ describe("AC-055 per-verb projections", () => {
   it("AC-055 inspect of a missing element → available:false", () => {
     const result = rnResult("inspect", {
       graph: [node({ id: "a", depth: 0 })],
-      elementId: "missing"
+      elementId: "missing",
     }) as RnUnavailable
     expect(result.available).toBe(false)
   })
