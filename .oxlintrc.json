@@ -181,7 +181,6 @@
     ".artifacts/",
     ".cache/",
     ".clawpatch/",
-    ".desloppify/",
     ".scratch/",
     "cli/",
     "coverage/",

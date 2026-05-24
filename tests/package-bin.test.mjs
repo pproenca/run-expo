@@ -1055,9 +1055,13 @@ describe("expo98 package bin", () => {
     assert.equal(/import\s+["']\.\.\//.test(bundledCli), false);
     assert.deepEqual(packageJson.dependencies, { ws: "^8.21.0" });
     assert.deepEqual(packageJson.devDependencies, {
+      "@typescript/native-preview": "7.0.0-dev.20260519.1",
       "@types/node": "^25.9.1",
       "@types/ws": "^8.18.1",
       esbuild: "^0.25.12",
+      oxfmt: "0.51.0",
+      oxlint: "1.66.0",
+      "oxlint-tsgolint": "0.23.0",
       typescript: "^6.0.3",
     });
   });
