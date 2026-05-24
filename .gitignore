@@ -11,6 +11,20 @@ pnpm-debug.log*
 .env
 .env.*
 
+# Local project-agent skill installs. Only repo-owned skills are visible by
+# default; promoting a new repo skill should require an intentional `git add -f`.
+.agents/skills/*
+!.agents/skills/autoreview/
+!.agents/skills/autoreview/**
+!.agents/skills/expo98-testing/
+!.agents/skills/expo98-testing/**
+!.agents/skills/expo98-debugging/
+!.agents/skills/expo98-debugging/**
+!.agents/skills/expo98-docs/
+!.agents/skills/expo98-docs/**
+!.agents/skills/crabbox/
+!.agents/skills/crabbox/**
+
 # Local evidence produced by --record and manual CLI runs
 expo98.policy.json
 *.har
