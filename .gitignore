@@ -3,6 +3,7 @@ node_modules/
 .tmp/
 .cache/
 .scratch/
+.clawpatch/
 coverage/
 dist/
 *.tgz
