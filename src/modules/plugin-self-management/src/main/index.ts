@@ -1,4 +1,5 @@
 import { execFile as nodeExecFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -192,11 +193,21 @@ export async function releaseCheck(
 }
 
 export function cliWrapperPath(deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {}): string {
-  return join(pluginRoot(deps), "cli", "expo-ios.mjs");
+  return join(pluginRoot(deps), "cli", "expo98.mjs");
 }
 
 export function pluginRoot(deps: Pick<PluginSelfManagementDependencies, "pluginRoot"> = {}): string {
-  return resolve(deps.pluginRoot ?? join(dirname(new URL(import.meta.url).pathname), "..", ".."));
+  return resolve(deps.pluginRoot ?? findPackageRoot(dirname(new URL(import.meta.url).pathname)));
+}
+
+function findPackageRoot(start: string): string {
+  let current = resolve(start);
+  while (true) {
+    if (existsSync(join(current, "package.json")) && existsSync(join(current, "cli"))) return current;
+    const parent = dirname(current);
+    if (parent === current) return resolve(start);
+    current = parent;
+  }
 }
 
 export async function pathExists(file: string): Promise<boolean> {

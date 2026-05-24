@@ -390,16 +390,17 @@ function commandArgs(command, args, globals = {}) {
       });
     case "annotate-screen":
       return pickDefined({
+        action: args.action ?? args._[0],
         cwd,
-        device: args.device,
-        bundleId: args.bundleId,
         metroPort: args.metroPort,
-        screenshotPath: args.screenshotPath,
         outputDir: args.outputDir,
+        overlayDir: args.overlayDir,
+        endpointPath: args.endpointPath,
         title: args.title,
         serve: args.serve,
         port: args.port,
-        includeUxContext: args.includeUxContext
+        force: args.force,
+        confirmActions: args.confirmActions ?? globals.confirmActions
       });
     case "inspector":
       return pickDefined({
@@ -1131,7 +1132,7 @@ var SIMULATOR_AND_APP_COMMANDS = [
 var EVIDENCE_AND_RUNTIME_COMMANDS = [
   "logs                   Collect recent app/device logs",
   "ux-context             Capture screenshot, route, runtime, hierarchy, and log context",
-  "annotate-screen        Create a local screenshot annotation board",
+  "annotate-screen        Prepare/read an in-app annotation overlay",
   "inspector              Toggle RN inspector and install/read simulator comments",
   "review-overlay         Scaffold/run an in-app Codex review overlay",
   "review-next            Suggest the next constraint-focused UI review step",
@@ -1179,7 +1180,7 @@ var EXAMPLES = [
   `expo-ios --json batch '["wait","--text","Customers"]' '["get","source","@e1"]' --bail true`,
   "expo-ios --json screenshot --annotate",
   "expo-ios --json open-route /customers --cwd apps/mobile --scheme myapp",
-  "expo-ios --json annotate-screen --cwd apps/mobile --serve true",
+  "expo-ios --json annotate-screen prepare --cwd apps/mobile --serve true",
   "expo-ios --json inspector probe --metro-port 8081",
   "expo-ios --json inspector install-comment-menu --metro-port 8081",
   "expo-ios --json inspector open-dev-menu",
@@ -1783,8 +1784,8 @@ function classifyExpoReactNativeCompatibility(expoVersion, reactNativeVersion) {
 }
 async function normalizeCwd(cwd) {
   const resolved = path.resolve(cwd ?? process.cwd());
-  const stat9 = await fs.stat(resolved).catch(() => null);
-  if (!stat9?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  const stat8 = await fs.stat(resolved).catch(() => null);
+  if (!stat8?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp(startDir, filename) {
@@ -2079,8 +2080,8 @@ function parseTypedRoutes(source2) {
 }
 async function normalizeCwd2(cwd, deps) {
   const resolved = deps.path.resolve(cwd ?? deps.processCwd);
-  const stat9 = await deps.fs.stat(resolved);
-  if (!stat9?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  const stat8 = await deps.fs.stat(resolved);
+  if (!stat8?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 function toolJson3(value) {
@@ -2364,8 +2365,8 @@ function normalizeSessionName(value) {
 }
 async function createSession(input) {
   const name = normalizeSessionName(input.name ?? "review");
-  const now6 = input.now ?? systemClock;
-  const created = now6();
+  const now4 = input.now ?? systemClock;
+  const created = now4();
   const createdAt = created.toISOString();
   const sessionId = createSessionId(name, created, input.randomSuffix ?? randomBase36Suffix);
   const artifactDir = join3(sessionDirectory(input.stateRoot, sessionId), "artifacts");
@@ -2497,8 +2498,8 @@ async function startRunRecord(input) {
     return { path: null, async finish() {
     } };
   }
-  const now6 = input.now ?? systemClock;
-  const startedAt = now6().toISOString();
+  const now4 = input.now ?? systemClock;
+  const startedAt = now4().toISOString();
   const runId = createRunId(new Date(startedAt), input.randomSuffix ?? randomBase36Suffix);
   const root = resolve3(String(input.globals.root ?? input.args.cwd ?? input.cwd ?? process.cwd()));
   const stateDir = resolve3(String(input.globals.stateDir ?? join4(root, ".scratch", "expo-ios", "runs")));
@@ -2523,7 +2524,7 @@ async function startRunRecord(input) {
     async finish({ status, exitCode, payload, error }) {
       await writeJsonFile(recordPath, {
         ...baseRecord,
-        finishedAt: now6().toISOString(),
+        finishedAt: now4().toISOString(),
         status,
         exitCode,
         summary: summarizeRunPayload(payload),
@@ -2837,8 +2838,8 @@ function clampNumber4(value, min, max) {
 }
 
 // src/modules/snapshot-evidence/src/main/ids.ts
-function createSnapshotId(now6, randomSuffix) {
-  const timestamp = now6.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").replace("T", "-").toLowerCase();
+function createSnapshotId(now4, randomSuffix) {
+  const timestamp = now4.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").replace("T", "-").toLowerCase();
   return `snapshot-${timestamp}-${randomSuffix}`;
 }
 
@@ -3232,7 +3233,7 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
 var defaultSnapshotDependencies = {
   now: () => /* @__PURE__ */ new Date(),
   randomSuffix: randomBase36Suffix,
-  ensureDirectory: (path14) => mkdir6(path14, { recursive: true }),
+  ensureDirectory: (path12) => mkdir6(path12, { recursive: true }),
   writeJsonFile: writeJson2,
   updateSessionRecord: async (stateRoot, record) => {
     await mkdir6(sessionDirectory(stateRoot, record.sessionId), { recursive: true });
@@ -3416,8 +3417,8 @@ async function readLatestSession2(stateRoot) {
   );
   return sessions[0] ?? null;
 }
-async function readJson4(path14) {
-  return JSON.parse(await readFile6(path14, "utf8"));
+async function readJson4(path12) {
+  return JSON.parse(await readFile6(path12, "utf8"));
 }
 
 // src/modules/ref-actions-wait/src/main/find.ts
@@ -3498,16 +3499,16 @@ async function planUnavailable(action) {
 
 // src/modules/ref-actions-wait/src/main/wait.ts
 async function waitCommand(args, deps = defaultRefActionDependencies) {
-  const now6 = deps.now ?? Date.now;
+  const now4 = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
-  const started = now6();
+  const started = now4();
   const timeoutMs = clampNumber5(args.timeoutMs ?? 5e3, 0, 6e4);
   const intervalMs = Math.min(Math.max(Math.floor(timeoutMs / 10), 25), 250);
   const predicate = waitPredicate(args);
   if (!predicate) {
     const ms = clampNumber5(args.ms ?? 0, 0, 6e4);
     if (ms > 0) await sleep(ms);
-    return toolJson6({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now6() - started });
+    return toolJson6({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now4() - started });
   }
   if (predicate.kind === "metro-ready" || predicate.kind === "app-ready" || predicate.kind === "fn") {
     if (!deps.waitRuntimePredicate) {
@@ -3517,7 +3518,7 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
         reason: "Runtime wait predicates require a runtime adapter.",
         predicate,
         timeoutMs,
-        elapsedMs: now6() - started
+        elapsedMs: now4() - started
       });
     }
     const runtimeResult = await deps.waitRuntimePredicate(predicate, args, { started, timeoutMs, intervalMs });
@@ -3536,13 +3537,13 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
     }
     const result = evaluateWaitPredicate(lastCache, predicate);
     if (result.final || result.matched) {
-      const payload = result.payload?.matched ? { ...result.payload, elapsedMs: now6() - started } : result.payload;
+      const payload = result.payload?.matched ? { ...result.payload, elapsedMs: now4() - started } : result.payload;
       return toolJson6(payload);
     }
-    if (now6() - started >= timeoutMs) break;
-    await sleep(Math.min(intervalMs, timeoutMs - (now6() - started)));
-  } while (now6() - started <= timeoutMs);
-  return toolJson6(timeoutWaitPayload(predicate, lastCache, timeoutMs, now6() - started));
+    if (now4() - started >= timeoutMs) break;
+    await sleep(Math.min(intervalMs, timeoutMs - (now4() - started)));
+  } while (now4() - started <= timeoutMs);
+  return toolJson6(timeoutWaitPayload(predicate, lastCache, timeoutMs, now4() - started));
 }
 function waitPredicate(args = {}) {
   if (args.metroReady === true) return { kind: "metro-ready" };
@@ -4595,13 +4596,13 @@ async function defaultListDiagnosticReports() {
   const entries = await fs3.readdir(directory, { withFileTypes: true }).catch(() => []);
   const reports = await Promise.all(entries.filter((entry) => entry.isFile() && /\.(ips|crash)$/.test(entry.name)).map(async (entry) => {
     const file = joinPath(directory, entry.name);
-    const stat9 = await fs3.stat(file);
+    const stat8 = await fs3.stat(file);
     return {
       name: entry.name,
       path: file,
       isFile: true,
-      mtimeMs: stat9.mtimeMs,
-      mtimeIso: stat9.mtime.toISOString(),
+      mtimeMs: stat8.mtimeMs,
+      mtimeIso: stat8.mtime.toISOString(),
       content: await fs3.readFile(file, "utf8").catch(() => "")
     };
   }));
@@ -4797,8 +4798,8 @@ async function normalizeProjectCwd(cwd, options = {}) {
 }
 async function normalizeCwd3(cwd) {
   const resolved = path3.resolve(cwd ?? ".");
-  const stat9 = await fs4.stat(resolved).catch(() => null);
-  if (!stat9?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  const stat8 = await fs4.stat(resolved).catch(() => null);
+  if (!stat8?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp2(startDir, filename) {
@@ -5831,9 +5832,9 @@ function clampNumber8(value, min, max) {
   }
   return Math.min(Math.max(numberValue, min), max);
 }
-function getPath(value, path14) {
+function getPath(value, path12) {
   let current = value;
-  for (const key of path14) {
+  for (const key of path12) {
     current = asRecord3(current)?.[key];
   }
   return current;
@@ -6289,14 +6290,14 @@ async function adbScreenshot(device, outputPath, deps) {
   await new Promise((resolve15, reject) => {
     const child = spawnProcess("adb", args, deps);
     let stderr = "";
-    const chunks2 = [];
+    const chunks = [];
     let byteLength = 0;
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error("adb screenshot timed out after 30000ms"));
     }, 3e4);
     child.stdout.on("data", (chunk) => {
-      chunks2.push(chunk);
+      chunks.push(chunk);
       byteLength += chunk.byteLength;
     });
     child.stderr.setEncoding?.("utf8");
@@ -6310,7 +6311,7 @@ async function adbScreenshot(device, outputPath, deps) {
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        fs6.writeFile(outputPath, Buffer.concat(chunks2, byteLength)).then(resolve15, reject);
+        fs6.writeFile(outputPath, Buffer.concat(chunks, byteLength)).then(resolve15, reject);
       } else {
         reject(new Error(`adb screenshot failed with code ${code}: ${stderr}`));
       }
@@ -6403,7 +6404,7 @@ var defaultInteractionDependencies = {
   wait: (ms) => new Promise((resolve15) => setTimeout(resolve15, ms)),
   now: () => /* @__PURE__ */ new Date(),
   tmpdir: osTmpdir,
-  mkdir: (path14, options) => fs7.mkdir(path14, options),
+  mkdir: (path12, options) => fs7.mkdir(path12, options),
   joinPath: joinPath2
 };
 async function automationTap(args, deps = defaultInteractionDependencies) {
@@ -7317,94 +7318,55 @@ function formatError9(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// src/modules/annotate-screen-artifacts/src/main/index.ts
+// src/modules/review-overlay-workflow/src/main/index.ts
 import { openSync } from "node:fs";
-import { copyFile, mkdir as mkdir10, stat as stat5, writeFile as writeFile6 } from "node:fs/promises";
-import { createServer } from "node:net";
+import { mkdir as mkdir10, readFile as readFile11, stat as stat5, writeFile as writeFile6 } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import path7 from "node:path";
 import { spawn as spawn2 } from "node:child_process";
+var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
 function toolJson13(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-function unwrapToolJson6(result) {
-  const text = result?.content?.[0]?.text;
-  if (typeof text !== "string") return result;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
+async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies) {
+  const action = requireOptionalString5(args.action) ?? "prepare";
+  if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
+    throw new Error(`Unknown review-overlay action: ${action}`);
   }
-}
-async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencies) {
+  if (action === "scaffold") return toolJson13(await scaffoldReviewOverlay(args, deps));
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
-  const timestamp = now2(deps).toISOString().replace(/[:.]/g, "-");
-  const outputDir = deps.resolvePath(
-    requireOptionalString5(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "expo-ios-annotations", `annotation-${timestamp}`)
-  );
-  await deps.mkdir(outputDir, { recursive: true });
-  const screenshotPath = deps.joinPath(outputDir, "screenshot.png");
-  let context = null;
-  const existingScreenshot = requireOptionalString5(args.screenshotPath);
-  if (existingScreenshot) {
-    await deps.copyFile(deps.resolvePath(existingScreenshot), screenshotPath);
-    context = {
-      source: "provided-screenshot",
-      screenshot: { outputPath: screenshotPath },
-      capturedAt: now2(deps).toISOString()
-    };
-  } else if (args.includeUxContext !== false) {
-    context = unwrapToolJson6(await deps.captureUxContext({
-      cwd,
-      device: args.device,
-      bundleId: args.bundleId,
-      metroPort: args.metroPort,
-      outputPath: screenshotPath,
-      includeScreenshot: true,
-      includeImageAnalysis: true,
-      includeHierarchy: true,
-      includeRuntime: true,
-      includeComponents: true,
-      includeLogs: false
-    }));
-  } else {
-    const shot = unwrapToolJson6(await deps.automationTakeScreenshot({
-      platform: "ios",
-      device: args.device,
-      outputPath: screenshotPath
-    }));
-    context = { source: "screenshot-only", screenshot: shot, capturedAt: now2(deps).toISOString() };
+  const outputDir = deps.resolvePath(requireOptionalString5(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
+  const eventsPath = deps.joinPath(outputDir, "events.json");
+  if (action === "read") {
+    const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
+    return toolJson13({ outputDir, eventsPath, ...data2 });
   }
-  const title = requireOptionalString5(args.title) ?? "Expo screen annotations";
-  const contextPath = deps.joinPath(outputDir, "context.json");
-  const annotationsPath = deps.joinPath(outputDir, "annotations.json");
-  const htmlPath = deps.joinPath(outputDir, "annotate.html");
-  await deps.writeFile(contextPath, `${JSON.stringify(context, null, 2)}
-`, "utf8");
-  if (!await deps.pathExists(annotationsPath)) {
-    await deps.writeFile(annotationsPath, `${JSON.stringify({
-      version: 1,
-      title,
-      createdAt: now2(deps).toISOString(),
-      screenshot: "screenshot.png",
-      context: "context.json",
-      comments: []
-    }, null, 2)}
-`, "utf8");
+  if (action === "clear") {
+    const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
+    return toolJson13({ outputDir, eventsPath, cleared: true, ...data2 });
   }
-  await deps.writeFile(htmlPath, (deps.annotationHtml ?? annotationHtml)({ title }), "utf8");
+  if (action === "server") {
+    return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
+  }
+  const title = requireOptionalString5(args.title) ?? "Codex in-app review";
+  const data = await deps.createEventsFile({ outputDir, title, reset: false });
   let server = null;
   if (args.serve === true) {
-    const port = args.port ? clampNumber12(args.port, 1, 65535) : await deps.findAvailablePort(17654);
-    const logPath = deps.joinPath(outputDir, "annotation-server.log");
+    const port = args.port ? clampNumber12(args.port, 1, 65535) : await deps.findAvailablePort(17655);
+    const endpointPath = normalizeEndpointPath(args.endpointPath);
+    const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
     const logFd = await deps.openLogFile(logPath, "a");
     const child = await deps.spawnDetached(deps.execPath, [
       deps.scriptPath,
-      "annotation-server",
-      "--dir",
+      "review-overlay-server",
+      "--output-dir",
       outputDir,
       "--port",
-      String(port)
+      String(port),
+      "--endpoint-path",
+      endpointPath
     ], {
       detached: true,
       stdio: ["ignore", logFd, logFd]
@@ -7412,6 +7374,8 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
     child.unref?.();
     server = {
       url: `http://127.0.0.1:${port}/`,
+      endpoint: `http://127.0.0.1:${port}${endpointPath}`,
+      eventsUrl: `http://127.0.0.1:${port}/events.json`,
       pid: child.pid,
       logPath,
       stop: `kill ${child.pid}`
@@ -7419,182 +7383,77 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
   }
   return toolJson13({
     outputDir,
-    htmlPath,
-    screenshotPath,
-    contextPath,
-    annotationsPath,
+    eventsPath,
     server,
+    ...data,
     instructions: [
-      server ? `Open ${server.url}, click or drag on the screenshot, add comments, then press Save.` : `Open ${htmlPath}. In file mode, use Download JSON or Copy JSON after adding comments.`,
-      `Codex can read comments from ${annotationsPath}.`
+      "Run review-overlay scaffold once, then mount CodexReviewOverlay inside the app root in development only.",
+      server ? `Pass endpoint="${server.endpoint}" to CodexReviewOverlay. In iOS Simulator, 127.0.0.1 points at the Mac host.` : "Start with --serve true or run review-overlay server before using the overlay in the simulator.",
+      `Codex can read in-app review events from ${eventsPath}.`
     ]
   });
 }
-var defaultAnnotateScreenDependencies = {
+var defaultReviewOverlayDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd2,
   fallbackCwd: () => process.cwd(),
   resolvePath: (...parts) => path7.resolve(...parts.filter((part) => Boolean(part))),
   joinPath: (...parts) => path7.join(...parts),
+  relativePath: (from, to) => path7.relative(from, to),
+  createEventsFile,
+  readEvents,
+  reviewOverlayServer,
   mkdir: mkdir10,
-  copyFile,
   writeFile: writeFile6,
   pathExists: async (file) => stat5(file).then(() => true, () => false),
-  captureUxContext,
-  automationTakeScreenshot,
   findAvailablePort,
   openLogFile: (file) => openSync(file, "a"),
   spawnDetached: (command, argv, options) => spawn2(command, argv, options),
   execPath: process.execPath,
-  scriptPath: process.argv[1] ?? "",
-  now: () => /* @__PURE__ */ new Date()
+  scriptPath: process.argv[1] ?? ""
 };
-function annotationHtml({ title }) {
-  const safeTitle = escapeHtml2(title);
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${safeTitle}</title>
-  <style>
-    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; background: #111; color: #f5f5f7; }
-    body { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 100vh; }
-    #stage { position: relative; align-self: start; margin: 16px; border: 1px solid #3a3a3c; border-radius: 12px; overflow: hidden; background: #000; }
-    #shot { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
-    aside { border-left: 1px solid #2c2c2e; padding: 16px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; overflow: auto; background: #1c1c1e; }
-    button, textarea { font: inherit; }
-    button { border: 0; border-radius: 8px; padding: 8px 10px; background: #0a84ff; color: white; font-weight: 600; cursor: pointer; }
-    button.secondary { background: #3a3a3c; }
-    textarea { width: 100%; min-height: 72px; box-sizing: border-box; border-radius: 8px; border: 1px solid #48484a; background: #111; color: white; padding: 8px; resize: vertical; }
-    .marker { position: absolute; min-width: 20px; height: 20px; border-radius: 999px; transform: translate(-50%, -50%); background: #ff453a; color: white; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
-    .rect { position: absolute; border: 2px solid #0a84ff; background: rgba(10,132,255,.12); border-radius: 6px; pointer-events: none; }
-    .comment { border: 1px solid #38383a; border-radius: 10px; padding: 10px; margin: 10px 0; background: #242426; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .hint { color: #a1a1a6; font-size: 13px; line-height: 1.35; }
-  </style>
-</head>
-<body>
-  <main><div id="stage"><img id="shot" src="screenshot.png" alt="Captured app screen"></div></main>
-  <aside>
-    <h1>${safeTitle}</h1>
-    <p class="hint">Click the screenshot to add a point comment. Served mode saves to annotations.json.</p>
-    <div class="row">
-      <button id="save">Save</button>
-      <button id="download" class="secondary">Download JSON</button>
-      <button id="copy" class="secondary">Copy JSON</button>
-    </div>
-    <p id="status" class="hint"></p>
-    <section id="comments"></section>
-  </aside>
-  <script>
-    const stage = document.getElementById('stage');
-    const shot = document.getElementById('shot');
-    const commentsEl = document.getElementById('comments');
-    const statusEl = document.getElementById('status');
-    let annotations = { version: 1, title: ${JSON.stringify(title)}, screenshot: 'screenshot.png', context: 'context.json', comments: [] };
-    let dragStart = null;
-    fetch('annotations.json').then(r => r.ok ? r.json() : annotations).then(data => {
-      if (data && Array.isArray(data.comments)) annotations = data;
-      render();
-    }).catch(render);
-    function point(event) {
-      const rect = shot.getBoundingClientRect();
-      const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
-      const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-      return { kind: 'point', x, y, nx: x / rect.width, ny: y / rect.height };
-    }
-    stage.addEventListener('mousedown', event => { if (event.button === 0) dragStart = point(event); });
-    stage.addEventListener('mouseup', event => {
-      if (!dragStart) return;
-      const end = point(event);
-      const dx = Math.abs(end.x - dragStart.x);
-      const dy = Math.abs(end.y - dragStart.y);
-      const isRect = dx > 8 || dy > 8;
-      const text = prompt(isRect ? 'Comment for this region:' : 'Comment for this point:');
-      if (text && text.trim()) {
-        const rect = shot.getBoundingClientRect();
-        const comment = isRect
-          ? {
-              kind: 'rect',
-              x: Math.min(dragStart.x, end.x),
-              y: Math.min(dragStart.y, end.y),
-              width: dx,
-              height: dy,
-              nx: Math.min(dragStart.x, end.x) / rect.width,
-              ny: Math.min(dragStart.y, end.y) / rect.height,
-              nw: dx / rect.width,
-              nh: dy / rect.height,
-            }
-          : end;
-        annotations.comments.push({ id: 'c' + Date.now().toString(36), createdAt: new Date().toISOString(), ...comment, text: text.trim() });
-        render();
-      }
-      dragStart = null;
-    });
-    function render() {
-      stage.querySelectorAll('.marker,.rect').forEach(node => node.remove());
-      commentsEl.textContent = '';
-      const rect = shot.getBoundingClientRect();
-      annotations.comments.forEach((comment, index) => {
-        if (comment.kind === 'rect') {
-          const node = document.createElement('div');
-          node.className = 'rect';
-          node.style.left = (comment.nx * rect.width) + 'px';
-          node.style.top = (comment.ny * rect.height) + 'px';
-          node.style.width = (comment.nw * rect.width) + 'px';
-          node.style.height = (comment.nh * rect.height) + 'px';
-          stage.appendChild(node);
-        } else {
-          const marker = document.createElement('div');
-          marker.className = 'marker';
-          marker.textContent = String(index + 1);
-          marker.style.left = (comment.nx * rect.width) + 'px';
-          marker.style.top = (comment.ny * rect.height) + 'px';
-          stage.appendChild(marker);
-        }
-        const card = document.createElement('div');
-        card.className = 'comment';
-        const label = document.createElement('strong');
-        label.textContent = '#' + (index + 1);
-        const textarea = document.createElement('textarea');
-        textarea.value = comment.text || '';
-        textarea.addEventListener('input', () => { comment.text = textarea.value; });
-        card.append(label, textarea);
-        commentsEl.appendChild(card);
-      });
-    }
-    async function save() {
-      annotations.savedAt = new Date().toISOString();
-      try {
-        const res = await fetch('/annotations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(annotations) });
-        if (!res.ok) throw new Error(await res.text());
-        statusEl.textContent = 'Saved to annotations.json';
-      } catch {
-        statusEl.textContent = 'Could not save via server. Use Download JSON or Copy JSON.';
-      }
-    }
-    function download() {
-      const blob = new Blob([JSON.stringify(annotations, null, 2) + '\\n'], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'annotations.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-    async function copyJson() {
-      await navigator.clipboard.writeText(JSON.stringify(annotations, null, 2));
-      statusEl.textContent = 'Copied JSON';
-    }
-    document.getElementById('save').addEventListener('click', save);
-    document.getElementById('download').addEventListener('click', download);
-    document.getElementById('copy').addEventListener('click', copyJson);
-    window.addEventListener('resize', render);
-    shot.addEventListener('load', render);
-  </script>
-</body>
-</html>
-`;
+async function scaffoldReviewOverlay(args = {}, deps) {
+  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
+  const overlayDir = deps.resolvePath(cwd, requireOptionalString5(args.overlayDir) ?? "codex-review-overlay");
+  const componentPath = deps.joinPath(overlayDir, "CodexReviewOverlay.tsx");
+  const indexPath = deps.joinPath(overlayDir, "index.ts");
+  if (await deps.pathExists(componentPath) && args.force !== true) {
+    throw new Error(`${componentPath} already exists. Pass --force true to overwrite.`);
+  }
+  await deps.mkdir(overlayDir, { recursive: true });
+  await deps.writeFile(componentPath, codexReviewOverlayComponentSource(), "utf8");
+  await deps.writeFile(indexPath, `export { CodexReviewOverlay } from "./CodexReviewOverlay";
+export { default } from "./CodexReviewOverlay";
+`, "utf8");
+  return {
+    overlayDir,
+    componentPath,
+    indexPath,
+    integration: {
+      import: `import { CodexReviewOverlay } from "${relativeImportFromAppRoot(cwd, overlayDir, deps)}";`,
+      jsx: `{__DEV__ ? <CodexReviewOverlay endpoint="http://127.0.0.1:17655/events" screenName="Schedule" inspectedViewRef={inspectedViewRef} /> : null}`,
+      note: "Mount this near the root layout so it floats above the current screen. Wrap only the app content, not the overlay, in a host View ref with collapsable={false}; pass that ref as inspectedViewRef so comments identify the tapped app element."
+    },
+    capabilities: [
+      "single Comment control inside the app",
+      "inactive state leaves the app interactive",
+      "mouse-over preview after Comment resolves native elements before selection",
+      "next click after Comment resolves the touched native element and owner hierarchy",
+      "Copy action writes Agentation-style feedback markdown to the Mac clipboard",
+      "bounding boxes around commented elements",
+      "gesture metadata for tap, hold, and scroll conflict notes",
+      "local JSON event sync readable by Codex"
+    ]
+  };
+}
+function relativeImportFromAppRoot(cwd, overlayDir, deps) {
+  const rel = (deps?.relativePath(cwd, overlayDir) ?? relativePathFallback(cwd, overlayDir)).replace(/\\/g, "/");
+  return rel.startsWith(".") ? rel : `./${rel}`;
+}
+function normalizeEndpointPath(value) {
+  const raw = requireOptionalString5(value) ?? "/events";
+  const endpoint = raw.startsWith("/") ? raw : `/${raw}`;
+  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint)) throw new Error("endpointPath must be a simple URL path.");
+  return endpoint;
 }
 function requireOptionalString5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -7606,8 +7465,88 @@ function clampNumber12(value, min, max) {
   }
   return Math.min(Math.max(numberValue, min), max);
 }
-function now2(deps) {
-  return deps.now?.() ?? /* @__PURE__ */ new Date();
+function codexReviewOverlayComponentSource() {
+  return `import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }) {
+  const [active, setActive] = useState(false);
+  const [events, setEvents] = useState([]);
+  const sequence = useRef(0);
+
+  const submit = useCallback(async (event) => {
+    const payload = {
+      id: "overlay-" + Date.now().toString(36) + "-" + sequence.current++,
+      screenName,
+      createdAt: new Date().toISOString(),
+      ...event,
+    };
+    setEvents((current) => current.concat(payload));
+    try {
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {}
+  }, [endpoint, screenName]);
+
+  const label = useMemo(() => active ? "Tap target" : "Comment", [active]);
+
+  return (
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      <View pointerEvents="box-none" style={styles.toolbar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Codex review comment"
+          onPress={() => setActive((value) => !value)}
+          style={[styles.button, active ? styles.active : null]}
+        >
+          <Text style={styles.buttonText}>{label}</Text>
+        </Pressable>
+      </View>
+      {active ? (
+        <Pressable
+          accessibilityLabel="Codex review target surface"
+          style={StyleSheet.absoluteFill}
+          onPress={(event) => {
+            const { locationX, locationY, pageX, pageY } = event.nativeEvent;
+            submit({
+              type: "tap-comment",
+              gesture: { locationX, locationY, pageX, pageY },
+              element: { refAvailable: Boolean(inspectedViewRef?.current) },
+            });
+            setActive(false);
+          }}
+        />
+      ) : null}
+      <View pointerEvents="none" style={styles.counter}>
+        <Text style={styles.counterText}>{events.length}</Text>
+      </View>
+    </View>
+  );
+}
+
+export default CodexReviewOverlay;
+
+const styles = StyleSheet.create({
+  toolbar: { position: "absolute", top: 48, right: 16, zIndex: 9999 },
+  button: { backgroundColor: "#0a84ff", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 },
+  active: { backgroundColor: "#ff453a" },
+  buttonText: { color: "white", fontWeight: "700" },
+  counter: { position: "absolute", top: 92, right: 16, minWidth: 24, alignItems: "center" },
+  counterText: { color: "white", backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12, overflow: "hidden", paddingHorizontal: 7, paddingVertical: 2 },
+});
+`;
+}
+function relativePathFallback(from, to) {
+  const fromParts = from.split("/").filter(Boolean);
+  const toParts = to.split("/").filter(Boolean);
+  while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
+    fromParts.shift();
+    toParts.shift();
+  }
+  return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
 }
 async function defaultNormalizeProjectCwd2(cwd) {
   const resolved = path7.resolve(requireOptionalString5(cwd) ?? ".");
@@ -7615,10 +7554,79 @@ async function defaultNormalizeProjectCwd2(cwd) {
   if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
+async function createEventsFile(args) {
+  await mkdir10(args.outputDir, { recursive: true });
+  const eventsPath = path7.join(args.outputDir, "events.json");
+  const existing = await readJson5(eventsPath).catch(() => null);
+  const payload = args.reset || !existing ? {
+    version: 1,
+    title: requireOptionalString5(args.title) ?? "Codex in-app review",
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    events: []
+  } : existing;
+  await writeFile6(eventsPath, `${JSON.stringify(payload, null, 2)}
+`, "utf8");
+  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
+}
+async function readEvents(eventsPath, options = {}) {
+  const payload = await readJson5(eventsPath).catch(() => null);
+  if (!payload) {
+    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
+  }
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
+}
+async function reviewOverlayServer(args) {
+  const dir = path7.resolve(args.dir);
+  const port = args.port ? clampNumber12(args.port, 1, 65535) : await findAvailablePort(17655);
+  const endpointPath = normalizeEndpointPath(args.endpointPath);
+  await mkdir10(dir, { recursive: true });
+  await createEventsFile({ outputDir: dir, reset: false });
+  const server = createHttpServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", async () => {
+      const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
+      const eventsPath = path7.join(dir, "events.json");
+      if (request.method === "GET" && url.pathname === "/events.json") {
+        const text = await readFile11(eventsPath, "utf8").catch(() => '{"events":[]}\n');
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(text);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === endpointPath) {
+        const current = await readJson5(eventsPath).catch(() => ({ version: 1, events: [] }));
+        const events = Array.isArray(current.events) ? current.events : [];
+        events.push(JSON.parse(body || "{}"));
+        const next = { ...current, events, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+        await writeFile6(eventsPath, `${JSON.stringify(next, null, 2)}
+`, "utf8");
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}
+`);
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+      response.end('{"ok":false,"error":"not found"}\n');
+    });
+  });
+  await new Promise((resolve15) => server.listen(port, "127.0.0.1", () => resolve15()));
+  const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}
+`);
+  return await new Promise(() => {
+  });
+}
+async function readJson5(file) {
+  return JSON.parse(await readFile11(file, "utf8"));
+}
 function findAvailablePort(start) {
   return new Promise((resolve15) => {
     const tryPort = (port) => {
-      const server = createServer();
+      const server = createNetServer();
       server.once("error", () => tryPort(port + 1));
       server.once("listening", () => {
         server.close(() => resolve15(port));
@@ -7628,14 +7636,78 @@ function findAvailablePort(start) {
     tryPort(start);
   });
 }
-function escapeHtml2(value) {
-  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// src/modules/annotate-screen-artifacts/src/main/index.ts
+var ANNOTATE_ACTIONS = /* @__PURE__ */ new Set(["prepare", "read", "clear", "scaffold", "server"]);
+var SCAFFOLD_CONFIRMATION = "annotate-overlay-scaffold";
+function toolJson14(value) {
+  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
+` }] };
+}
+async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencies) {
+  const positionals = Array.isArray(args._) ? args._ : [];
+  const action = requireOptionalString6(args.action ?? positionals[0]) ?? "prepare";
+  if (!ANNOTATE_ACTIONS.has(action)) {
+    throw new Error(`Unknown annotate-screen action: ${action}`);
+  }
+  if (action === "scaffold" && !hasExplicitConfirmation(args.confirmActions, SCAFFOLD_CONFIRMATION)) {
+    return toolJson14({
+      available: false,
+      action,
+      source: "policy",
+      evidenceSource: "policy",
+      code: "confirmation-required",
+      reason: `Refusing to mutate app files without explicit --confirm-actions ${SCAFFOLD_CONFIRMATION}.`,
+      requiredConfirmation: SCAFFOLD_CONFIRMATION,
+      mutation: {
+        writesAppFiles: true,
+        developmentOnly: true
+      }
+    });
+  }
+  const result = await deps.reviewOverlay({
+    ...args,
+    action,
+    title: args.title ?? "Codex in-app annotations"
+  });
+  const payload = unwrapToolJson6(result);
+  return toolJson14({
+    ...isRecord6(payload) ? payload : { value: payload },
+    command: "annotate-screen",
+    annotationSurface: "in-app-overlay",
+    compatibility: {
+      legacyBoard: "removed",
+      replacement: "review-overlay"
+    }
+  });
+}
+var defaultAnnotateScreenDependencies = {
+  reviewOverlay
+};
+function unwrapToolJson6(result) {
+  const text = result?.content?.[0]?.text;
+  if (typeof text !== "string") return result;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+function hasExplicitConfirmation(value, required) {
+  if (typeof value !== "string") return false;
+  return value.split(/[,\s]+/).filter(Boolean).includes(required);
+}
+function requireOptionalString6(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+function isRecord6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/modules/runtime-inspector-actions/src/main/index.ts
 import { execFile as nodeExecFile9 } from "node:child_process";
 var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"];
-function toolJson14(value) {
+function toolJson15(value) {
   return {
     content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }],
@@ -7656,20 +7728,20 @@ function unwrapToolJson7(value) {
 async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
   const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
-  const commentTitle = requireOptionalString6(args.commentTitle) ?? "Codex: Add UI comment";
+  const commentTitle = requireOptionalString7(args.commentTitle) ?? "Codex: Add UI comment";
   const maxComments = clampNumber13(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
-    return toolJson14(await deps.openIosDevMenu({ ...args, metroPort }));
+    return toolJson15(await deps.openIosDevMenu({ ...args, metroPort }));
   }
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
   const webSocketDebuggerUrl = asString2(asRecord7(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
-    return toolJson14({ available: false, action, reason: "No Metro inspector target.", metroPort });
+    return toolJson15({ available: false, action, reason: "No Metro inspector target.", metroPort });
   }
   const expression = runtimeInspectorExpression({ action, commentTitle, maxComments });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8e3 });
-  return toolJson14({
+  return toolJson15({
     action,
     metroPort,
     target: targetSummary3(targetList[0]),
@@ -7685,7 +7757,7 @@ var defaultRuntimeInspectorDependencies = {
 };
 var defaultOpenDevMenuDependencies = {
   broadcastMetroMessage,
-  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString6(device), options),
+  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString7(device), options),
   openDevClientForMessageSocket: async (args) => unwrapToolJson7(await openExpoRoute({
     device: args.device.udid,
     bundleId: args.bundleId,
@@ -7717,7 +7789,7 @@ async function openIosDevMenu(args, deps) {
     };
   }
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
-  const devClientUrl = requireOptionalString6(args.devClientUrl);
+  const devClientUrl = requireOptionalString7(args.devClientUrl);
   let devClientRepair = null;
   if (devClientUrl) {
     devClientRepair = await deps.openDevClientForMessageSocket({
@@ -7892,7 +7964,7 @@ function requireString9(value, field) {
   }
   return value.trim();
 }
-function requireOptionalString6(value) {
+function requireOptionalString7(value) {
   if (value === void 0 || value === null || value === "") return null;
   return requireString9(value, "value");
 }
@@ -7902,9 +7974,9 @@ function truncate12(value, limit = 4e4) {
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
-function getPath2(value, path14) {
+function getPath2(value, path12) {
   let current = value;
-  for (const part of path14) {
+  for (const part of path12) {
     current = asRecord7(current)?.[part];
     if (current === void 0) return void 0;
   }
@@ -8004,325 +8076,6 @@ function formatError10(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// src/modules/review-overlay-workflow/src/main/index.ts
-import { openSync as openSync2 } from "node:fs";
-import { mkdir as mkdir11, readFile as readFile11, stat as stat6, writeFile as writeFile7 } from "node:fs/promises";
-import { createServer as createHttpServer } from "node:http";
-import { createServer as createNetServer } from "node:net";
-import path8 from "node:path";
-import { spawn as spawn3 } from "node:child_process";
-var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
-function toolJson15(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
-async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies) {
-  const action = requireOptionalString7(args.action) ?? "prepare";
-  if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
-    throw new Error(`Unknown review-overlay action: ${action}`);
-  }
-  if (action === "scaffold") return toolJson15(await scaffoldReviewOverlay(args, deps));
-  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
-  const outputDir = deps.resolvePath(requireOptionalString7(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
-  const eventsPath = deps.joinPath(outputDir, "events.json");
-  if (action === "read") {
-    const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
-    return toolJson15({ outputDir, eventsPath, ...data2 });
-  }
-  if (action === "clear") {
-    const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
-    return toolJson15({ outputDir, eventsPath, cleared: true, ...data2 });
-  }
-  if (action === "server") {
-    return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
-  }
-  const title = requireOptionalString7(args.title) ?? "Codex in-app review";
-  const data = await deps.createEventsFile({ outputDir, title, reset: false });
-  let server = null;
-  if (args.serve === true) {
-    const port = args.port ? clampNumber14(args.port, 1, 65535) : await deps.findAvailablePort(17655);
-    const endpointPath = normalizeEndpointPath(args.endpointPath);
-    const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
-    const logFd = await deps.openLogFile(logPath, "a");
-    const child = await deps.spawnDetached(deps.execPath, [
-      deps.scriptPath,
-      "review-overlay-server",
-      "--output-dir",
-      outputDir,
-      "--port",
-      String(port),
-      "--endpoint-path",
-      endpointPath
-    ], {
-      detached: true,
-      stdio: ["ignore", logFd, logFd]
-    });
-    child.unref?.();
-    server = {
-      url: `http://127.0.0.1:${port}/`,
-      endpoint: `http://127.0.0.1:${port}${endpointPath}`,
-      eventsUrl: `http://127.0.0.1:${port}/events.json`,
-      pid: child.pid,
-      logPath,
-      stop: `kill ${child.pid}`
-    };
-  }
-  return toolJson15({
-    outputDir,
-    eventsPath,
-    server,
-    ...data,
-    instructions: [
-      "Run review-overlay scaffold once, then mount CodexReviewOverlay inside the app root in development only.",
-      server ? `Pass endpoint="${server.endpoint}" to CodexReviewOverlay. In iOS Simulator, 127.0.0.1 points at the Mac host.` : "Start with --serve true or run review-overlay server before using the overlay in the simulator.",
-      `Codex can read in-app review events from ${eventsPath}.`
-    ]
-  });
-}
-var defaultReviewOverlayDependencies = {
-  normalizeProjectCwd: defaultNormalizeProjectCwd3,
-  fallbackCwd: () => process.cwd(),
-  resolvePath: (...parts) => path8.resolve(...parts.filter((part) => Boolean(part))),
-  joinPath: (...parts) => path8.join(...parts),
-  relativePath: (from, to) => path8.relative(from, to),
-  createEventsFile,
-  readEvents,
-  reviewOverlayServer,
-  mkdir: mkdir11,
-  writeFile: writeFile7,
-  pathExists: async (file) => stat6(file).then(() => true, () => false),
-  findAvailablePort: findAvailablePort2,
-  openLogFile: (file) => openSync2(file, "a"),
-  spawnDetached: (command, argv, options) => spawn3(command, argv, options),
-  execPath: process.execPath,
-  scriptPath: process.argv[1] ?? ""
-};
-async function scaffoldReviewOverlay(args = {}, deps) {
-  const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
-  const overlayDir = deps.resolvePath(cwd, requireOptionalString7(args.overlayDir) ?? "codex-review-overlay");
-  const componentPath = deps.joinPath(overlayDir, "CodexReviewOverlay.tsx");
-  const indexPath = deps.joinPath(overlayDir, "index.ts");
-  if (await deps.pathExists(componentPath) && args.force !== true) {
-    throw new Error(`${componentPath} already exists. Pass --force true to overwrite.`);
-  }
-  await deps.mkdir(overlayDir, { recursive: true });
-  await deps.writeFile(componentPath, codexReviewOverlayComponentSource(), "utf8");
-  await deps.writeFile(indexPath, `export { CodexReviewOverlay } from "./CodexReviewOverlay";
-export { default } from "./CodexReviewOverlay";
-`, "utf8");
-  return {
-    overlayDir,
-    componentPath,
-    indexPath,
-    integration: {
-      import: `import { CodexReviewOverlay } from "${relativeImportFromAppRoot(cwd, overlayDir, deps)}";`,
-      jsx: `{__DEV__ ? <CodexReviewOverlay endpoint="http://127.0.0.1:17655/events" screenName="Schedule" inspectedViewRef={inspectedViewRef} /> : null}`,
-      note: "Mount this near the root layout so it floats above the current screen. Wrap only the app content, not the overlay, in a host View ref with collapsable={false}; pass that ref as inspectedViewRef so comments identify the tapped app element."
-    },
-    capabilities: [
-      "single Comment control inside the app",
-      "inactive state leaves the app interactive",
-      "mouse-over preview after Comment resolves native elements before selection",
-      "next click after Comment resolves the touched native element and owner hierarchy",
-      "Copy action writes Agentation-style feedback markdown to the Mac clipboard",
-      "bounding boxes around commented elements",
-      "gesture metadata for tap, hold, and scroll conflict notes",
-      "local JSON event sync readable by Codex"
-    ]
-  };
-}
-function relativeImportFromAppRoot(cwd, overlayDir, deps) {
-  const rel = (deps?.relativePath(cwd, overlayDir) ?? relativePathFallback(cwd, overlayDir)).replace(/\\/g, "/");
-  return rel.startsWith(".") ? rel : `./${rel}`;
-}
-function normalizeEndpointPath(value) {
-  const raw = requireOptionalString7(value) ?? "/events";
-  const endpoint = raw.startsWith("/") ? raw : `/${raw}`;
-  if (!/^\/[A-Za-z0-9_./-]+$/.test(endpoint)) throw new Error("endpointPath must be a simple URL path.");
-  return endpoint;
-}
-function requireOptionalString7(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-function clampNumber14(value, min, max) {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) {
-    throw new Error(`Expected a finite number, got ${value}.`);
-  }
-  return Math.min(Math.max(numberValue, min), max);
-}
-function codexReviewOverlayComponentSource() {
-  return `import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-
-export function CodexReviewOverlay({ endpoint = "http://127.0.0.1:17655/events", screenName = "Screen", inspectedViewRef }) {
-  const [active, setActive] = useState(false);
-  const [events, setEvents] = useState([]);
-  const sequence = useRef(0);
-
-  const submit = useCallback(async (event) => {
-    const payload = {
-      id: "overlay-" + Date.now().toString(36) + "-" + sequence.current++,
-      screenName,
-      createdAt: new Date().toISOString(),
-      ...event,
-    };
-    setEvents((current) => current.concat(payload));
-    try {
-      await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch {}
-  }, [endpoint, screenName]);
-
-  const label = useMemo(() => active ? "Tap target" : "Comment", [active]);
-
-  return (
-    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <View pointerEvents="box-none" style={styles.toolbar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Codex review comment"
-          onPress={() => setActive((value) => !value)}
-          style={[styles.button, active ? styles.active : null]}
-        >
-          <Text style={styles.buttonText}>{label}</Text>
-        </Pressable>
-      </View>
-      {active ? (
-        <Pressable
-          accessibilityLabel="Codex review target surface"
-          style={StyleSheet.absoluteFill}
-          onPress={(event) => {
-            const { locationX, locationY, pageX, pageY } = event.nativeEvent;
-            submit({
-              type: "tap-comment",
-              gesture: { locationX, locationY, pageX, pageY },
-              element: { refAvailable: Boolean(inspectedViewRef?.current) },
-            });
-            setActive(false);
-          }}
-        />
-      ) : null}
-      <View pointerEvents="none" style={styles.counter}>
-        <Text style={styles.counterText}>{events.length}</Text>
-      </View>
-    </View>
-  );
-}
-
-export default CodexReviewOverlay;
-
-const styles = StyleSheet.create({
-  toolbar: { position: "absolute", top: 48, right: 16, zIndex: 9999 },
-  button: { backgroundColor: "#0a84ff", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 },
-  active: { backgroundColor: "#ff453a" },
-  buttonText: { color: "white", fontWeight: "700" },
-  counter: { position: "absolute", top: 92, right: 16, minWidth: 24, alignItems: "center" },
-  counterText: { color: "white", backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12, overflow: "hidden", paddingHorizontal: 7, paddingVertical: 2 },
-});
-`;
-}
-function relativePathFallback(from, to) {
-  const fromParts = from.split("/").filter(Boolean);
-  const toParts = to.split("/").filter(Boolean);
-  while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
-    fromParts.shift();
-    toParts.shift();
-  }
-  return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
-}
-async function defaultNormalizeProjectCwd3(cwd) {
-  const resolved = path8.resolve(requireOptionalString7(cwd) ?? ".");
-  const details = await stat6(resolved).catch(() => null);
-  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
-  return resolved;
-}
-async function createEventsFile(args) {
-  await mkdir11(args.outputDir, { recursive: true });
-  const eventsPath = path8.join(args.outputDir, "events.json");
-  const existing = await readJson5(eventsPath).catch(() => null);
-  const payload = args.reset || !existing ? {
-    version: 1,
-    title: requireOptionalString7(args.title) ?? "Codex in-app review",
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-    events: []
-  } : existing;
-  await writeFile7(eventsPath, `${JSON.stringify(payload, null, 2)}
-`, "utf8");
-  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
-}
-async function readEvents(eventsPath, options = {}) {
-  const payload = await readJson5(eventsPath).catch(() => null);
-  if (!payload) {
-    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
-  }
-  const events = Array.isArray(payload.events) ? payload.events : [];
-  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
-}
-async function reviewOverlayServer(args) {
-  const dir = path8.resolve(args.dir);
-  const port = args.port ? clampNumber14(args.port, 1, 65535) : await findAvailablePort2(17655);
-  const endpointPath = normalizeEndpointPath(args.endpointPath);
-  await mkdir11(dir, { recursive: true });
-  await createEventsFile({ outputDir: dir, reset: false });
-  const server = createHttpServer((request, response) => {
-    let body = "";
-    request.setEncoding("utf8");
-    request.on("data", (chunk) => {
-      body += chunk;
-    });
-    request.on("end", async () => {
-      const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
-      const eventsPath = path8.join(dir, "events.json");
-      if (request.method === "GET" && url.pathname === "/events.json") {
-        const text = await readFile11(eventsPath, "utf8").catch(() => '{"events":[]}\n');
-        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(text);
-        return;
-      }
-      if (request.method === "POST" && url.pathname === endpointPath) {
-        const current = await readJson5(eventsPath).catch(() => ({ version: 1, events: [] }));
-        const events = Array.isArray(current.events) ? current.events : [];
-        events.push(JSON.parse(body || "{}"));
-        const next = { ...current, events, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-        await writeFile7(eventsPath, `${JSON.stringify(next, null, 2)}
-`, "utf8");
-        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}
-`);
-        return;
-      }
-      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-      response.end('{"ok":false,"error":"not found"}\n');
-    });
-  });
-  await new Promise((resolve15) => server.listen(port, "127.0.0.1", () => resolve15()));
-  const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}
-`);
-  return await new Promise(() => {
-  });
-}
-async function readJson5(file) {
-  return JSON.parse(await readFile11(file, "utf8"));
-}
-function findAvailablePort2(start) {
-  return new Promise((resolve15) => {
-    const tryPort = (port) => {
-      const server = createNetServer();
-      server.once("error", () => tryPort(port + 1));
-      server.once("listening", () => {
-        server.close(() => resolve15(port));
-      });
-      server.listen(port, "127.0.0.1");
-    };
-    tryPort(start);
-  });
-}
-
 // src/modules/review-next-guidance/src/main/index.ts
 var SUBORDINATE_RULE = "Do not patch or call done until the current constraint is proven or deliberately elevated.";
 var NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigation model without a separate reason."];
@@ -8335,7 +8088,7 @@ async function reviewNextStep(args = {}) {
   const stage = args.stage ?? "intake";
   const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
   const cwd = requireOptionalString8(args.cwd) ?? ".";
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
   const componentFilter = requireOptionalString8(args.componentFilter);
   const verifierRule = requireOptionalString8(args.verifierRule);
   const flags = reviewFlags(args);
@@ -8582,155 +8335,37 @@ function requireOptionalString8(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : void 0;
 }
-function clampNumber15(value, min, max) {
+function clampNumber14(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return min;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
 }
 
 // src/modules/annotation-server-http/src/main/index.ts
-import { createServer as createServer2 } from "node:http";
-import { readFile as readFile12, writeFile as writeFile8 } from "node:fs/promises";
-import path9 from "node:path";
-var ANNOTATION_BODY_LIMIT = 2 * 1024 * 1024;
-async function annotationServer(args = {}, deps = defaultAnnotationServerDependencies) {
-  const dir = deps.resolvePath(requireString10(args.dir, "dir"));
-  const port = clampNumber16(args.port ?? 17654, 1, 65535);
-  await deps.listen({
-    host: "127.0.0.1",
-    port,
-    handler: (request) => handleAnnotationRequest(request, { dir, port }, deps)
-  });
-  const payload = annotationServerStartupPayload(dir, port);
-  deps.stdout?.(`${JSON.stringify(payload, null, 2)}
-`);
-  if (deps.waitForever) {
-    await deps.waitForever();
-  }
-  return payload;
+async function annotationServer(args = {}) {
+  return annotationServerDeprecationPayload(args);
 }
-var defaultAnnotationServerDependencies = {
-  joinPath: (...parts) => path9.join(...parts),
-  readFile: async (file) => readFile12(file, file.endsWith(".png") ? "base64" : "utf8"),
-  writeFile: writeFile8,
-  resolvePath: (file) => path9.resolve(file),
-  listen,
-  stdout: (text) => process.stdout.write(text),
-  waitForever: () => new Promise(() => {
-  }),
-  now: () => /* @__PURE__ */ new Date()
-};
-async function handleAnnotationRequest(request, options, deps) {
-  try {
-    const url = new URL(request.url ?? "/", `http://127.0.0.1:${options.port}`);
-    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/annotate.html")) {
-      return sendFilePayload(await deps.readFile(deps.joinPath(options.dir, "annotate.html")), "text/html; charset=utf-8");
-    }
-    if (request.method === "GET" && url.pathname === "/screenshot.png") {
-      return sendFilePayload(await deps.readFile(deps.joinPath(options.dir, "screenshot.png")), "image/png");
-    }
-    if (request.method === "GET" && url.pathname === "/context.json") {
-      return sendFilePayload(await deps.readFile(deps.joinPath(options.dir, "context.json")), "application/json; charset=utf-8");
-    }
-    if (request.method === "GET" && url.pathname === "/annotations.json") {
-      return sendFilePayload(await deps.readFile(deps.joinPath(options.dir, "annotations.json")), "application/json; charset=utf-8");
-    }
-    if (request.method === "POST" && url.pathname === "/annotations") {
-      const body = await readRequestBodyText(request.body ?? "", ANNOTATION_BODY_LIMIT);
-      const payload = JSON.parse(body || "{}");
-      if (!payload || !Array.isArray(payload.comments)) throw new Error("annotations payload must include comments array");
-      payload.savedAt = now3(deps).toISOString();
-      const annotationsPath = deps.joinPath(options.dir, "annotations.json");
-      await deps.writeFile(annotationsPath, `${JSON.stringify(payload, null, 2)}
-`, "utf8");
-      return sendJsonPayload({ ok: true, annotationsPath, savedAt: payload.savedAt });
-    }
-    return sendJsonPayload({ ok: false, error: "not found" }, 404);
-  } catch (error) {
-    return sendJsonPayload({ ok: false, error: formatError11(error) }, 500);
-  }
-}
-function sendFilePayload(body, contentType) {
+function annotationServerDeprecationPayload(args = {}) {
   return {
-    status: 200,
-    headers: {
-      "content-type": contentType,
-      "cache-control": "no-store"
+    available: false,
+    action: "annotation-server",
+    code: "external-annotation-server-removed",
+    reason: "The external annotation server has been removed. Use the in-app annotation overlay instead.",
+    requested: {
+      dir: typeof args.dir === "string" ? args.dir : null,
+      port: args.port ?? null
     },
-    body
-  };
-}
-function sendJsonPayload(payload, status = 200) {
-  return {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store"
+    replacement: {
+      prepare: "annotate-screen prepare --serve true",
+      server: "annotate-screen server",
+      read: "annotate-screen read",
+      scaffold: "annotate-screen scaffold --confirm-actions annotate-overlay-scaffold"
     },
-    body: `${JSON.stringify(payload, null, 2)}
-`
+    limitations: [
+      "Annotation UI must be mounted inside the Expo/React Native app.",
+      "This compatibility command does not serve external annotation boards."
+    ]
   };
-}
-async function readRequestBodyText(body, limit) {
-  let text = "";
-  for (const chunk of chunks(String(body))) {
-    text += chunk;
-    if (text.length > limit) {
-      throw new Error("request body too large");
-    }
-  }
-  return text;
-}
-function annotationServerStartupPayload(dir, port) {
-  return { ok: true, url: `http://127.0.0.1:${port}/`, dir };
-}
-function requireString10(value, field) {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${field} must be a non-empty string.`);
-  }
-  return value.trim();
-}
-function clampNumber16(value, min, max) {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) {
-    throw new Error(`Expected a finite number, got ${value}.`);
-  }
-  return Math.min(Math.max(numberValue, min), max);
-}
-function chunks(text) {
-  const result = [];
-  for (let index = 0; index < text.length; index += 64 * 1024) {
-    result.push(text.slice(index, index + 64 * 1024));
-  }
-  if (result.length === 0) result.push("");
-  return result;
-}
-function listen(options) {
-  return new Promise((resolve15) => {
-    const server = createServer2((request, response) => {
-      let body = "";
-      request.setEncoding("utf8");
-      request.on("data", (chunk) => {
-        body += chunk;
-      });
-      request.on("end", async () => {
-        const payload = await options.handler({ method: request.method, url: request.url, body });
-        response.writeHead(payload.status, payload.headers);
-        if (payload.headers["content-type"] === "image/png") {
-          response.end(Buffer.from(payload.body, "base64"));
-        } else {
-          response.end(payload.body);
-        }
-      });
-    });
-    server.listen(options.port, options.host, () => resolve15(server));
-  });
-}
-function now3(deps) {
-  return deps.now?.() ?? /* @__PURE__ */ new Date();
-}
-function formatError11(error) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 // src/modules/devtools-diagnostics/src/main/index.ts
@@ -8745,13 +8380,13 @@ var MAX_ARRAY_ITEMS = 500;
 function toolJson17(value) {
   return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
 }
-function requireString11(value, name) {
+function requireString10(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${name} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber17(value, min, max) {
+function clampNumber15(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
@@ -8783,7 +8418,7 @@ function targetSummary4(target) {
   };
 }
 async function devtoolsCommand(args = {}, deps = {}) {
-  const action = requireString11(args.action ?? "capabilities", "action");
+  const action = requireString10(args.action ?? "capabilities", "action");
   if (action === "status" || action === "panels") return toolJson17(await devtoolsStatusPayload(args, action, deps));
   if (action === "open") return toolJson17(await devtoolsOpenPayload(args, deps));
   if (action === "events") return toolJson17(await devtoolsEventsPayload(args, deps));
@@ -9030,17 +8665,17 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
   });
 }
 async function devtoolsEventsPayload(args = {}, deps = {}) {
-  const subaction = requireString11(args.subaction ?? "read", "subaction");
+  const subaction = requireString10(args.subaction ?? "read", "subaction");
   if (!["start", "read", "stop"].includes(subaction)) throw new Error(`Unknown devtools events action: ${subaction}`);
   const stateRoot = resolveExpoStateRoot4(args, deps);
   const eventsDir = joinPath3(stateRoot, "artifacts", "devtools-events");
-  await mkdir12(deps, eventsDir, { recursive: true });
+  await mkdir11(deps, eventsDir, { recursive: true });
   const file = joinPath3(eventsDir, "events.json");
   const existing = await readJsonFile5(deps, file).catch(() => ({ events: [] }));
   const previousEvents = Array.isArray(asRecord8(existing)?.events) ? asRecord8(existing)?.events : [];
   const event = {
     type: `devtools.${subaction}`,
-    timestamp: now4(deps),
+    timestamp: now2(deps),
     metro: sanitizePayload(await metroStatusPayload2(args, deps))
   };
   const payload = {
@@ -9063,8 +8698,8 @@ async function errorsCommand(args = {}, deps = {}) {
 }
 async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
   const action = args.action ?? "read";
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber15(args.limit ?? 100, 1, 1e3);
   const targetDiscovery = await metroTargetDiscovery(metroPort, deps);
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
@@ -9197,7 +8832,7 @@ function frontendUrlForTarget(target, metroPort) {
 }
 async function metroStatusPayload2(args, deps) {
   if (deps.metroStatusPayload) return deps.metroStatusPayload(args);
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const baseUrl = `http://127.0.0.1:${metroPort}`;
   const status = await fetchText(deps, `${baseUrl}/status`, 1500);
   if (!status.available) {
@@ -9215,7 +8850,7 @@ async function metroStatusPayload2(args, deps) {
   }
   const targetDiscovery = await fetchMetroTargets(deps, metroPort);
   const version = await fetchJson(deps, `${baseUrl}/json/version`, 1500).catch((error) => ({
-    __error: formatError12(error)
+    __error: formatError11(error)
   }));
   const symbolication = await probeMetroSymbolication(deps, metroPort);
   return {
@@ -9234,7 +8869,7 @@ async function metroStatusPayload2(args, deps) {
 }
 async function fetchMetroTargets(deps, metroPort) {
   const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch((error2) => ({
-    __error: formatError12(error2)
+    __error: formatError11(error2)
   }));
   const error = asRecord8(raw)?.__error;
   if (typeof error === "string") {
@@ -9292,7 +8927,7 @@ async function execFile8(deps, file, args, options) {
       resolve15({
         stdout,
         stderr,
-        error: error ? formatError12(error) : null
+        error: error ? formatError11(error) : null
       });
     });
   });
@@ -9303,7 +8938,7 @@ function resolveExpoStateRoot4(args, deps) {
   if (explicit?.endsWith("/runs")) return explicit.slice(0, -"/runs".length);
   return explicit ?? joinPath3(typeof args.root === "string" ? args.root : ".", ".scratch", "expo-ios");
 }
-async function mkdir12(deps, dir, options) {
+async function mkdir11(deps, dir, options) {
   if (deps.mkdir) return deps.mkdir(dir, options);
   const fs10 = await import("node:fs/promises");
   return fs10.mkdir(dir, options);
@@ -9325,7 +8960,7 @@ async function writeJsonFile3(deps, file, payload) {
   }
   return deps.writeJsonFile(file, redacted);
 }
-function now4(deps) {
+function now2(deps) {
   return deps.now ? deps.now() : (/* @__PURE__ */ new Date()).toISOString();
 }
 function joinPath3(...parts) {
@@ -9351,7 +8986,7 @@ async function probeMetroSymbolication(deps, metroPort) {
       reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`
     };
   } catch (error) {
-    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError12(error) };
+    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError11(error) };
   }
 }
 async function fetchText(deps, url, timeoutMs) {
@@ -9359,7 +8994,7 @@ async function fetchText(deps, url, timeoutMs) {
     const response = asFetchResponse(await fetchWithTimeout2(deps, url, { timeoutMs }));
     return { available: response.ok, text: await response.text(), error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {
-    return { available: false, text: null, error: formatError12(error) };
+    return { available: false, text: null, error: formatError11(error) };
   }
 }
 async function fetchJson(deps, url, timeoutMs) {
@@ -9459,7 +9094,7 @@ function redactString(value) {
 function isSensitiveKey(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function formatError12(error) {
+function formatError11(error) {
   const record = asRecord8(error);
   const message = record?.message;
   return message == null ? String(error) : String(message);
@@ -9471,7 +9106,7 @@ var NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
   "Use open-route or navigation deep-link when only URL navigation is available."
 ];
-function clampNumber18(value, min, max) {
+function clampNumber16(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9550,12 +9185,12 @@ async function navigationPolicyDecision(args, action, deps = {}) {
   return deps.policyDecision(args, `navigation.${action}`, "device");
 }
 async function navigationCommand(args = {}, deps = defaultNavigationDependencies) {
-  const action = requireString12(args.action ?? "state", "action");
+  const action = requireString11(args.action ?? "state", "action");
   if (!["state", "back", "pop-to-root", "tab", "deep-link"].includes(action)) {
     throw new Error(`Unknown navigation action: ${action}`);
   }
   if (action === "deep-link") return toolJson18(await navigationDeepLink(args, deps));
-  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
   const policy = await navigationPolicyDecision(args, action, deps);
   if (!policy.allowed) {
     return toolJson18({
@@ -9764,7 +9399,7 @@ async function selectedTargetId(args = {}, deps = {}) {
 async function latestSessionId(args = {}, deps = {}) {
   return deps.latestSessionId ? deps.latestSessionId(args) : null;
 }
-function requireString12(value, field) {
+function requireString11(value, field) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
@@ -9853,7 +9488,7 @@ function waitForMessage3(ws, id, timeoutMs) {
 
 // src/modules/network-evidence/src/main/index.ts
 import { promises as fs8 } from "node:fs";
-import path10 from "node:path";
+import path8 from "node:path";
 var CLI_NAME4 = "expo-ios";
 var CLI_VERSION5 = "0.1.0";
 var EXPO_IOS_BRIDGE_VERSION2 = "1.0.0";
@@ -9862,23 +9497,23 @@ var UNAVAILABLE_LIMITATIONS = [
   "Network evidence requires dev-only app instrumentation that patches fetch/XHR or an equivalent app network adapter.",
   "Native networking stacks are unavailable unless the app exposes them through the bridge."
 ];
-function clampNumber19(value, min, max) {
+function clampNumber17(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
 async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
-  const action = requireString13(args.action ?? "status", "action");
+  const action = requireString12(args.action ?? "status", "action");
   if (!["status", "requests", "request", "clear", "har"].includes(action)) {
     throw new Error(`Unknown network action: ${action}`);
   }
-  const harAction = action === "har" ? requireString13(args.harAction ?? "start", "harAction") : null;
+  const harAction = action === "har" ? requireString12(args.harAction ?? "start", "harAction") : null;
   const bridgeAction = action === "har" ? `har-${harAction}` : action;
   if (harAction && !["start", "stop"].includes(harAction)) {
     throw new Error(`Unknown network HAR action: ${harAction}`);
   }
-  const metroPort = clampNumber19(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber19(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -10150,7 +9785,7 @@ function networkExpression(input) {
   })()`;
 }
 function redactNetworkEvidence(value) {
-  if (!isRecord6(value)) return value;
+  if (!isRecord7(value)) return value;
   const clone = { ...value };
   if (Array.isArray(clone.requests)) clone.requests = clone.requests.map(redactNetworkRequest);
   if (clone.request) clone.request = redactNetworkRequest(clone.request);
@@ -10158,7 +9793,7 @@ function redactNetworkEvidence(value) {
   return clone;
 }
 function normalizeNetworkEvidence(value, action) {
-  if (!isRecord6(value) || Array.isArray(value)) {
+  if (!isRecord7(value) || Array.isArray(value)) {
     return {
       available: false,
       action,
@@ -10201,7 +9836,7 @@ function networkTransport(metroPort, target, cdp = null) {
   };
 }
 function networkLimitations(value) {
-  const record = isRecord6(value) ? value : {};
+  const record = isRecord7(value) ? value : {};
   const limitations = [
     "Network evidence is limited to traffic observed by the selected React Native DevTools or app bridge network domain.",
     "Headers, cookies, credentials, request bodies, and response bodies are redacted before stdout and artifact writes."
@@ -10215,9 +9850,9 @@ function networkLimitations(value) {
   return limitations;
 }
 function networkCaptureTiming(value, clock = systemClock2) {
-  const record = isRecord6(value) ? value : {};
+  const record = isRecord7(value) ? value : {};
   const requests = Array.isArray(record.requests) ? record.requests : record.request ? [record.request] : [];
-  const times = requests.map((request) => isRecord6(request) ? request.startedAt : void 0).filter((item) => typeof item === "string" && item.length > 0).sort();
+  const times = requests.map((request) => isRecord7(request) ? request.startedAt : void 0).filter((item) => typeof item === "string" && item.length > 0).sort();
   return {
     startedAt: typeof record.startedAt === "string" ? record.startedAt : times[0] ?? null,
     stoppedAt: typeof record.stoppedAt === "string" ? record.stoppedAt : clock.now().toISOString(),
@@ -10251,8 +9886,8 @@ function harFromNetworkRequests(requests, clock = systemClock2) {
   };
 }
 function annotateHar(har, metadata) {
-  const copy = cloneJson(isRecord6(har) ? har : harFromNetworkRequests([]));
-  const log = isRecord6(copy.log) ? copy.log : { version: "1.2", creator: { name: CLI_NAME4, version: CLI_VERSION5 }, entries: [] };
+  const copy = cloneJson(isRecord7(har) ? har : harFromNetworkRequests([]));
+  const log = isRecord7(copy.log) ? copy.log : { version: "1.2", creator: { name: CLI_NAME4, version: CLI_VERSION5 }, entries: [] };
   copy.log = log;
   log._expoIos = {
     source: metadata.source,
@@ -10288,15 +9923,15 @@ function targetSummary6(target) {
 function toolJson19(value) {
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
 }
-function requireString13(value, field) {
+function requireString12(value, field) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${field} must be a non-empty string.`);
   }
   return value.trim();
 }
 function redactNetworkRequest(request) {
-  if (!isRecord6(request)) return request;
-  const content = isRecord6(request.content) ? { ...request.content, text: request.content.text ? REDACTED4 : request.content.text } : void 0;
+  if (!isRecord7(request)) return request;
+  const content = isRecord7(request.content) ? { ...request.content, text: request.content.text ? REDACTED4 : request.content.text } : void 0;
   return {
     ...request,
     url: redactNetworkUrl(request.url),
@@ -10310,8 +9945,8 @@ function redactNetworkRequest(request) {
   };
 }
 function redactNetworkMessage(message) {
-  if (!isRecord6(message)) return message;
-  const content = isRecord6(message.content) ? { ...message.content, text: message.content.text ? REDACTED4 : message.content.text } : void 0;
+  if (!isRecord7(message)) return message;
+  const content = isRecord7(message.content) ? { ...message.content, text: message.content.text ? REDACTED4 : message.content.text } : void 0;
   return {
     ...message,
     url: redactNetworkUrl(message.url),
@@ -10325,7 +9960,7 @@ function redactNetworkMessage(message) {
 function redactHeaders(headers) {
   if (Array.isArray(headers)) {
     return headers.map((header) => {
-      if (!isRecord6(header)) return header;
+      if (!isRecord7(header)) return header;
       const name = String(header.name ?? "");
       return {
         ...header,
@@ -10333,7 +9968,7 @@ function redactHeaders(headers) {
       };
     });
   }
-  if (!isRecord6(headers)) return headers;
+  if (!isRecord7(headers)) return headers;
   return Object.fromEntries(Object.entries(headers).map(([key, value]) => [
     key,
     /authorization|cookie|token|secret|api[-_]?key|password|set-cookie/i.test(key) ? REDACTED4 : value
@@ -10354,12 +9989,12 @@ function redactNetworkUrl(url) {
   }
 }
 function redactHar(har) {
-  if (!isRecord6(har)) return har;
+  if (!isRecord7(har)) return har;
   const copy = cloneJson(har);
-  const entries = isRecord6(copy.log) ? copy.log.entries : void 0;
+  const entries = isRecord7(copy.log) ? copy.log.entries : void 0;
   if (Array.isArray(entries)) {
     for (const entry of entries) {
-      if (!isRecord6(entry)) continue;
+      if (!isRecord7(entry)) continue;
       if (entry.request) entry.request = redactNetworkMessage(entry.request);
       if (entry.response) entry.response = redactNetworkMessage(entry.response);
     }
@@ -10369,16 +10004,16 @@ function redactHar(har) {
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 var systemClock2 = {
   now: () => /* @__PURE__ */ new Date()
 };
 var defaultPath2 = {
-  resolve: (filePath) => path10.resolve(filePath),
-  join: (...segments) => path10.join(...segments),
-  dirname: (filePath) => path10.dirname(filePath)
+  resolve: (filePath) => path8.resolve(filePath),
+  join: (...segments) => path8.join(...segments),
+  dirname: (filePath) => path8.dirname(filePath)
 };
 var defaultFileSystem = {
   mkdir: (filePath, options) => fs8.mkdir(filePath, options).then(() => void 0),
@@ -10391,8 +10026,8 @@ function defaultResolveExpoStateRoot(args) {
 }
 
 // src/modules/bridge-domain-actions/src/main/index.ts
-import { readFile as readFile13 } from "node:fs/promises";
-import path11 from "node:path";
+import { readFile as readFile12 } from "node:fs/promises";
+import path9 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
 var MAX_OUTPUT11 = 4e4;
 var MAX_ARRAY_ITEMS2 = 1e3;
@@ -10401,8 +10036,8 @@ function toolJson20(value) {
 }
 async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const store = requireString14(args.store ?? positionals[0], "store");
-  const action = requireString14(args.action ?? positionals[1] ?? "list", "action");
+  const store = requireString13(args.store ?? positionals[0], "store");
+  const action = requireString13(args.action ?? positionals[1] ?? "list", "action");
   if (!["list", "get", "set", "clear"].includes(action)) throw new Error(`Unknown storage action: ${action}`);
   const key = args.key ?? positionals[2];
   const sideEffect = action === "list" || action === "get" ? "read" : "write";
@@ -10418,14 +10053,14 @@ async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies)
       action,
       key,
       value,
-      limit: clampNumber20(args.limit ?? 100, 1, 1e3)
+      limit: clampNumber18(args.limit ?? 100, 1, 1e3)
     }),
     policy
   }, deps));
 }
 async function stateCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString14(args.action ?? positionals[0] ?? "list", "action");
+  const action = requireString13(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
   const sideEffect = action === "list" || action === "save" ? "read" : "write";
   const policy = await policyDecision(args, `state.${action}`, sideEffect, deps);
@@ -10440,7 +10075,7 @@ async function stateCommand(args = {}, deps = defaultBridgeDomainDependencies) {
 }
 async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString14(args.action ?? positionals[0] ?? "list", "action");
+  const action = requireString13(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
   const sideEffect = action === "press" ? "device" : "read";
   const policy = await policyDecision(args, `controls.${action}`, sideEffect, deps);
@@ -10456,11 +10091,11 @@ async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies
 var defaultBridgeDomainDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
   evaluateHermesExpression: evaluateHermesExpression5,
-  readJsonFile: async (file) => JSON.parse(await readFile13(file, "utf8")),
-  resolvePath: (file) => path11.resolve(file)
+  readJsonFile: async (file) => JSON.parse(await readFile12(file, "utf8")),
+  resolvePath: (file) => path9.resolve(file)
 };
 async function bridgeDomainCommand(input, deps = {}) {
-  const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber18(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
   if (sideEffect !== "read" && input.policy?.allowed !== true) {
     return policyDeniedPayload3({ domain: input.domain, action: input.action, policy: input.policy ?? {
@@ -10593,7 +10228,7 @@ function parseStorageValue(value) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    throw new Error(`Invalid JSON for --value: ${formatError13(error)}`);
+    throw new Error(`Invalid JSON for --value: ${formatError12(error)}`);
   }
 }
 function storageExpression(args) {
@@ -10743,12 +10378,12 @@ function targetSummary7(target) {
     }
   });
 }
-function clampNumber20(value, min, max) {
+function clampNumber18(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
-function requireString14(value, name) {
+function requireString13(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -10834,7 +10469,7 @@ function truncate14(value, max = MAX_OUTPUT11) {
 function asRecord9(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-function formatError13(error) {
+function formatError12(error) {
   const record = asRecord9(error);
   return record?.message == null ? String(error) : String(record.message);
 }
@@ -10884,7 +10519,7 @@ function waitForMessage4(ws, id, timeoutMs) {
 
 // src/modules/bridge-command-adapter/src/main/index.ts
 import { promises as fs9 } from "node:fs";
-import path12 from "node:path";
+import path10 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION4 = "1.0.0";
 var BRIDGE_SCHEMA_VERSION = 1;
 async function bridgeCommand(args = {}, dependencies = {}) {
@@ -10899,7 +10534,7 @@ async function bridgeCommand(args = {}, dependencies = {}) {
     return toolJson21(await io.bridgeHealthPayload(args, { action, status, plan }));
   }
   const permission = action === "install" ? "bridge-install" : "bridge-remove";
-  if (!hasExplicitConfirmation(args.confirmActions, permission)) {
+  if (!hasExplicitConfirmation2(args.confirmActions, permission)) {
     return toolJson21({
       available: false,
       action,
@@ -11046,19 +10681,19 @@ function toolJson21(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
 }
-function requireString15(value, field) {
+function requireString14(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
   return value.trim();
 }
-function hasExplicitConfirmation(value, required) {
+function hasExplicitConfirmation2(value, required) {
   return String(value ?? "").split(",").map((item) => item.trim()).includes(required);
 }
 async function normalizeProjectCwd2(cwd, options = {}) {
-  const resolved = path12.resolve(cwd ?? process.cwd());
-  const stat9 = await fs9.stat(resolved).catch(() => null);
-  if (!stat9?.isDirectory()) {
+  const resolved = path10.resolve(cwd ?? process.cwd());
+  const stat8 = await fs9.stat(resolved).catch(() => null);
+  if (!stat8?.isDirectory()) {
     throw new Error(`Directory does not exist: ${resolved}`);
   }
   if (options.allowMissingPackageJson) return resolved;
@@ -11084,8 +10719,8 @@ function bridgeCommandIo(dependencies) {
     writeJsonFile: dependencies.writeJsonFile ?? writeJsonFile4,
     writeFile: dependencies.writeFile ?? fs9.writeFile,
     rm: dependencies.rm ?? fs9.rm,
-    joinPath: dependencies.joinPath ?? path12.join,
-    resolvePath: dependencies.resolvePath ?? path12.resolve,
+    joinPath: dependencies.joinPath ?? path10.join,
+    resolvePath: dependencies.resolvePath ?? path10.resolve,
     currentCwd: dependencies.currentCwd ?? process.cwd
   };
 }
@@ -11110,7 +10745,7 @@ async function removeIgnoringErrors(io, file) {
   }
 }
 function requireBridgeAction(value) {
-  const action = requireString15(value, "action");
+  const action = requireString14(value, "action");
   if (isBridgeAction(action)) return action;
   throw new Error(`Unknown bridge action: ${action}`);
 }
@@ -11139,7 +10774,7 @@ function asRecord10(value) {
 }
 
 // src/modules/accessibility-actions/src/main/index.ts
-import { readdir as readdir8, readFile as readFile14 } from "node:fs/promises";
+import { readdir as readdir8, readFile as readFile13 } from "node:fs/promises";
 import { execFile as nodeExecFile10 } from "node:child_process";
 import { basename as basename5, join as join10, resolve as resolve5 } from "node:path";
 var FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
@@ -11149,10 +10784,10 @@ function toolJson22(value) {
 }
 async function accessibilityCommand(args = {}, deps = defaultAccessibilityDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString16(args.action ?? positionals[0] ?? "tree", "action");
+  const action = requireString15(args.action ?? positionals[0] ?? "tree", "action");
   if (!["tree", "inspect", "audit", "focus"].includes(action)) throw new Error(`Unknown accessibility action: ${action}`);
   if (action === "focus") {
-    const ref = requireString16(args.ref ?? positionals[1], "ref");
+    const ref = requireString15(args.ref ?? positionals[1], "ref");
     if (!deps.refActionCommand) return toolJson22({ available: false, action, ref, reason: "No ref action adapter is configured." });
     const result = unwrapToolJson9(await deps.refActionCommand({ ...args, command: "focus", ref }));
     return toolJson22({
@@ -11163,7 +10798,7 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
     });
   }
   if (action === "inspect") {
-    const ref = requireString16(args.ref ?? positionals[1], "ref");
+    const ref = requireString15(args.ref ?? positionals[1], "ref");
     const cache = await readLatestRefCache4(args, deps);
     if (!cache) return toolJson22({ available: false, action, reason: "No snapshot exists for the current session.", ref });
     const record = (cache.refs ?? []).find((item) => item.ref === ref);
@@ -11253,7 +10888,7 @@ async function semanticBridgeTree(args, deps = {}) {
       filters: { interactiveOnly: false, compact: false, depth: null, includeSource: true, includeBounds: true }
     });
   } catch (error) {
-    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError14(error) };
+    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError13(error) };
   }
 }
 async function readLatestSession4(stateRoot) {
@@ -11280,9 +10915,9 @@ function sessionDirectory2(stateRoot, sessionId) {
   return join10(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile7(file) {
-  return JSON.parse(await readFile14(file, "utf8"));
+  return JSON.parse(await readFile13(file, "utf8"));
 }
-function requireString16(value, name) {
+function requireString15(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -11294,7 +10929,7 @@ function truncate15(value, max = 4e4) {
 function unwrapToolJson9(result) {
   return JSON.parse(result.content[0]?.text ?? "null");
 }
-function formatError14(error) {
+function formatError13(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
@@ -11320,7 +10955,7 @@ var defaultModalBridgeDependencies = {
 };
 async function modalBridgeCommand(input, deps) {
   const positionals = Array.isArray(input.args._) ? input.args._ : [];
-  const action = requireString17(input.args.action ?? positionals[0] ?? "status", "action");
+  const action = requireString16(input.args.action ?? positionals[0] ?? "status", "action");
   if (!input.actions.includes(action)) throw new Error(`Unknown ${input.domain} action: ${action}`);
   const sideEffect = action === "status" ? "read" : "device";
   const policy = {
@@ -11343,7 +10978,7 @@ async function modalBridgeCommand(input, deps) {
   }, deps));
 }
 async function bridgeDomainCommand2(input, deps) {
-  const metroPort = clampNumber21(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber19(input.args.metroPort ?? 8081, 1, 65535);
   const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -11451,12 +11086,12 @@ function targetSummary8(target) {
     }
   });
 }
-function clampNumber21(value, min, max) {
+function clampNumber19(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
-function requireString17(value, name) {
+function requireString16(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -11578,7 +11213,7 @@ function waitForMessage5(ws, id, timeoutMs) {
 }
 
 // src/modules/record-artifacts/src/main/index.ts
-import { access as access4, mkdir as mkdir13, readdir as readdir9, readFile as readFile15, writeFile as writeFile9 } from "node:fs/promises";
+import { access as access4, mkdir as mkdir12, readdir as readdir9, readFile as readFile14, writeFile as writeFile7 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname4, join as join11, resolve as resolve6 } from "node:path";
 var RECORD_LIMITATION = "This tracer-bullet command records metadata; native video capture is implemented by a later adapter.";
 function toolJson24(value) {
@@ -11587,18 +11222,18 @@ function toolJson24(value) {
 }
 async function recordCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString18(args.action ?? positionals[0] ?? "start", "action");
+  const action = requireString17(args.action ?? positionals[0] ?? "start", "action");
   if (!["start", "stop"].includes(action)) throw new Error(`Unknown record action: ${action}`);
   const stateRoot = resolveExpoStateRoot6(args);
   const session = asRecord13(await readLatestSession5(stateRoot));
   const recordDir = join11(stateRoot, "artifacts", "recordings");
-  await mkdir13(recordDir, { recursive: true });
+  await mkdir12(recordDir, { recursive: true });
   const metadataPath = runRecordMetadataPath(stateRoot);
   if (action === "start") {
     const metadata2 = {
       available: true,
       action,
-      startedAt: now5(deps).toISOString(),
+      startedAt: now3(deps).toISOString(),
       sessionId: session?.sessionId ?? null,
       targetId: session?.activeTargetId ?? null,
       status: "recording",
@@ -11608,12 +11243,12 @@ async function recordCommand(args = {}, deps = {}) {
     return toolJson24({ ...metadata2, metadataPath });
   }
   const outputPath = resolve6(String(args.outputPath ?? positionals[1] ?? join11(recordDir, `recording-${isoStamp(deps)}.mov`)));
-  await mkdir13(dirname4(outputPath), { recursive: true });
-  if (!await pathExists5(outputPath)) await writeFile9(outputPath, "recording placeholder\n", "utf8");
+  await mkdir12(dirname4(outputPath), { recursive: true });
+  if (!await pathExists5(outputPath)) await writeFile7(outputPath, "recording placeholder\n", "utf8");
   const metadata = {
     available: true,
     action,
-    stoppedAt: now5(deps).toISOString(),
+    stoppedAt: now3(deps).toISOString(),
     sessionId: session?.sessionId ?? null,
     targetId: session?.activeTargetId ?? null,
     outputPath,
@@ -11647,10 +11282,10 @@ function resolveExpoStateRoot6(args = {}) {
   return join11(root, ".scratch", "expo-ios");
 }
 async function readJsonFile8(file) {
-  return JSON.parse(await readFile15(file, "utf8"));
+  return JSON.parse(await readFile14(file, "utf8"));
 }
 async function writeJsonFile5(file, value) {
-  await writeFile9(file, `${JSON.stringify(value, null, 2)}
+  await writeFile7(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 async function pathExists5(file) {
@@ -11661,14 +11296,14 @@ async function pathExists5(file) {
     return false;
   }
 }
-function requireString18(value, name) {
+function requireString17(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 function isoStamp(deps) {
-  return now5(deps).toISOString().replace(/[:.]/g, "-");
+  return now3(deps).toISOString().replace(/[:.]/g, "-");
 }
-function now5(deps) {
+function now3(deps) {
   return deps.now ? deps.now() : /* @__PURE__ */ new Date();
 }
 function asRecord13(value) {
@@ -11676,7 +11311,7 @@ function asRecord13(value) {
 }
 
 // src/modules/review-evidence-reports/src/main/index.ts
-import { mkdir as mkdir14, readdir as readdir10, readFile as readFile16, stat as stat7, writeFile as writeFile10 } from "node:fs/promises";
+import { mkdir as mkdir13, readdir as readdir10, readFile as readFile15, stat as stat6, writeFile as writeFile8 } from "node:fs/promises";
 import { basename as basename7, dirname as dirname5, join as join12, resolve as resolve7 } from "node:path";
 var REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
 var ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
@@ -11686,12 +11321,12 @@ function toolJson25(value) {
 }
 async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString19(args.action ?? positionals[0] ?? "report", "action");
+  const action = requireString18(args.action ?? positionals[0] ?? "report", "action");
   if (!["report", "matrix"].includes(action)) throw new Error(`Unknown review action: ${action}`);
   const stateRoot = resolveExpoStateRoot7(args);
   const session = await readLatestSession6(stateRoot);
   const outputPath = resolve7(String(args.outputPath ?? join12(stateRoot, "artifacts", `review-${action}-${isoStamp2(deps)}.json`)));
-  await mkdir14(dirname5(outputPath), { recursive: true });
+  await mkdir13(dirname5(outputPath), { recursive: true });
   const runs = await listRunRecords(stateRoot);
   const latestRefs = await readLatestRefCache5(args);
   const payload = action === "matrix" ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath }) : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
@@ -11700,7 +11335,7 @@ async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
 }
 async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const kind = requireString19(args.kind ?? positionals[0], "kind");
+  const kind = requireString18(args.kind ?? positionals[0], "kind");
   if (!["snapshot", "screenshot", "route"].includes(kind)) throw new Error(`Unknown diff kind: ${kind}`);
   const normalizedArgs = {
     ...args,
@@ -11713,7 +11348,7 @@ async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const stateRoot = resolveExpoStateRoot7(normalizedArgs);
   const session = await readLatestSession6(stateRoot);
   const outputPath = resolve7(String(normalizedArgs.outputPath ?? join12(stateRoot, "artifacts", `diff-${kind}-${isoStamp2(deps)}.json`)));
-  await mkdir14(dirname5(outputPath), { recursive: true });
+  await mkdir13(dirname5(outputPath), { recursive: true });
   const diff = kind === "snapshot" ? await snapshotDiffPayload(normalizedArgs) : kind === "route" ? await routeDiffPayload(normalizedArgs, deps) : await screenshotDiffPayload(normalizedArgs);
   const payload = {
     ...diff,
@@ -11773,8 +11408,8 @@ function reviewMatrixPayload(args) {
   };
 }
 async function routeDiffPayload(args = {}, deps = defaultReviewDiffDependencies) {
-  const routeA = requireString19(args.routeA, "routeA");
-  const routeB = requireString19(args.routeB, "routeB");
+  const routeA = requireString18(args.routeA, "routeA");
+  const routeB = requireString18(args.routeB, "routeB");
   const screenshot = args.screenshot === true;
   if (!deps.openExpoRoute) return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
   const openedA = unwrapToolJson10(await deps.openExpoRoute({ ...args, route: routeA }));
@@ -11792,8 +11427,8 @@ async function routeDiffPayload(args = {}, deps = defaultReviewDiffDependencies)
   };
 }
 async function snapshotDiffPayload(args = {}) {
-  const baseline = await readJsonFile9(resolve7(requireString19(args.baseline, "baseline")));
-  const current = args.current ? await readJsonFile9(resolve7(requireString19(args.current, "current"))) : await latestSnapshotJson(args);
+  const baseline = await readJsonFile9(resolve7(requireString18(args.baseline, "baseline")));
+  const current = args.current ? await readJsonFile9(resolve7(requireString18(args.current, "current"))) : await latestSnapshotJson(args);
   if (!current) return { available: false, reason: "No current snapshot exists for the current session." };
   const beforeRefs = new Set(refsFromSnapshot(baseline));
   const afterRefs = new Set(refsFromSnapshot(current));
@@ -11808,9 +11443,9 @@ async function snapshotDiffPayload(args = {}) {
   };
 }
 async function screenshotDiffPayload(args = {}) {
-  const baseline = resolve7(requireString19(args.baseline, "baseline"));
-  const current = resolve7(requireString19(args.current, "current"));
-  const [before, after] = await Promise.all([stat7(baseline), stat7(current)]);
+  const baseline = resolve7(requireString18(args.baseline, "baseline"));
+  const current = resolve7(requireString18(args.current, "current"));
+  const [before, after] = await Promise.all([stat6(baseline), stat6(current)]);
   return {
     available: true,
     baseline,
@@ -11889,13 +11524,13 @@ function sessionDirectory3(stateRoot, sessionId) {
   return join12(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile9(file) {
-  return JSON.parse(await readFile16(file, "utf8"));
+  return JSON.parse(await readFile15(file, "utf8"));
 }
 async function writeJsonFile6(file, value) {
-  await writeFile10(file, `${JSON.stringify(value, null, 2)}
+  await writeFile8(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-function requireString19(value, name) {
+function requireString18(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -11924,7 +11559,7 @@ function asRecord14(value) {
 }
 
 // src/modules/debug-inspect-highlight/src/main/index.ts
-import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile17, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile16, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename as basename8, dirname as dirname6, join as join13, resolve as resolve8 } from "node:path";
 function toolJson26(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -11934,7 +11569,7 @@ async function debugInspectCommand(args = {}, deps = {}) {
   return toolJson26(await debugInspectPayload(args, deps));
 }
 async function debugInspectPayload(args = {}, deps = {}) {
-  const ref = requireString20(args.ref ?? firstPositional(args), "ref");
+  const ref = requireString19(args.ref ?? firstPositional(args), "ref");
   const found = await readRefRecord(ref, args, deps);
   const stateRoot = resolveExpoStateRoot8(args);
   const session = await latestSession(stateRoot, deps);
@@ -11945,7 +11580,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
       sessionId: session?.sessionId ?? null
     };
   }
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber20(args.metroPort ?? 8081, 1, 65535);
   const metro = await metroStatus({ metroPort }, deps);
   const target = session ? await selectedTarget(stateRoot, session, deps) : null;
   const record = found.record;
@@ -11988,7 +11623,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
   };
 }
 async function highlightCommand(args = {}, deps = {}) {
-  const ref = requireString20(args.ref ?? firstPositional(args), "ref");
+  const ref = requireString19(args.ref ?? firstPositional(args), "ref");
   const found = await readRefRecord(ref, args, deps);
   if (found.available === false) return toolJson26({ ...found, action: "highlight" });
   const box = found.record.box;
@@ -12026,8 +11661,8 @@ function highlightSvg({ ref, record, durationMs }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="rgba(0,0,0,0.08)"/>
   <rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="rgba(255,204,0,0.25)" stroke="#ffcc00" stroke-width="4"/>
-  <text x="${Math.max(4, box.x)}" y="${Math.max(18, box.y - 8)}" fill="#111" font-family="Menlo, monospace" font-size="14">${escapeHtml3(label)}</text>
-  <text x="8" y="${height - 12}" fill="#444" font-family="Menlo, monospace" font-size="11">${escapeHtml3(durationMs ? `durationMs=${durationMs}` : "static highlight evidence")}</text>
+  <text x="${Math.max(4, box.x)}" y="${Math.max(18, box.y - 8)}" fill="#111" font-family="Menlo, monospace" font-size="14">${escapeHtml2(label)}</text>
+  <text x="8" y="${height - 12}" fill="#444" font-family="Menlo, monospace" font-size="11">${escapeHtml2(durationMs ? `durationMs=${durationMs}` : "static highlight evidence")}</text>
 </svg>
 `;
 }
@@ -12073,18 +11708,18 @@ function sessionDirectory4(stateRoot, sessionId) {
   return join13(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile10(file) {
-  return JSON.parse(await readFile17(file, "utf8"));
+  return JSON.parse(await readFile16(file, "utf8"));
 }
-function requireString20(value, name) {
+function requireString19(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber22(value, min, max) {
+function clampNumber20(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
-function escapeHtml3(value) {
+function escapeHtml2(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 async function latestSession(stateRoot, deps) {
@@ -12113,8 +11748,8 @@ function asRecord15(value) {
 }
 
 // src/modules/expo-introspection-actions/src/main/index.ts
-import { access as access5, readFile as readFile18, stat as stat8 } from "node:fs/promises";
-import path13 from "node:path";
+import { access as access5, readFile as readFile17, stat as stat7 } from "node:fs/promises";
+import path11 from "node:path";
 var EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"];
 function toolJson27(value) {
   return {
@@ -12135,7 +11770,7 @@ function unwrapToolJson11(value) {
   }
 }
 async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
-  const action = requireString21(args.action ?? "modules", "action");
+  const action = requireString20(args.action ?? "modules", "action");
   if (!isExpoAction(action)) throw new Error(`Unknown Expo action: ${action}`);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(args.cwd ?? deps.currentWorkingDirectory()));
   const summary = await deps.runtimeSummary(cwd);
@@ -12200,8 +11835,8 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   });
 }
 var defaultExpoCommandDependencies = {
-  normalizeProjectCwd: defaultNormalizeProjectCwd4,
-  resolvePath: (input) => path13.resolve(input),
+  normalizeProjectCwd: defaultNormalizeProjectCwd3,
+  resolvePath: (input) => path11.resolve(input),
   currentWorkingDirectory: () => process.cwd(),
   runtimeSummary: async (cwd) => {
     const info = asRecord16(unwrapToolJson11(await projectInfo({ cwd }))) ?? {};
@@ -12216,17 +11851,17 @@ var defaultExpoCommandDependencies = {
   projectInfo,
   buildUpstreamDependencyReport,
   findUp: findUp3,
-  readJsonFile: async (filePath) => JSON.parse(await readFile18(filePath, "utf8")),
-  joinPath: (...parts) => path13.join(...parts),
+  readJsonFile: async (filePath) => JSON.parse(await readFile17(filePath, "utf8")),
+  joinPath: (...parts) => path11.join(...parts),
   pathExists: async (filePath) => access5(filePath).then(() => true, () => false),
   firstExisting: async (projectRoot, names) => {
     for (const name of names) {
-      const candidate = path13.join(projectRoot, name);
+      const candidate = path11.join(projectRoot, name);
       if (await access5(candidate).then(() => true, () => false)) return candidate;
     }
     return null;
   },
-  readTextFile: (filePath) => readFile18(filePath, "utf8")
+  readTextFile: (filePath) => readFile17(filePath, "utf8")
 };
 async function expoModuleRecords(projectRoot, deps) {
   const packageJsonPath = await deps.findUp(projectRoot, "package.json");
@@ -12306,7 +11941,7 @@ function expoPrebuildRiskLevel(risks) {
   if (risks.some((risk) => risk.kind === "native-project-present")) return "high";
   return risks.length > 0 ? "medium" : "low";
 }
-function requireString21(value, field) {
+function requireString20(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -12318,25 +11953,25 @@ function isExpoAction(action) {
 function asRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
-async function defaultNormalizeProjectCwd4(cwd) {
-  const resolved = path13.resolve(cwd ?? ".");
-  const details = await stat8(resolved).catch(() => null);
+async function defaultNormalizeProjectCwd3(cwd) {
+  const resolved = path11.resolve(cwd ?? ".");
+  const details = await stat7(resolved).catch(() => null);
   if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp3(projectRoot, filename) {
-  let current = path13.resolve(projectRoot);
+  let current = path11.resolve(projectRoot);
   while (true) {
-    const candidate = path13.join(current, filename);
+    const candidate = path11.join(current, filename);
     if (await access5(candidate).then(() => true, () => false)) return candidate;
-    const parent = path13.dirname(current);
+    const parent = path11.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
 
 // src/modules/rn-introspection/src/main/index.ts
-import { readdir as readdir12, readFile as readFile19 } from "node:fs/promises";
+import { readdir as readdir12, readFile as readFile18 } from "node:fs/promises";
 import { basename as basename9, join as join14, resolve as resolve9 } from "node:path";
 function toolJson28(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -12344,10 +11979,10 @@ function toolJson28(value) {
 }
 async function rnCommand(args = {}, deps = defaultRnDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString22(args.action ?? positionals[0] ?? "tree", "action");
+  const action = requireString21(args.action ?? positionals[0] ?? "tree", "action");
   if (!["tree", "inspect", "renders", "fiber"].includes(action)) throw new Error(`Unknown React Native action: ${action}`);
   if (action === "inspect") return toolJson28(await rnInspectPayload(args, deps));
-  const subaction = action === "renders" ? requireString22(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
+  const subaction = action === "renders" ? requireString21(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
   if (subaction && !["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown React Native renders action: ${subaction}`);
   const bridgeAction = action === "renders" ? `renders-${subaction}` : action;
   const bridgePayload = await deps.bridgeDomainCommand({
@@ -12374,7 +12009,7 @@ var defaultRnDependencies = {
   bridgeDomainCommand: defaultBridgeDomainCommand
 };
 async function defaultBridgeDomainCommand(request) {
-  const metroPort = clampNumber23(request.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber21(request.args.metroPort ?? 8081, 1, 65535);
   const targets = await defaultMetroTargets2(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   if (!target?.webSocketDebuggerUrl) {
@@ -12404,14 +12039,14 @@ async function defaultMetroTargets2(metroPort) {
   const parsed = await response.json();
   return Array.isArray(parsed) ? parsed.map((target) => asRecord17(target) ?? {}) : [];
 }
-function clampNumber23(value, min, max) {
+function clampNumber21(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
 async function rnInspectPayload(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const ref = requireString22(args.ref ?? positionals[1] ?? positionals[0], "ref");
+  const ref = requireString21(args.ref ?? positionals[1] ?? positionals[0], "ref");
   const cache = await readLatestRefCache7(args, deps);
   if (!cache) {
     return {
@@ -12501,9 +12136,9 @@ function sessionDirectory5(stateRoot, sessionId) {
   return join14(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile11(file) {
-  return JSON.parse(await readFile19(file, "utf8"));
+  return JSON.parse(await readFile18(file, "utf8"));
 }
-function requireString22(value, name) {
+function requireString21(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -12512,7 +12147,7 @@ function asRecord17(value) {
 }
 
 // src/modules/perf-evidence/src/main/index.ts
-import { mkdir as fsMkdir2, readFile as readFile20, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
+import { mkdir as fsMkdir2, readFile as readFile19, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
 import { basename as basename10, dirname as dirname7, join as join15, resolve as resolve10 } from "node:path";
 var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
 var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph"];
@@ -12521,7 +12156,7 @@ function toolJson29(value) {
 ` }] };
 }
 async function perfCommand(args = {}, deps = {}) {
-  const action = requireString23(args.action ?? firstPositional2(args) ?? "summary", "action");
+  const action = requireString22(args.action ?? firstPositional2(args) ?? "summary", "action");
   if (!PERF_ACTIONS.includes(action)) throw new Error(`Unknown performance action: ${action}`);
   if (action === "summary") return toolJson29(await perfSummaryPayload(args, deps));
   if (action === "bundle") return toolJson29(await perfBundlePayload(args, deps));
@@ -12535,7 +12170,7 @@ async function perfCommand(args = {}, deps = {}) {
 async function perfSummaryPayload(args = {}, deps = {}) {
   const cwd = await projectCwd(args.cwd, deps);
   const summary = await projectSummary(cwd, deps);
-  const metroPort = clampNumber24(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
   const metro = await metroStatus2({ metroPort }, deps);
   const metrics = [];
   const unavailableSources = [];
@@ -12586,7 +12221,7 @@ async function perfSummaryPayload(args = {}, deps = {}) {
   };
 }
 async function perfRuntimePayload(args = {}, action, deps = {}) {
-  const metroPort = clampNumber24(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
   const targets = await listMetroTargets(metroPort, deps);
   const target = targets[0] ?? null;
   const projectRoot = await projectCwd(args.cwd, deps);
@@ -12606,7 +12241,7 @@ async function perfRuntimePayload(args = {}, action, deps = {}) {
   const payload = {
     ...basePayload,
     action,
-    ...action === "action" ? { actionName: requireString23(args.label, "label") } : {},
+    ...action === "action" ? { actionName: requireString22(args.label, "label") } : {},
     mode: "development",
     context: await perfContext({ args, projectRoot, metro, target }),
     transport: perfTransport(metroPort, target, null),
@@ -12620,7 +12255,7 @@ async function perfInstrumentedPayload(args = {}, action, deps = {}) {
   const subaction = requireOptionalString9(args.subaction);
   const label = requireOptionalString9(args.label);
   const bridgeAction = perfBridgeAction(action, subaction);
-  const metroPort = clampNumber24(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
   const targets = await listMetroTargets(metroPort, deps);
   const target = targets[0] ?? null;
   const projectRoot = await projectCwd(args.cwd, deps);
@@ -12656,8 +12291,8 @@ function perfBridgeAction(action, subaction) {
   return action;
 }
 async function perfComparePayload(args = {}, deps = {}) {
-  const baselinePath = resolve10(requireString23(args.baseline, "baseline"));
-  const candidatePath = resolve10(requireString23(args.candidate, "candidate"));
+  const baselinePath = resolve10(requireString22(args.baseline, "baseline"));
+  const candidatePath = resolve10(requireString22(args.candidate, "candidate"));
   const baseline = await readJson6(baselinePath, deps);
   const candidate = await readJson6(candidatePath, deps);
   const candidateMetrics = metricMap(candidate.metrics ?? []);
@@ -12687,10 +12322,10 @@ async function perfComparePayload(args = {}, deps = {}) {
   }, deps);
 }
 async function perfBudgetPayload(args = {}, deps = {}) {
-  const subaction = requireString23(args.subaction ?? "check", "subaction");
+  const subaction = requireString22(args.subaction ?? "check", "subaction");
   if (subaction !== "check") throw new Error(`Unknown performance budget action: ${subaction}`);
-  const budgetPath = resolve10(requireString23(args.file, "file"));
-  const candidatePath = resolve10(requireString23(args.candidate, "candidate"));
+  const budgetPath = resolve10(requireString22(args.file, "file"));
+  const candidatePath = resolve10(requireString22(args.candidate, "candidate"));
   const budget = await readJson6(budgetPath, deps);
   const candidate = await readJson6(candidatePath, deps);
   const metrics = metricMap(candidate.metrics ?? []);
@@ -12713,7 +12348,7 @@ async function perfBudgetPayload(args = {}, deps = {}) {
   }, deps);
 }
 async function perfMemoryPayload(args = {}, deps = {}) {
-  const samples = clampNumber24(args.samples ?? 1, 1, 100);
+  const samples = clampNumber22(args.samples ?? 1, 1, 100);
   const nativeArtifact = requireOptionalString9(args.nativeArtifact);
   const projectRoot = await projectCwd(args.cwd, deps);
   const metrics = [perfMetric({
@@ -12741,7 +12376,7 @@ async function perfMemoryPayload(args = {}, deps = {}) {
   }, deps);
 }
 async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
-  const subaction = requireString23(args.subaction ?? (profiler === "memgraph" ? "capture" : "stop"), "subaction");
+  const subaction = requireString22(args.subaction ?? (profiler === "memgraph" ? "capture" : "stop"), "subaction");
   const allowed = profiler === "ettrace" ? ["start", "stop"] : ["capture"];
   if (!allowed.includes(subaction)) throw new Error(`Unknown ${profiler} action: ${subaction}`);
   const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
@@ -12778,10 +12413,10 @@ async function perfBundlePayload(args = {}, deps = {}) {
   let bundlePath = null;
   if (bundleArtifact) {
     bundlePath = resolve10(bundleArtifact);
-    const stat9 = await fileStat(bundlePath, deps);
-    if (stat9?.isFile()) {
+    const stat8 = await fileStat(bundlePath, deps);
+    if (stat8?.isFile()) {
       available = true;
-      metrics.push(perfMetric({ name: "bundle.bytes", value: stat9.size, unit: "bytes", source: "metro", confidence: "high" }));
+      metrics.push(perfMetric({ name: "bundle.bytes", value: stat8.size, unit: "bytes", source: "metro", confidence: "high" }));
     } else {
       unavailableSources.push({ source: "bundle-artifact", reason: "Bundle artifact was not found.", path: bundlePath });
     }
@@ -12959,14 +12594,14 @@ function resolveExpoStateRoot10(args = {}) {
   const root = resolve10(args.root ?? args.cwd ?? process.cwd());
   return join15(root, ".scratch", "expo-ios");
 }
-function requireString23(value, name) {
+function requireString22(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
 function requireOptionalString9(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-function clampNumber24(value, min, max) {
+function clampNumber22(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -12994,17 +12629,17 @@ async function findUpFile(cwd, name, deps) {
 }
 async function readJson6(file, deps) {
   if (deps.readJsonFile) return deps.readJsonFile(file);
-  return JSON.parse(await readFile20(file, "utf8"));
+  return JSON.parse(await readFile19(file, "utf8"));
 }
 async function writeJsonFile7(file, value, deps) {
   await (deps.writeFile ?? fsWriteFile2)(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-async function exists(path14, deps) {
-  return deps.pathExists ? deps.pathExists(path14) : fsStat(path14).then(() => true, () => false);
+async function exists(path12, deps) {
+  return deps.pathExists ? deps.pathExists(path12) : fsStat(path12).then(() => true, () => false);
 }
-async function fileStat(path14, deps) {
-  return deps.stat ? deps.stat(path14) : fsStat(path14).catch(() => null);
+async function fileStat(path12, deps) {
+  return deps.stat ? deps.stat(path12) : fsStat(path12).catch(() => null);
 }
 function redactValue8(value) {
   if (Array.isArray(value)) return value.map(redactValue8);
@@ -13020,7 +12655,7 @@ function firstPositional2(args) {
 }
 
 // src/modules/dashboard-observability/src/main/index.ts
-import { mkdir as mkdir15, readdir as readdir13, readFile as readFile21, writeFile as writeFile11 } from "node:fs/promises";
+import { mkdir as mkdir14, readdir as readdir13, readFile as readFile20, writeFile as writeFile9 } from "node:fs/promises";
 import { basename as basename11, dirname as dirname8, join as join16, resolve as resolve11 } from "node:path";
 var DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
 function toolJson30(value) {
@@ -13029,12 +12664,12 @@ function toolJson30(value) {
 }
 async function dashboardCommand(args = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString24(args.action ?? positionals[0] ?? "status", "action");
+  const action = requireString23(args.action ?? positionals[0] ?? "status", "action");
   if (!["start", "status", "stop"].includes(action)) throw new Error(`Unknown dashboard action: ${action}`);
   const stateRoot = resolveExpoStateRoot11(args);
   const dashboardDir = join16(stateRoot, "dashboard");
   const statePath = join16(dashboardDir, "dashboard-state.json");
-  await mkdir15(dashboardDir, { recursive: true });
+  await mkdir14(dashboardDir, { recursive: true });
   const previous = asRecord18(await readJsonFile12(statePath).catch(() => null));
   const previousArtifacts = asRecord18(previous?.artifacts);
   const status = action === "start" ? "running" : action === "stop" ? "stopped" : previous?.status ?? "stopped";
@@ -13042,7 +12677,7 @@ async function dashboardCommand(args = {}) {
     available: true,
     action,
     status,
-    port: clampNumber25(args.port ?? previous?.port ?? 0, 0, 65535),
+    port: clampNumber23(args.port ?? previous?.port ?? 0, 0, 65535),
     stateRoot,
     sessions: await dashboardSessions(stateRoot),
     artifacts: {
@@ -13077,15 +12712,15 @@ async function dashboardSessions(stateRoot) {
   return sessions;
 }
 async function writeDashboardHtml(file, payload) {
-  await mkdir15(dirname8(file), { recursive: true });
-  await writeFile11(file, `<!doctype html>
+  await mkdir14(dirname8(file), { recursive: true });
+  await writeFile9(file, `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>expo-ios dashboard</title></head>
 <body>
 <h1>expo-ios dashboard</h1>
-<p>Status: ${escapeHtml4(payload.status)}</p>
+<p>Status: ${escapeHtml3(payload.status)}</p>
 <p>Sessions: ${payload.sessions.length}</p>
-<pre>${escapeHtml4(JSON.stringify(payload.sessions, null, 2))}</pre>
+<pre>${escapeHtml3(JSON.stringify(payload.sessions, null, 2))}</pre>
 </body>
 </html>
 `, "utf8");
@@ -13099,22 +12734,22 @@ function resolveExpoStateRoot11(args = {}) {
   return join16(root, ".scratch", "expo-ios");
 }
 async function readJsonFile12(file) {
-  return JSON.parse(await readFile21(file, "utf8"));
+  return JSON.parse(await readFile20(file, "utf8"));
 }
 async function writeJsonFile8(file, value) {
-  await mkdir15(dirname8(file), { recursive: true });
-  await writeFile11(file, `${JSON.stringify(value, null, 2)}
+  await mkdir14(dirname8(file), { recursive: true });
+  await writeFile9(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-function escapeHtml4(value) {
+function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber25(value, min, max) {
+function clampNumber23(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
 }
-function requireString24(value, name) {
+function requireString23(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -13123,7 +12758,7 @@ function asRecord18(value) {
 }
 
 // src/modules/policy-redaction/src/main/command-boundary.ts
-import { mkdir as mkdir16, readFile as readFile22, writeFile as writeFile12 } from "node:fs/promises";
+import { mkdir as mkdir15, readFile as readFile21, writeFile as writeFile10 } from "node:fs/promises";
 import { dirname as dirname9, resolve as resolve12 } from "node:path";
 
 // src/modules/policy-redaction/src/main/domain.ts
@@ -13268,7 +12903,7 @@ function toolJson31(value) {
 ` }], isError: false };
 }
 async function policyCommand(args = {}) {
-  const action = requireString25(args.action ?? "show", "action");
+  const action = requireString24(args.action ?? "show", "action");
   if (action !== "show" && action !== "check") {
     throw new Error(`Unknown policy action: ${action}`);
   }
@@ -13286,8 +12921,8 @@ async function policyCommand(args = {}) {
       ]
     });
   }
-  const subject = requireString25(args.subject, "subject");
-  const name = requireString25(args.name, "name");
+  const subject = requireString24(args.subject, "subject");
+  const name = requireString24(args.name, "name");
   const policyAction = subject === "action" ? name : `${subject}.${name}`;
   const sideEffect = actionSideEffect(policyAction);
   const decision = sideEffect === "read" ? {
@@ -13314,8 +12949,8 @@ async function policyCommand(args = {}) {
   });
 }
 async function redactCommand(args = {}) {
-  const file = resolve12(requireString25(args.file, "file"));
-  const raw = await readFile22(file, "utf8");
+  const file = resolve12(requireString24(args.file, "file"));
+  const raw = await readFile21(file, "utf8");
   let payload;
   try {
     payload = redactJson(JSON.parse(raw));
@@ -13325,9 +12960,9 @@ async function redactCommand(args = {}) {
   const outputPath = requireOptionalString10(args.outputPath);
   const resolvedOutputPath = outputPath ? resolve12(outputPath) : null;
   if (resolvedOutputPath) {
-    await mkdir16(dirname9(resolvedOutputPath), { recursive: true });
+    await mkdir15(dirname9(resolvedOutputPath), { recursive: true });
     const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
-    await writeFile12(resolvedOutputPath, `${text}
+    await writeFile10(resolvedOutputPath, `${text}
 `, "utf8");
   }
   return toolJson31({
@@ -13339,9 +12974,9 @@ async function redactCommand(args = {}) {
   });
 }
 async function readJsonFile13(file) {
-  return JSON.parse(await readFile22(file, "utf8"));
+  return JSON.parse(await readFile21(file, "utf8"));
 }
-function requireString25(value, field) {
+function requireString24(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -13353,7 +12988,8 @@ function requireOptionalString10(value) {
 
 // src/modules/plugin-self-management/src/main/index.ts
 import { execFile as nodeExecFile11 } from "node:child_process";
-import { access as access6, mkdir as mkdir17, mkdtemp, readdir as readdir14, readFile as readFile23, writeFile as writeFile13 } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile22, writeFile as writeFile11 } from "node:fs/promises";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname10, join as join17, resolve as resolve13 } from "node:path";
 var CLI_NAME5 = "expo-ios";
@@ -13364,7 +13000,7 @@ function toolJson32(value) {
 }
 async function skillsCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString26(args.action ?? positionals[0] ?? "list", "action");
+  const action = requireString25(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "get"].includes(action)) throw new Error(`Unknown skills action: ${action}`);
   const skills = await listBundledSkills(deps);
   if (action === "list") {
@@ -13375,7 +13011,7 @@ async function skillsCommand(args = {}, deps = {}) {
       skills: skills.map(({ content: _content, ...skill2 }) => skill2)
     });
   }
-  const name = requireString26(args.name ?? positionals[1], "name");
+  const name = requireString25(args.name ?? positionals[1], "name");
   const skill = skills.find((item) => item.name === name);
   if (!skill) return toolJson32({ available: false, action, name, reason: "Skill not found.", pluginVersion: CLI_VERSION6 });
   return toolJson32({ available: true, action, pluginVersion: CLI_VERSION6, ...skill });
@@ -13387,7 +13023,7 @@ async function listBundledSkills(deps = {}) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const file = join17(skillsRoot, entry.name, "SKILL.md");
-    const content = await readFile23(file, "utf8").catch(() => null);
+    const content = await readFile22(file, "utf8").catch(() => null);
     if (!content) continue;
     const metadata = parseSkillFrontmatter(content);
     skills.push({
@@ -13411,7 +13047,7 @@ function parseSkillFrontmatter(content) {
 }
 async function installCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString26(args.action ?? positionals[0] ?? "check", "action");
+  const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown install action: ${action}`);
   const prefix = resolve13(optionalString7(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
   const binPath = join17(prefix, "bin", CLI_NAME5);
@@ -13428,7 +13064,7 @@ async function installCommand(args = {}, deps = {}) {
 }
 async function upgradeCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString26(args.action ?? positionals[0] ?? "check", "action");
+  const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown upgrade action: ${action}`);
   const prefix = resolve13(optionalString7(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
   return toolJson32({
@@ -13443,14 +13079,14 @@ async function upgradeCommand(args = {}, deps = {}) {
 }
 async function releaseCommand(args = {}, deps = defaultPluginSelfManagementDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
-  const action = requireString26(args.action ?? positionals[0] ?? "check", "action");
+  const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown release action: ${action}`);
   const outsideCwd = resolve13(String(args.cwd ?? await mkdtemp(join17(deps.tmpDir ?? tmpdir2(), "expo-ios-release-"))));
-  await mkdir17(outsideCwd, { recursive: true });
+  await mkdir16(outsideCwd, { recursive: true });
   const fixture = join17(outsideCwd, "routes-fixture");
-  await mkdir17(join17(fixture, "app"), { recursive: true });
+  await mkdir16(join17(fixture, "app"), { recursive: true });
   await writeJsonFile9(join17(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
-  await writeFile13(join17(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
+  await writeFile11(join17(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
   const checks = [
     await releaseCheck("version", ["--version"], outsideCwd, (result) => result.stdout.trim() === CLI_VERSION6, deps),
     await releaseCheck("help", ["--help"], outsideCwd, (result) => result.stdout.includes("perf") && result.stdout.includes("dashboard"), deps),
@@ -13486,14 +13122,23 @@ async function releaseCheck(name, argv, cwd, predicate, deps = defaultPluginSelf
       stderr: truncate17(result.stderr, 1e3)
     };
   } catch (error) {
-    return { name, ok: false, exitCode: 1, error: formatError15(error) };
+    return { name, ok: false, exitCode: 1, error: formatError14(error) };
   }
 }
 function cliWrapperPath(deps = {}) {
-  return join17(pluginRoot(deps), "cli", "expo-ios.mjs");
+  return join17(pluginRoot(deps), "cli", "expo98.mjs");
 }
 function pluginRoot(deps = {}) {
-  return resolve13(deps.pluginRoot ?? join17(dirname10(new URL(import.meta.url).pathname), "..", ".."));
+  return resolve13(deps.pluginRoot ?? findPackageRoot(dirname10(new URL(import.meta.url).pathname)));
+}
+function findPackageRoot(start) {
+  let current = resolve13(start);
+  while (true) {
+    if (existsSync(join17(current, "package.json")) && existsSync(join17(current, "cli"))) return current;
+    const parent = dirname10(current);
+    if (parent === current) return resolve13(start);
+    current = parent;
+  }
 }
 async function pathExists6(file) {
   try {
@@ -13504,11 +13149,11 @@ async function pathExists6(file) {
   }
 }
 async function writeJsonFile9(file, value) {
-  await mkdir17(dirname10(file), { recursive: true });
-  await writeFile13(file, `${JSON.stringify(value, null, 2)}
+  await mkdir16(dirname10(file), { recursive: true });
+  await writeFile11(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-function requireString26(value, name) {
+function requireString25(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
@@ -13520,7 +13165,7 @@ function truncate17(value, max = 4e4) {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...[truncated ${text.length - max} chars]`;
 }
-function formatError15(error) {
+function formatError14(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
@@ -13658,7 +13303,7 @@ function toolJson33(value) {
 ` }] };
 }
 async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependencies) {
-  const action = requireString27(args.action ?? firstPositional3(args) ?? "matrix", "action");
+  const action = requireString26(args.action ?? firstPositional3(args) ?? "matrix", "action");
   if (!["matrix", "self-check", "run"].includes(action)) throw new Error(`Unknown live-backlog action: ${action}`);
   const cwd = resolve14(args.cwd ?? process.cwd());
   const scope = args.scope ?? "smoke";
@@ -13847,7 +13492,7 @@ function liveBacklogTemplate(command, _args = {}) {
     case "ux-context":
       return { argv: ["ux-context", ...cwdArg, ...metroArg], requirements: ["simulator", "metro"] };
     case "annotate-screen":
-      return { argv: ["annotate-screen", ...cwdArg, "--output-path", "__ROW_DIR__/annotation.html"] };
+      return { argv: ["annotate-screen", "prepare", ...cwdArg, "--output-dir", "__ROW_DIR__/annotations"] };
     case "inspector":
       return { argv: ["inspector", "probe", ...metroArg], requirements: ["hermes-target"] };
     case "review-overlay":
@@ -13857,7 +13502,7 @@ function liveBacklogTemplate(command, _args = {}) {
     case "review-next":
       return { argv: ["review-next", "--surface", "live-backlog", "--stage", "intake", "--issue", "live verification"] };
     case "annotation-server":
-      return { argv: ["annotation-server", "status", ...cwdArg] };
+      return { argv: ["annotation-server", "--dir", "__ROW_DIR__/annotations"] };
     case "devtools":
       return { argv: ["devtools", "capabilities", ...metroArg], requirements: ["metro"] };
     case "console":
@@ -14121,7 +13766,7 @@ Examples:
   expo-ios doctor
 `;
 }
-function requireString27(value, name) {
+function requireString26(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }

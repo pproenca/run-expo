@@ -61,7 +61,7 @@ const SIMULATOR_AND_APP_COMMANDS = [
 const EVIDENCE_AND_RUNTIME_COMMANDS = [
   "logs                   Collect recent app/device logs",
   "ux-context             Capture screenshot, route, runtime, hierarchy, and log context",
-  "annotate-screen        Create a local screenshot annotation board",
+  "annotate-screen        Prepare/read an in-app annotation overlay",
   "inspector              Toggle RN inspector and install/read simulator comments",
   "review-overlay         Scaffold/run an in-app Codex review overlay",
   "review-next            Suggest the next constraint-focused UI review step",
@@ -110,7 +110,7 @@ const EXAMPLES = [
   "expo-ios --json batch '[\"wait\",\"--text\",\"Customers\"]' '[\"get\",\"source\",\"@e1\"]' --bail true",
   "expo-ios --json screenshot --annotate",
   "expo-ios --json open-route /customers --cwd apps/mobile --scheme myapp",
-  "expo-ios --json annotate-screen --cwd apps/mobile --serve true",
+  "expo-ios --json annotate-screen prepare --cwd apps/mobile --serve true",
   "expo-ios --json inspector probe --metro-port 8081",
   "expo-ios --json inspector install-comment-menu --metro-port 8081",
   "expo-ios --json inspector open-dev-menu",

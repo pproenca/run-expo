@@ -288,12 +288,12 @@ export function liveBacklogTemplate(command: string, _args: Record<string, any> 
     case "gesture": return { argv: ["gesture", "tap", "--x", "1", "--y", "1", "--dry-run", "true"], requirements: ["simulator"], scope: "full" };
     case "open-route": return { argv: ["open-route", "/", ...cwdArg], requirements: ["project-scheme", "simulator"], scope: "full" };
     case "ux-context": return { argv: ["ux-context", ...cwdArg, ...metroArg], requirements: ["simulator", "metro"] };
-    case "annotate-screen": return { argv: ["annotate-screen", ...cwdArg, "--output-path", "__ROW_DIR__/annotation.html"] };
+    case "annotate-screen": return { argv: ["annotate-screen", "prepare", ...cwdArg, "--output-dir", "__ROW_DIR__/annotations"] };
     case "inspector": return { argv: ["inspector", "probe", ...metroArg], requirements: ["hermes-target"] };
     case "review-overlay": return { argv: ["review-overlay", "read", "--output-dir", "__ROW_DIR__", ...cwdArg] };
     case "review-overlay-server": return { argv: ["review-overlay-server", "--output-dir", "__ROW_DIR__", "--port", "0", ...cwdArg] };
     case "review-next": return { argv: ["review-next", "--surface", "live-backlog", "--stage", "intake", "--issue", "live verification"] };
-    case "annotation-server": return { argv: ["annotation-server", "status", ...cwdArg] };
+    case "annotation-server": return { argv: ["annotation-server", "--dir", "__ROW_DIR__/annotations"] };
     case "devtools": return { argv: ["devtools", "capabilities", ...metroArg], requirements: ["metro"] };
     case "console": return { argv: ["console", "--limit", "20", ...metroArg], requirements: ["hermes-target"] };
     case "errors": return { argv: ["errors", "--limit", "20", ...metroArg], requirements: ["hermes-target"] };

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +14,17 @@ const npxEnv = {
   ...sanitizedEnv,
   npm_config_cache: resolve(tmpdir(), "expo98-npm-cache"),
 };
+
+async function makeFixtureProject(prefix = "expo98-fixture-") {
+  const project = await mkdtemp(resolve(tmpdir(), prefix));
+  await writeFile(resolve(project, "package.json"), JSON.stringify({ name: "fixture" }), "utf8");
+  return project;
+}
+
+async function runJson(args, options = {}) {
+  const { stdout } = await execFileAsync(process.execPath, ["cli/expo98.mjs", "--json", ...args], options);
+  return JSON.parse(stdout);
+}
 
 describe("expo98 package bin", () => {
   it("prints the modernized package version through the direct bin", async () => {
@@ -49,7 +60,7 @@ describe("expo98 package bin", () => {
   });
 
   it("dispatches bundled project-info and policy commands without monorepo package imports", async () => {
-    const project = await mkdtemp(resolve(tmpdir(), "expo98-package-bin-"));
+    const project = await makeFixtureProject("expo98-package-bin-");
     try {
       await writeFile(resolve(project, "package.json"), JSON.stringify({
         dependencies: {
@@ -78,6 +89,94 @@ describe("expo98 package bin", () => {
       assert.equal(policyPayload.ok, true);
       assert.equal(policyPayload.data.available, true);
       assert.equal(policyPayload.data.action, "show");
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("prepares annotate-screen as an in-app overlay without HTML board artifacts", async () => {
+    const project = await makeFixtureProject("expo98-annotate-prepare-");
+    try {
+      const payload = await runJson([
+        "--root",
+        project,
+        "annotate-screen",
+        "prepare",
+        "--output-dir",
+        resolve(project, "annotations"),
+        "--serve",
+        "false",
+      ]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.command, "annotate-screen");
+      assert.equal(payload.data.annotationSurface, "in-app-overlay");
+      assert.equal(payload.data.compatibility.legacyBoard, "removed");
+      assert.equal(payload.data.outputDir, resolve(project, "annotations"));
+      assert.equal(payload.data.eventsPath, resolve(project, "annotations", "events.json"));
+      assert.equal(payload.data.server, null);
+      assert.equal(Object.hasOwn(payload.data, "htmlPath"), false);
+      assert.equal(Object.hasOwn(payload.data, "screenshotPath"), false);
+      assert.equal(Object.hasOwn(payload.data, "contextPath"), false);
+      assert.doesNotMatch(JSON.stringify(payload), /annotate\.html|file:\/\/|browser board/i);
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("requires explicit confirmation before annotate-screen scaffolds app files", async () => {
+    const project = await makeFixtureProject("expo98-annotate-refusal-");
+    const overlayDir = resolve(project, "codex-review-overlay");
+    try {
+      const payload = await runJson(["--root", project, "annotate-screen", "scaffold"]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, false);
+      assert.equal(payload.data.code, "confirmation-required");
+      assert.equal(payload.data.requiredConfirmation, "annotate-overlay-scaffold");
+      assert.equal(payload.data.mutation.writesAppFiles, true);
+      await assert.rejects(access(overlayDir));
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("delegates confirmed annotate-screen scaffold to the review overlay implementation", async () => {
+    const project = await makeFixtureProject("expo98-annotate-scaffold-");
+    try {
+      const payload = await runJson([
+        "--root",
+        project,
+        "annotate-screen",
+        "scaffold",
+        "--confirm-actions",
+        "annotate-overlay-scaffold",
+      ]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.command, "annotate-screen");
+      assert.equal(payload.data.annotationSurface, "in-app-overlay");
+      assert.equal(payload.data.componentPath, resolve(project, "codex-review-overlay", "CodexReviewOverlay.tsx"));
+      assert.equal(payload.data.indexPath, resolve(project, "codex-review-overlay", "index.ts"));
+      assert.match(payload.data.integration.import, /CodexReviewOverlay/);
+      await access(payload.data.componentPath);
+      await access(payload.data.indexPath);
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("returns annotation-server as a deprecation response instead of serving the old HTML workflow", async () => {
+    const project = await makeFixtureProject("expo98-annotation-server-");
+    try {
+      const payload = await runJson(["annotation-server", "--dir", resolve(project, "annotations")]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.available, false);
+      assert.equal(payload.data.action, "annotation-server");
+      assert.equal(payload.data.code, "external-annotation-server-removed");
+      assert.match(payload.data.replacement.prepare, /annotate-screen prepare --serve true/);
+      assert.doesNotMatch(JSON.stringify(payload), /annotate\.html|file:\/\//i);
     } finally {
       await rm(project, { recursive: true, force: true });
     }

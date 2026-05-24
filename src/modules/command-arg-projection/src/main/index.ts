@@ -270,16 +270,17 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
       });
     case "annotate-screen":
       return pickDefined({
+        action: args.action ?? args._[0],
         cwd,
-        device: args.device,
-        bundleId: args.bundleId,
         metroPort: args.metroPort,
-        screenshotPath: args.screenshotPath,
         outputDir: args.outputDir,
+        overlayDir: args.overlayDir,
+        endpointPath: args.endpointPath,
         title: args.title,
         serve: args.serve,
         port: args.port,
-        includeUxContext: args.includeUxContext,
+        force: args.force,
+        confirmActions: args.confirmActions ?? globals.confirmActions,
       });
     case "inspector":
       return pickDefined({
