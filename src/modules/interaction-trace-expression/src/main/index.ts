@@ -1,3 +1,5 @@
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+
 export interface InteractionTraceExpressionArgs {
   action: unknown;
   maxEvents: unknown;
@@ -37,7 +39,7 @@ export interface ToolTextResult {
 
 export async function traceInteraction(
   args: TraceInteractionArgs = {},
-  deps: TraceInteractionDependencies,
+  deps: TraceInteractionDependencies = defaultTraceInteractionDependencies,
 ): Promise<ToolTextResult> {
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const action = args.action;
@@ -73,6 +75,11 @@ export async function traceInteraction(
     cdp: asRecord(result)?.diagnostics ?? asRecord(result)?.cdp ?? null,
   });
 }
+
+const defaultTraceInteractionDependencies: TraceInteractionDependencies = {
+  fetchMetroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression,
+};
 
 export function toolJson(value: unknown): ToolTextResult {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }], isError: false };
@@ -564,4 +571,54 @@ function asString(value: unknown): string | null {
 
 function asRecord(value: unknown): Record<string, any> | null {
   return value && typeof value === "object" ? value as Record<string, any> : null;
+}
+
+async function evaluateHermesExpression(
+  webSocketDebuggerUrl: string,
+  expression: string,
+  options: { timeoutMs: number },
+): Promise<unknown> {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage(ws, 2, options.timeoutMs);
+  } finally {
+    ws.close();
+  }
+}
+
+function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+
+function waitForMessage(ws: WebSocket, id: number, timeoutMs: number): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
 }

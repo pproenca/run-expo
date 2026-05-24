@@ -1,3 +1,14 @@
+import { execFile as nodeExecFile } from "node:child_process";
+import { stat } from "node:fs/promises";
+import path from "node:path";
+
+import { collectAppLogs } from "../../../app-lifecycle-actions/src/main/index.ts";
+import { metroStatusPayload } from "../../../metro-probes/src/main/index.ts";
+import { projectInfo } from "../../../project-info-doctor/src/main/index.ts";
+import { expoRouteContext } from "../../../router-sitemap/src/main/index.ts";
+import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
+import { automationTakeScreenshot } from "../../../screenshot-capture/src/main/index.ts";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -55,7 +66,7 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function captureUxContext(
   args: CaptureUxContextArgs = {},
-  deps: UxContextDependencies,
+  deps: UxContextDependencies = defaultUxContextDependencies,
 ): Promise<ToolTextResult> {
   const startedAt = nowMs(deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
@@ -162,6 +173,63 @@ export async function captureUxContext(
   return toolJson(context);
 }
 
+const defaultUxContextDependencies: UxContextDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd,
+  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString(device), options),
+  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson(await projectInfo({ cwd })) as Record<string, any>,
+  inspectMetro: async (metroPort) => {
+    const metro = await metroStatusPayload({ metroPort });
+    return { metro, runtime: { available: metro.available, targetCount: metro.targetCount, targets: metro.targets } };
+  },
+  iosInstalledAppInfo: async (udid, bundleId) => {
+    const result = await execFile("xcrun", ["simctl", "get_app_container", udid, bundleId], {
+      timeout: 15_000,
+      rejectOnError: false,
+    });
+    return {
+      available: !result.error,
+      bundleId,
+      containerPath: result.error ? null : String(result.stdout ?? "").trim(),
+      stderr: truncate(result.stderr),
+      error: result.error ?? null,
+    };
+  },
+  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson(await automationTakeScreenshot({
+    platform: "ios",
+    device: udid,
+    outputPath,
+  })) as Record<string, any>,
+  analyzePngScreenshot: async (outputPath) => {
+    const details = await stat(outputPath).catch(() => null);
+    return details
+      ? { available: true, outputPath, bytes: details.size, modifiedAt: details.mtime.toISOString() }
+      : { available: false, outputPath, reason: "Screenshot file was not found." };
+  },
+  expoRouteContext,
+  describeIosHierarchy: async (udid) => {
+    const result = await execFile("axe", ["describe-ui", "--udid", udid], {
+      timeout: 20_000,
+      rejectOnError: false,
+    });
+    return {
+      available: !result.error,
+      tool: "axe",
+      stdout: truncate(result.stdout),
+      stderr: truncate(result.stderr),
+      error: result.error ?? null,
+    };
+  },
+  collectFilteredIosLogs: async (udid, options) => collectAppLogs({
+    platform: "ios",
+    device: udid,
+    last: options.last,
+    bundleId: options.bundleId ?? undefined,
+    processName: options.processName ?? undefined,
+  }),
+  now: () => new Date(),
+  nowMs: () => Date.now(),
+};
+
 export async function safeToolSection<T>(fn: () => Promise<T> | T): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
   try {
     return { ok: true, value: await fn() };
@@ -210,6 +278,45 @@ function now(deps: UxContextDependencies): Date {
 
 function nowMs(deps: UxContextDependencies): number {
   return deps.nowMs?.() ?? Date.now();
+}
+
+function unwrapToolJson(result: unknown): unknown {
+  const text = (result as ToolTextResult | null | undefined)?.content?.[0]?.text;
+  if (typeof text !== "string") return result;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+
+async function defaultNormalizeProjectCwd(cwd: unknown): Promise<string> {
+  const resolved = path.resolve(requireOptionalString(cwd) ?? ".");
+  const details = await stat(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+
+function execFile(
+  file: string,
+  args: string[],
+  options: { timeout: number; rejectOnError: false },
+): Promise<{ stdout: string; stderr: string; error?: Error & { code?: number | string | null; signal?: string | null } }> {
+  return new Promise((resolve) => {
+    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error as (Error & { code?: number | string | null; signal?: string | null }) | undefined,
+      });
+    });
+  });
+}
+
+function truncate(value: unknown, limit = 40_000): string {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n[truncated ${text.length - limit} characters]`;
 }
 
 function formatError(error: unknown): string {

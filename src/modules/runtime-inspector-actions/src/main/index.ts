@@ -1,3 +1,9 @@
+import { execFile as nodeExecFile } from "node:child_process";
+
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
+import { resolveIosDevice } from "../../../route-url-actions/src/main/index.ts";
+
 export const INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"] as const;
 export type InspectorAction = (typeof INSPECTOR_ACTIONS)[number];
 
@@ -83,7 +89,7 @@ export function unwrapToolJson(value: unknown): unknown {
 
 export async function runtimeInspector(
   args: RuntimeInspectorArgs,
-  deps: RuntimeInspectorDependencies,
+  deps: RuntimeInspectorDependencies = defaultRuntimeInspectorDependencies,
 ): Promise<ToolTextResult> {
   const metroPort = clampNumber(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
@@ -113,6 +119,24 @@ export async function runtimeInspector(
     cdp: asRecord(result)?.diagnostics ?? asRecord(result)?.cdp ?? null,
   });
 }
+
+const defaultRuntimeInspectorDependencies: RuntimeInspectorDependencies = {
+  fetchMetroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression: evaluateHermesExpression,
+  openIosDevMenu: (args) => openIosDevMenu(args, defaultOpenDevMenuDependencies),
+};
+
+const defaultOpenDevMenuDependencies: OpenDevMenuDependencies = {
+  broadcastMetroMessage,
+  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString(device), options),
+  openDevClientForMessageSocket: async (args) => unwrapToolJson(await openExpoRoute({
+    device: args.device.udid,
+    bundleId: args.bundleId,
+    url: args.devClientUrl,
+  })) as Record<string, unknown>,
+  execFile,
+  truncate,
+};
 
 export function normalizeRuntimeInspectorAction(value: unknown): InspectorAction {
   const action = requireString(value, "action");
@@ -361,3 +385,113 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+async function evaluateHermesExpression(
+  webSocketDebuggerUrl: string,
+  expression: string,
+  options: { timeoutMs: number },
+): Promise<unknown> {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  return cdpCall(webSocketDebuggerUrl, [
+    { method: "Runtime.enable", params: {} },
+    { method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } },
+  ], options.timeoutMs);
+}
+
+async function broadcastMetroMessage(
+  metroPort: number,
+  method: string | null,
+  params?: unknown,
+): Promise<Record<string, unknown>> {
+  if (!method) return { available: false, reason: "No Metro message method was requested.", metroPort };
+  if (typeof WebSocket !== "function") return { available: false, reason: "This Node runtime does not expose a WebSocket client.", metroPort };
+  const url = `ws://127.0.0.1:${metroPort}/message?role=debugger&name=expo98`;
+  try {
+    await cdpMessage(url, { method, params: params ?? {} }, 2500);
+    return { available: true, metroPort, method, url };
+  } catch (error) {
+    return { available: false, metroPort, method, url, reason: formatError(error) };
+  }
+}
+
+async function cdpCall(
+  url: string,
+  calls: Array<{ method: string; params: Record<string, unknown> }>,
+  timeoutMs: number,
+): Promise<unknown> {
+  const results: Record<string, unknown>[] = [];
+  let id = 0;
+  const ws = new WebSocket(url);
+  await waitForOpen(ws, Math.min(timeoutMs, 2500));
+  try {
+    for (const call of calls) {
+      id += 1;
+      ws.send(JSON.stringify({ id, method: call.method, params: call.params }));
+      results.push(await waitForMessage(ws, id, timeoutMs));
+    }
+    return results.at(-1) ?? null;
+  } finally {
+    ws.close();
+  }
+}
+
+async function cdpMessage(url: string, payload: Record<string, unknown>, timeoutMs: number): Promise<void> {
+  const ws = new WebSocket(url);
+  await waitForOpen(ws, timeoutMs);
+  try {
+    ws.send(JSON.stringify(payload));
+  } finally {
+    ws.close();
+  }
+}
+
+function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+
+function waitForMessage(ws: WebSocket, id: number, timeoutMs: number): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+
+function execFile(
+  command: string,
+  args: string[],
+  options: { timeout: number; rejectOnError: false },
+): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    nodeExecFile(command, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message } : null,
+      });
+    });
+  });
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

@@ -256,7 +256,10 @@ export async function attachIosCrashEvidence(
   };
 }
 
-export async function iosCrashEvidence(args: AppActionArgs, deps: AppLifecycleDependencies): Promise<AppActionPayload> {
+export async function iosCrashEvidence(
+  args: AppActionArgs,
+  deps: AppLifecycleDependencies = defaultAppLifecycleDependencies,
+): Promise<AppActionPayload> {
   const sinceMs = finiteNumber(args.sinceMs ?? deps.now());
   const delay = clampNumber(args.waitMs ?? 0, 0, 30_000);
   if (delay > 0) await deps.wait(delay);

@@ -1,5 +1,6 @@
 import type { RefActionDependencies, RefBox, RefRecord } from "./domain.js";
 import { clampNumber, requireString } from "./common.js";
+import { defaultRefActionDependencies } from "./defaults.js";
 
 /**
  * RULE-008 and RULE-020: ref actions fail closed for missing/stale/unsupported
@@ -7,7 +8,7 @@ import { clampNumber, requireString } from "./common.js";
  */
 export async function planRefAction(
   args: Record<string, unknown>,
-  deps: RefActionDependencies,
+  deps: RefActionDependencies = defaultRefActionDependencies,
 ): Promise<Record<string, unknown>> {
   const action = requireString(args.action, "action");
   const ref = requireString(args.ref, "ref");
@@ -44,7 +45,10 @@ export async function planRefAction(
   };
 }
 
-export async function refPoint(refValue: unknown, deps: RefActionDependencies): Promise<Record<string, unknown>> {
+export async function refPoint(
+  refValue: unknown,
+  deps: RefActionDependencies = defaultRefActionDependencies,
+): Promise<Record<string, unknown>> {
   const ref = requireString(refValue, "ref");
   const found = await readRefRecord(ref, deps);
   if (found.available === false) {
@@ -64,7 +68,7 @@ export async function refPoint(refValue: unknown, deps: RefActionDependencies): 
 
 export async function scrollPlan(
   args: Record<string, unknown>,
-  deps: RefActionDependencies,
+  deps: RefActionDependencies = defaultRefActionDependencies,
 ): Promise<Record<string, unknown>> {
   const maybeRef = /^@e\d+$/.test(String(args.ref ?? "")) ? args.ref : null;
   const direction = requireString(

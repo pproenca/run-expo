@@ -1,3 +1,12 @@
+import { openSync } from "node:fs";
+import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
+import path from "node:path";
+import { spawn } from "node:child_process";
+
+import { automationTakeScreenshot } from "../../../screenshot-capture/src/main/index.ts";
+import { captureUxContext } from "../../../ux-context-capture/src/main/index.ts";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -57,7 +66,7 @@ export function unwrapToolJson(result: unknown): unknown {
 
 export async function annotateScreen(
   args: AnnotateScreenArgs = {},
-  deps: AnnotateScreenDependencies,
+  deps: AnnotateScreenDependencies = defaultAnnotateScreenDependencies,
 ): Promise<ToolTextResult> {
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true })
     .catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
@@ -158,6 +167,25 @@ export async function annotateScreen(
     ],
   });
 }
+
+const defaultAnnotateScreenDependencies: AnnotateScreenDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd,
+  fallbackCwd: () => process.cwd(),
+  resolvePath: (...parts) => path.resolve(...parts.filter((part): part is string => Boolean(part))),
+  joinPath: (...parts) => path.join(...parts),
+  mkdir,
+  copyFile,
+  writeFile,
+  pathExists: async (file) => stat(file).then(() => true, () => false),
+  captureUxContext,
+  automationTakeScreenshot,
+  findAvailablePort,
+  openLogFile: (file) => openSync(file, "a"),
+  spawnDetached: (command, argv, options) => spawn(command, argv, options),
+  execPath: process.execPath,
+  scriptPath: process.argv[1] ?? "",
+  now: () => new Date(),
+};
 
 export function annotationHtml({ title }: { title: string }): string {
   const safeTitle = escapeHtml(title);
@@ -322,6 +350,27 @@ export function clampNumber(value: unknown, min: number, max: number): number {
 
 function now(deps: AnnotateScreenDependencies): Date {
   return deps.now?.() ?? new Date();
+}
+
+async function defaultNormalizeProjectCwd(cwd: unknown): Promise<string> {
+  const resolved = path.resolve(requireOptionalString(cwd) ?? ".");
+  const details = await stat(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+
+function findAvailablePort(start: number): Promise<number> {
+  return new Promise((resolve) => {
+    const tryPort = (port: number) => {
+      const server = createServer();
+      server.once("error", () => tryPort(port + 1));
+      server.once("listening", () => {
+        server.close(() => resolve(port));
+      });
+      server.listen(port, "127.0.0.1");
+    };
+    tryPort(start);
+  });
 }
 
 function escapeHtml(value: unknown): string {

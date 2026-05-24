@@ -691,7 +691,10 @@ async function executeRepeatedCommandInternal(
   };
 }
 
-export async function captureGestureScreenshot(args: InteractionArgs, deps: InteractionDependencies): Promise<InteractionPayload> {
+export async function captureGestureScreenshot(
+  args: InteractionArgs,
+  deps: InteractionDependencies = defaultInteractionDependencies,
+): Promise<InteractionPayload> {
   const root = optionalString(args.outputDir) ?? deps.joinPath(deps.tmpdir(), "expo-ios-gestures");
   await deps.mkdir(root, { recursive: true });
   const outputPath = deps.joinPath(root, `${requireString(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`);

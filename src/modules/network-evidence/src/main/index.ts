@@ -181,7 +181,15 @@ export async function networkCommand(
       reason: "No Metro inspector target.",
     }));
   }
-  if (!deps.evaluateHermesExpression) throw new Error("networkCommand requires an evaluateHermesExpression adapter.");
+  if (!deps.evaluateHermesExpression) {
+    return toolJson(networkUnavailable({
+      action: bridgeAction,
+      metroPort,
+      code: "transport-failure",
+      reason: "No Hermes evaluator is configured.",
+      target: targetSummary(target),
+    }));
+  }
 
   const result = await deps.evaluateHermesExpression(
     webSocketDebuggerUrl,
@@ -251,10 +259,14 @@ const defaultNetworkDependencies: NetworkCommandDependencies = {
 };
 
 async function defaultMetroTargets(metroPort: number): Promise<NetworkTarget[]> {
-  const response = await fetch(`http://localhost:${metroPort}/json/list`);
-  if (!response.ok) return [];
-  const parsed = await response.json() as unknown;
-  return Array.isArray(parsed) ? parsed.map((target) => target as NetworkTarget) : [];
+  try {
+    const response = await fetch(`http://localhost:${metroPort}/json/list`);
+    if (!response.ok) return [];
+    const parsed = await response.json() as unknown;
+    return Array.isArray(parsed) ? parsed.map((target) => target as NetworkTarget) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function defaultEvaluateHermesExpression(

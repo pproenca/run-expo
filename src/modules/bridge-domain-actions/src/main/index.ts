@@ -1,3 +1,8 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -97,7 +102,7 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function storageCommand(
   args: Record<string, unknown> = {},
-  deps: BridgeDomainDependencies = {},
+  deps: BridgeDomainDependencies = defaultBridgeDomainDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const store = requireString(args.store ?? positionals[0], "store");
@@ -125,7 +130,7 @@ export async function storageCommand(
 
 export async function stateCommand(
   args: Record<string, unknown> = {},
-  deps: BridgeDomainDependencies = {},
+  deps: BridgeDomainDependencies = defaultBridgeDomainDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "list", "action");
@@ -144,7 +149,7 @@ export async function stateCommand(
 
 export async function controlsCommand(
   args: Record<string, unknown> = {},
-  deps: BridgeDomainDependencies = {},
+  deps: BridgeDomainDependencies = defaultBridgeDomainDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "list", "action");
@@ -160,6 +165,13 @@ export async function controlsCommand(
     policy,
   }, deps));
 }
+
+const defaultBridgeDomainDependencies: BridgeDomainDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort) as Promise<BridgeTarget[]>,
+  evaluateHermesExpression,
+  readJsonFile: async (file) => JSON.parse(await readFile(file, "utf8")),
+  resolvePath: (file) => path.resolve(file),
+};
 
 async function bridgeDomainCommand(
   input: BridgeDomainCommandInput,
@@ -592,4 +604,54 @@ function asRecord(value: unknown): Record<string, any> | null {
 function formatError(error: unknown): string {
   const record = asRecord(error);
   return record?.message == null ? String(error) : String(record.message);
+}
+
+async function evaluateHermesExpression(
+  webSocketDebuggerUrl: string,
+  expression: string,
+  options: { timeoutMs: number },
+): Promise<HermesEvaluationResult> {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage(ws, 2, options.timeoutMs) as HermesEvaluationResult;
+  } finally {
+    ws.close();
+  }
+}
+
+function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+
+function waitForMessage(ws: WebSocket, id: number, timeoutMs: number): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
 }

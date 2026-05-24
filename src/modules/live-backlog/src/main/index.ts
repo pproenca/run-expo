@@ -1,3 +1,4 @@
+import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir as fsMkdir, readdir as fsReaddir, writeFile as fsWriteFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -133,7 +134,7 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function liveBacklogCommand(
   args: Record<string, any> = {},
-  deps: LiveBacklogDependencies = {},
+  deps: LiveBacklogDependencies = defaultLiveBacklogDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? firstPositional(args) ?? "matrix", "action");
   if (!["matrix", "self-check", "run"].includes(action)) throw new Error(`Unknown live-backlog action: ${action}`);
@@ -179,6 +180,10 @@ export async function liveBacklogCommand(
   await writeJsonFile(reportPath, report, deps);
   return toolJson({ ...report, reportPath });
 }
+
+const defaultLiveBacklogDependencies: LiveBacklogDependencies = {
+  execFile,
+};
 
 export function buildLiveBacklogMatrix(args: Record<string, any> = {}): Record<string, any> {
   const dispatcherCommands = Object.keys(COMMAND_ALIASES).sort();
@@ -374,7 +379,7 @@ export function liveBacklogSelfCheck(matrix: Record<string, any>): Record<string
 export async function runLiveBacklogRow(
   row: LiveBacklogRow,
   args: Record<string, any>,
-  deps: LiveBacklogDependencies = {},
+  deps: LiveBacklogDependencies = defaultLiveBacklogDependencies,
 ): Promise<Record<string, any>> {
   const rowDir = join(args.outputDir, row.id);
   await (deps.mkdir ?? fsMkdir)(rowDir, { recursive: true });
@@ -395,7 +400,7 @@ export async function runLiveBacklogRow(
   const cli = deps.cliWrapperPath ?? join(resolve("."), "cli", "expo-ios.mjs");
   const exactCommand = [executable, cli, ...argv];
   const startedAt = (deps.now?.() ?? new Date()).toISOString();
-  if (!deps.execFile) throw new Error("live-backlog run requires execFile dependency.");
+  if (!deps.execFile) throw new Error("No subprocess adapter is configured.");
   const result = await deps.execFile(executable, [cli, ...argv], {
     cwd: args.cwd,
     timeout: 60_000,
@@ -554,4 +559,28 @@ function isoStamp(deps: Pick<LiveBacklogDependencies, "now"> = {}): string {
 
 function firstPositional(args: Record<string, unknown>): unknown {
   return Array.isArray(args._) ? args._[0] : undefined;
+}
+
+function execFile(
+  file: string,
+  argv: string[],
+  options: { cwd: string; timeout: number; maxBuffer: number; rejectOnError: false },
+): Promise<{ stdout: string; stderr: string; error?: { code?: number } | null }> {
+  return new Promise((resolve) => {
+    nodeExecFile(file, argv, {
+      cwd: options.cwd,
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer,
+    }, (error, stdout, stderr) => {
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error && typeof error === "object" && "code" in error
+          ? { code: Number((error as { code?: unknown }).code) }
+          : error
+            ? { code: 1 }
+            : null,
+      });
+    });
+  });
 }

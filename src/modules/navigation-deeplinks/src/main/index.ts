@@ -1,3 +1,6 @@
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = Record<string, unknown>;
@@ -204,7 +207,7 @@ export async function navigationPolicyDecision(
 
 export async function navigationCommand(
   args: NavigationCommandArgs = {},
-  deps: NavigationCommandDependencies = {},
+  deps: NavigationCommandDependencies = defaultNavigationDependencies,
 ): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "state", "action");
   if (!["state", "back", "pop-to-root", "tab", "deep-link"].includes(action)) {
@@ -233,7 +236,15 @@ export async function navigationCommand(
   if (!webSocketDebuggerUrl) {
     return toolJson(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
   }
-  if (!deps.evaluateHermesExpression) throw new Error("navigationCommand requires an evaluateHermesExpression adapter.");
+  if (!deps.evaluateHermesExpression) {
+    return toolJson(navigationUnavailable({
+      action,
+      metroPort,
+      reason: "No Hermes evaluator is configured.",
+      target: targetSummary(target),
+      policy,
+    }));
+  }
 
   const result = await deps.evaluateHermesExpression(
     webSocketDebuggerUrl,
@@ -264,11 +275,13 @@ export async function navigationCommand(
 
 export async function navigationDeepLink(
   args: NavigationCommandArgs = {},
-  deps: Pick<NavigationCommandDependencies, "policyDecision" | "openExpoRoute" | "selectedTargetId" | "latestSessionId"> = {},
+  deps: Pick<NavigationCommandDependencies, "policyDecision" | "openExpoRoute" | "selectedTargetId" | "latestSessionId"> = defaultNavigationDependencies,
 ): Promise<JsonObject> {
   const policy = await navigationPolicyDecision(args, "deep-link", deps);
   if (!policy.allowed) return { available: false, action: "deep-link", reason: policy.reason, policy } as JsonObject;
-  if (!deps.openExpoRoute) throw new Error("navigationDeepLink requires an openExpoRoute adapter.");
+  if (!deps.openExpoRoute) {
+    return { available: false, action: "deep-link", reason: "No open-route adapter is configured.", policy } as JsonObject;
+  }
 
   const route = args.route ?? args._?.[1] ?? args._?.[0];
   const openedRaw = unwrapToolJson(await deps.openExpoRoute({ ...args, route }));
@@ -303,6 +316,12 @@ export async function navigationDeepLink(
     },
   } as JsonObject;
 }
+
+const defaultNavigationDependencies: NavigationCommandDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort) as Promise<NavigationTarget[]>,
+  evaluateHermesExpression,
+  openExpoRoute,
+};
 
 export function navigationExpression(args: { action: string; tab?: unknown }): string {
   return `(() => {
@@ -471,4 +490,54 @@ function redactSensitiveUrlQuery(value: string): string {
     /([?&][^=\s&]*(?:cookie|token|authorization|password|secret)[^=\s&]*=)[^&\s]+/gi,
     "$1[redacted]",
   );
+}
+
+async function evaluateHermesExpression(
+  webSocketDebuggerUrl: string,
+  expression: string,
+  options: { timeoutMs: number },
+): Promise<HermesEvaluationResult> {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage(ws, 2, options.timeoutMs) as HermesEvaluationResult;
+  } finally {
+    ws.close();
+  }
+}
+
+function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+
+function waitForMessage(ws: WebSocket, id: number, timeoutMs: number): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
 }

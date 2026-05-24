@@ -1,3 +1,12 @@
+import { access, readFile, stat } from "node:fs/promises";
+import path from "node:path";
+
+import {
+  buildUpstreamDependencyReport,
+  doctor,
+  projectInfo,
+} from "../../../project-info-doctor/src/main/index.ts";
+
 export const EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"] as const;
 
 export type ExpoAction = (typeof EXPO_ACTIONS)[number];
@@ -99,7 +108,10 @@ export function unwrapToolJson(value: unknown): unknown {
   }
 }
 
-export async function expoCommand(args: ExpoCommandArgs = {}, deps: ExpoCommandDependencies): Promise<ToolTextResult> {
+export async function expoCommand(
+  args: ExpoCommandArgs = {},
+  deps: ExpoCommandDependencies = defaultExpoCommandDependencies,
+): Promise<ToolTextResult> {
   const action = requireString(args.action ?? "modules", "action");
   if (!isExpoAction(action)) throw new Error(`Unknown Expo action: ${action}`);
 
@@ -171,6 +183,36 @@ export async function expoCommand(args: ExpoCommandArgs = {}, deps: ExpoCommandD
     ],
   });
 }
+
+const defaultExpoCommandDependencies: ExpoCommandDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd,
+  resolvePath: (input) => path.resolve(input),
+  currentWorkingDirectory: () => process.cwd(),
+  runtimeSummary: async (cwd) => {
+    const info = asRecord(unwrapToolJson(await projectInfo({ cwd }))) ?? {};
+    return {
+      projectRoot: String(info.projectRoot ?? cwd),
+      expoDependency: info.expoDependency ?? null,
+      reactNativeDependency: info.reactNativeDependency ?? null,
+      appConfig: asRecord(info.appConfig) as ExpoAppConfigSummary | null,
+    };
+  },
+  doctor,
+  projectInfo,
+  buildUpstreamDependencyReport,
+  findUp,
+  readJsonFile: async (filePath) => JSON.parse(await readFile(filePath, "utf8")),
+  joinPath: (...parts) => path.join(...parts),
+  pathExists: async (filePath) => access(filePath).then(() => true, () => false),
+  firstExisting: async (projectRoot, names) => {
+    for (const name of names) {
+      const candidate = path.join(projectRoot, name);
+      if (await access(candidate).then(() => true, () => false)) return candidate;
+    }
+    return null;
+  },
+  readTextFile: (filePath) => readFile(filePath, "utf8"),
+};
 
 export async function expoModuleRecords(
   projectRoot: string,
@@ -300,3 +342,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+async function defaultNormalizeProjectCwd(cwd: string | undefined): Promise<string> {
+  const resolved = path.resolve(cwd ?? ".");
+  const details = await stat(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+
+async function findUp(projectRoot: string, filename: string): Promise<string | null> {
+  let current = path.resolve(projectRoot);
+  while (true) {
+    const candidate = path.join(current, filename);
+    if (await access(candidate).then(() => true, () => false)) return candidate;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}

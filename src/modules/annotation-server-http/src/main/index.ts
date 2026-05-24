@@ -1,3 +1,7 @@
+import { createServer } from "node:http";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 export interface AnnotationRequest {
   method?: string;
   url?: string | null;
@@ -44,7 +48,7 @@ export const ANNOTATION_BODY_LIMIT = 2 * 1024 * 1024;
 
 export async function annotationServer(
   args: AnnotationServerArgs = {},
-  deps: AnnotationServerCommandDependencies,
+  deps: AnnotationServerCommandDependencies = defaultAnnotationServerDependencies,
 ): Promise<Record<string, unknown>> {
   const dir = deps.resolvePath(requireString(args.dir, "dir"));
   const port = clampNumber(args.port ?? 17654, 1, 65535);
@@ -60,6 +64,17 @@ export async function annotationServer(
   }
   return payload;
 }
+
+const defaultAnnotationServerDependencies: AnnotationServerCommandDependencies = {
+  joinPath: (...parts) => path.join(...parts),
+  readFile: async (file) => readFile(file, file.endsWith(".png") ? "base64" : "utf8"),
+  writeFile,
+  resolvePath: (file) => path.resolve(file),
+  listen,
+  stdout: (text) => process.stdout.write(text),
+  waitForever: () => new Promise<never>(() => {}),
+  now: () => new Date(),
+};
 
 export async function handleAnnotationRequest(
   request: AnnotationRequest,
@@ -154,6 +169,32 @@ function chunks(text: string): string[] {
   }
   if (result.length === 0) result.push("");
   return result;
+}
+
+function listen(options: {
+  host: "127.0.0.1";
+  port: number;
+  handler: AnnotationRequestHandler;
+}): Promise<unknown> {
+  return new Promise((resolve) => {
+    const server = createServer((request, response) => {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        body += chunk;
+      });
+      request.on("end", async () => {
+        const payload = await options.handler({ method: request.method, url: request.url, body });
+        response.writeHead(payload.status, payload.headers);
+        if (payload.headers["content-type"] === "image/png") {
+          response.end(Buffer.from(payload.body, "base64"));
+        } else {
+          response.end(payload.body);
+        }
+      });
+    });
+    server.listen(options.port, options.host, () => resolve(server));
+  });
 }
 
 function now(deps: AnnotationServerDependencies): Date {

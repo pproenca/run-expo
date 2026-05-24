@@ -1,3 +1,10 @@
+import { openSync } from "node:fs";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
+import path from "node:path";
+import { spawn } from "node:child_process";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -43,7 +50,7 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function reviewOverlay(
   args: ReviewOverlayArgs = {},
-  deps: ReviewOverlayDependencies,
+  deps: ReviewOverlayDependencies = defaultReviewOverlayDependencies,
 ): Promise<ToolTextResult> {
   const action = requireOptionalString(args.action) ?? "prepare";
   if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
@@ -114,6 +121,25 @@ export async function reviewOverlay(
     ],
   });
 }
+
+const defaultReviewOverlayDependencies: ReviewOverlayDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd,
+  fallbackCwd: () => process.cwd(),
+  resolvePath: (...parts) => path.resolve(...parts.filter((part): part is string => Boolean(part))),
+  joinPath: (...parts) => path.join(...parts),
+  relativePath: (from, to) => path.relative(from, to),
+  createEventsFile,
+  readEvents,
+  reviewOverlayServer,
+  mkdir,
+  writeFile,
+  pathExists: async (file) => stat(file).then(() => true, () => false),
+  findAvailablePort,
+  openLogFile: (file) => openSync(file, "a"),
+  spawnDetached: (command, argv, options) => spawn(command, argv, options),
+  execPath: process.execPath,
+  scriptPath: process.argv[1] ?? "",
+};
 
 export async function scaffoldReviewOverlay(
   args: ReviewOverlayArgs = {},
@@ -259,4 +285,95 @@ function relativePathFallback(from: string, to: string): string {
     toParts.shift();
   }
   return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
+}
+
+async function defaultNormalizeProjectCwd(cwd: unknown): Promise<string> {
+  const resolved = path.resolve(requireOptionalString(cwd) ?? ".");
+  const details = await stat(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+
+async function createEventsFile(args: { outputDir: string; title?: unknown; reset: boolean }): Promise<Record<string, any>> {
+  await mkdir(args.outputDir, { recursive: true });
+  const eventsPath = path.join(args.outputDir, "events.json");
+  const existing = await readJson(eventsPath).catch(() => null);
+  const payload = args.reset || !existing
+    ? {
+      version: 1,
+      title: requireOptionalString(args.title) ?? "Codex in-app review",
+      createdAt: new Date().toISOString(),
+      events: [],
+    }
+    : existing;
+  await writeFile(eventsPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
+}
+
+async function readEvents(eventsPath: string, options: { metroPort?: unknown } = {}): Promise<Record<string, any>> {
+  const payload = await readJson(eventsPath).catch(() => null);
+  if (!payload) {
+    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
+  }
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
+}
+
+async function reviewOverlayServer(args: { dir: string; port?: unknown; endpointPath?: unknown }): Promise<ToolTextResult> {
+  const dir = path.resolve(args.dir);
+  const port = args.port ? clampNumber(args.port, 1, 65535) : await findAvailablePort(17655);
+  const endpointPath = normalizeEndpointPath(args.endpointPath);
+  await mkdir(dir, { recursive: true });
+  await createEventsFile({ outputDir: dir, reset: false });
+  const server = createHttpServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", async () => {
+      const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
+      const eventsPath = path.join(dir, "events.json");
+      if (request.method === "GET" && url.pathname === "/events.json") {
+        const text = await readFile(eventsPath, "utf8").catch(() => "{\"events\":[]}\n");
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(text);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === endpointPath) {
+        const current = await readJson(eventsPath).catch(() => ({ version: 1, events: [] }));
+        const events = Array.isArray(current.events) ? current.events : [];
+        events.push(JSON.parse(body || "{}"));
+        const next = { ...current, events, updatedAt: new Date().toISOString() };
+        await writeFile(eventsPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}\n`);
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+      response.end("{\"ok\":false,\"error\":\"not found\"}\n");
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", () => resolve()));
+  const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  return await new Promise<never>(() => {});
+}
+
+async function readJson(file: string): Promise<Record<string, any>> {
+  return JSON.parse(await readFile(file, "utf8"));
+}
+
+function findAvailablePort(start: number): Promise<number> {
+  return new Promise((resolve) => {
+    const tryPort = (port: number) => {
+      const server = createNetServer();
+      server.once("error", () => tryPort(port + 1));
+      server.once("listening", () => {
+        server.close(() => resolve(port));
+      });
+      server.listen(port, "127.0.0.1");
+    };
+    tryPort(start);
+  });
 }

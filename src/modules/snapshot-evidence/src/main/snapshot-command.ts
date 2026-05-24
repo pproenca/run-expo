@@ -1,12 +1,18 @@
+import { execFile as nodeExecFile } from "node:child_process";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import type { SnapshotArgs, SnapshotCommandDependencies, SnapshotResult } from "./domain.js";
 import { buildSnapshotFilters } from "./filters.js";
 import { persistNativeSnapshot, persistSemanticSnapshot } from "./persistence.js";
+import { randomBase36Suffix } from "../../../session-run-records/src/main/ids.js";
+import { resolveExpoStateRoot, sessionDirectory, sessionJsonPath } from "../../../session-run-records/src/main/paths.js";
 
 export async function snapshotCommand(
-  args: SnapshotArgs,
-  deps: SnapshotCommandDependencies,
+  args: SnapshotArgs = {},
+  deps: SnapshotCommandDependencies = defaultSnapshotDependencies,
 ): Promise<SnapshotResult | { available: false; [key: string]: unknown }> {
-  const stateRoot = args.stateRoot ?? "";
+  const stateRoot = args.stateRoot ?? resolveExpoStateRoot(args as Record<string, string | null>);
   const session = await deps.readLatestSession(stateRoot);
   if (!session) {
     return {
@@ -71,6 +77,74 @@ export async function snapshotCommand(
     semanticBridge,
     accessibilityTree: JSON.parse(result.stdout || "[]"),
   }, deps);
+}
+
+const defaultSnapshotDependencies: SnapshotCommandDependencies = {
+  now: () => new Date(),
+  randomSuffix: randomBase36Suffix,
+  ensureDirectory: (path) => mkdir(path, { recursive: true }),
+  writeJsonFile: writeJson,
+  updateSessionRecord: async (stateRoot, record) => {
+    await mkdir(sessionDirectory(stateRoot, record.sessionId), { recursive: true });
+    await writeJson(sessionJsonPath(stateRoot, record.sessionId), record);
+    return record;
+  },
+  readLatestSession: async (stateRoot) => {
+    const sessionsRoot = join(stateRoot, "sessions");
+    const entries = await readdir(sessionsRoot, { withFileTypes: true }).catch(() => []);
+    const sessions = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const record = await readJson(join(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      if (record) sessions.push(record as any);
+    }
+    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    return sessions[0] ?? null;
+  },
+  readSelectedTarget: async (stateRoot, session) => {
+    return readJson(join(sessionDirectory(stateRoot, session.sessionId), "target.json")).catch(() => null);
+  },
+  captureSemanticBridge: async (args) => ({
+    available: false,
+    source: "plugin-bridge-semantic",
+    code: "no-runtime-target",
+    reason: "Semantic bridge adapter is not configured.",
+    metroPort: args.metroPort ?? 8081,
+  }),
+  findAxeCli: () => commandPath("axe"),
+  describeNativeUi: (axePath, deviceId) => execFile(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12_000 }),
+};
+
+function commandPath(command: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    nodeExecFile("which", [command], { timeout: 5000 }, (error, stdout) => {
+      resolve(error ? null : String(stdout ?? "").trim() || null);
+    });
+  });
+}
+
+function execFile(
+  file: string,
+  args: string[],
+  options: { timeout: number },
+): Promise<{ stdout: string; stderr: string; error?: unknown }> {
+  return new Promise((resolve) => {
+    nodeExecFile(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : undefined,
+      });
+    });
+  });
+}
+
+async function readJson(file: string): Promise<any> {
+  return JSON.parse(await readFile(file, "utf8"));
+}
+
+async function writeJson(file: string, value: unknown): Promise<void> {
+  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 function formatError(error: unknown): string {

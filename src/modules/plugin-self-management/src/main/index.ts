@@ -1,3 +1,4 @@
+import { execFile as nodeExecFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -132,7 +133,7 @@ export async function upgradeCommand(
 
 export async function releaseCommand(
   args: Record<string, unknown> = {},
-  deps: PluginSelfManagementDependencies = {},
+  deps: PluginSelfManagementDependencies = defaultPluginSelfManagementDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "check", "action");
@@ -159,15 +160,19 @@ export async function releaseCommand(
   });
 }
 
+const defaultPluginSelfManagementDependencies: PluginSelfManagementDependencies = {
+  execFile,
+};
+
 export async function releaseCheck(
   name: string,
   argv: string[],
   cwd: string,
   predicate: (result: ExecResult) => boolean,
-  deps: PluginSelfManagementDependencies = {},
+  deps: PluginSelfManagementDependencies = defaultPluginSelfManagementDependencies,
 ): Promise<Record<string, unknown>> {
   try {
-    if (!deps.execFile) throw new Error("releaseCheck requires execFile dependency.");
+    if (!deps.execFile) return { name, ok: false, exitCode: 1, error: "No subprocess adapter is configured." };
     const result = await deps.execFile(process.execPath, [cliWrapperPath(deps), ...argv], {
       cwd,
       timeout: 20_000,
@@ -226,4 +231,16 @@ export function truncate(value: unknown, max = 40_000): string {
 function formatError(error: unknown): string {
   const record = error && typeof error === "object" ? error as { message?: unknown } : null;
   return record?.message == null ? String(error) : String(record.message);
+}
+
+function execFile(
+  file: string,
+  argv: string[],
+  options: { cwd: string; timeout: number; rejectOnError: false },
+): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    nodeExecFile(file, argv, { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (_error, stdout, stderr) => {
+      resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+    });
+  });
 }

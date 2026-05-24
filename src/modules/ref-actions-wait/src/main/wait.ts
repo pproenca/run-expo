@@ -1,5 +1,6 @@
 import type { RefActionDependencies, RefCache, RefRecord, ToolTextResult, WaitEvaluation, WaitPredicate } from "./domain.js";
 import { clampNumber, normalizeFinderText, requireString, toolJson } from "./common.js";
+import { defaultRefActionDependencies } from "./defaults.js";
 
 /**
  * RULE-019: cached-ref waits poll at a bounded interval until a final match,
@@ -7,7 +8,7 @@ import { clampNumber, normalizeFinderText, requireString, toolJson } from "./com
  */
 export async function waitCommand(
   args: Record<string, unknown>,
-  deps: RefActionDependencies,
+  deps: RefActionDependencies = defaultRefActionDependencies,
 ): Promise<ToolTextResult> {
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
@@ -24,7 +25,14 @@ export async function waitCommand(
 
   if (predicate.kind === "metro-ready" || predicate.kind === "app-ready" || predicate.kind === "fn") {
     if (!deps.waitRuntimePredicate) {
-      throw new Error("Runtime wait predicate requires waitRuntimePredicate dependency.");
+      return toolJson({
+        matched: false,
+        available: false,
+        reason: "Runtime wait predicates require a runtime adapter.",
+        predicate,
+        timeoutMs,
+        elapsedMs: now() - started,
+      });
     }
     const runtimeResult = await deps.waitRuntimePredicate(predicate, args, { started, timeoutMs, intervalMs });
     return toolJson(runtimeResult);

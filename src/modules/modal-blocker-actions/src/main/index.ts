@@ -1,3 +1,5 @@
+import { metroTargets } from "../../../metro-probes/src/main/index.ts";
+
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -94,17 +96,22 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function dialogCommand(
   args: Record<string, unknown> = {},
-  deps: ModalBridgeDependencies = {},
+  deps: ModalBridgeDependencies = defaultModalBridgeDependencies,
 ): Promise<ToolTextResult> {
   return modalBridgeCommand({ args, domain: "dialog", actions: ["status", "accept", "dismiss"] }, deps);
 }
 
 export async function sheetCommand(
   args: Record<string, unknown> = {},
-  deps: ModalBridgeDependencies = {},
+  deps: ModalBridgeDependencies = defaultModalBridgeDependencies,
 ): Promise<ToolTextResult> {
   return modalBridgeCommand({ args, domain: "sheet", actions: ["status", "dismiss"] }, deps);
 }
+
+const defaultModalBridgeDependencies: ModalBridgeDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort) as Promise<ModalBridgeTarget[]>,
+  evaluateHermesExpression,
+};
 
 async function modalBridgeCommand(
   input: { args: Record<string, unknown>; domain: "dialog" | "sheet"; actions: string[] },
@@ -353,4 +360,54 @@ function truncate(value: unknown, max = MAX_OUTPUT): string {
 
 function asRecord(value: unknown): Record<string, any> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
+}
+
+async function evaluateHermesExpression(
+  webSocketDebuggerUrl: string,
+  expression: string,
+  options: { timeoutMs: number },
+): Promise<HermesEvaluationResult> {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage(ws, 2, options.timeoutMs) as HermesEvaluationResult;
+  } finally {
+    ws.close();
+  }
+}
+
+function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+
+function waitForMessage(ws: WebSocket, id: number, timeoutMs: number): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
 }

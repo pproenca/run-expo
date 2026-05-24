@@ -1,5 +1,6 @@
 import type { RefActionDependencies, RefRecord, ToolTextResult } from "./domain.js";
 import { clampNumber, normalizeFinderText, requireString, toolJson, unwrapToolJson } from "./common.js";
+import { defaultRefActionDependencies } from "./defaults.js";
 
 /**
  * RULE-008: finder operations only use the latest cached refs and can attach
@@ -7,7 +8,7 @@ import { clampNumber, normalizeFinderText, requireString, toolJson, unwrapToolJs
  */
 export async function findCommand(
   args: Record<string, unknown>,
-  deps: RefActionDependencies,
+  deps: RefActionDependencies = defaultRefActionDependencies,
 ): Promise<ToolTextResult> {
   const kind = requireString(args.kind, "kind").toLowerCase();
   const value = requireString(args.value, "value");

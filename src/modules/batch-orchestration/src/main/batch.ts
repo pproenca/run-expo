@@ -1,9 +1,11 @@
+import { execFile as nodeExecFile } from "node:child_process";
+
 import { parseCliArgs, parseJsonArgument } from "./cli.js";
 import { commandAliases, commandArgs } from "./command-map.js";
 import { batchStepError } from "./errors.js";
 import { redactValue } from "./errors.js";
 import { CliUsageError } from "./domain.js";
-import type { BatchDependencies, BatchPayload, ToolTextResult } from "./domain.js";
+import type { BatchDependencies, BatchPayload, RunToolOptions, ToolTextResult } from "./domain.js";
 import { toolJson, unwrapToolJson } from "./tool-json.js";
 
 /**
@@ -12,7 +14,7 @@ import { toolJson, unwrapToolJson } from "./tool-json.js";
  */
 export async function batchCommand(
   args: Record<string, unknown>,
-  deps: BatchDependencies,
+  deps: BatchDependencies = defaultBatchDependencies,
 ): Promise<ToolTextResult> {
   const steps = normalizeBatchSteps(args.steps ?? []);
   const bail = args.bail === true;
@@ -44,6 +46,10 @@ export async function batchCommand(
     steps: results,
   });
 }
+
+const defaultBatchDependencies: BatchDependencies = {
+  runTool: runToolViaCli,
+};
 
 export function normalizeBatchSteps(steps: unknown): string[][] {
   if (!Array.isArray(steps)) {
@@ -82,4 +88,75 @@ export async function runBatchStep(
   const effectiveArgs = commandArgs(command, args, mergedGlobals);
   const result = await deps.runTool(toolName, effectiveArgs, { command, globals: mergedGlobals, silent: true });
   return { command, data: redactValue(unwrapToolJson(result)) };
+}
+
+async function runToolViaCli(
+  _toolName: string,
+  args: Record<string, unknown>,
+  options: RunToolOptions,
+): Promise<unknown> {
+  const cliPath = process.argv[1];
+  if (!cliPath) {
+    throw new Error("batch requires a CLI entrypoint to run steps.");
+  }
+  const argv = cliArgv(options.command, args, options.globals);
+  const result = await execFile(process.execPath, [cliPath, ...argv], {
+    timeout: 120_000,
+    rejectOnError: false,
+  });
+  if (result.error) {
+    const message = [result.error.message, result.stderr].filter(Boolean).join("\n");
+    throw new Error(message || `Batch step failed: ${options.command}`);
+  }
+  const parsed = parseCliJson(result.stdout);
+  return parsed && typeof parsed === "object" && "data" in parsed
+    ? (parsed as { data: unknown }).data
+    : parsed;
+}
+
+function cliArgv(command: string, args: Record<string, unknown>, globals: Record<string, unknown>): string[] {
+  const argv: string[] = ["--json", "--quiet"];
+  if (typeof globals.root === "string" && globals.root) argv.push("--root", globals.root);
+  if (typeof globals.stateDir === "string" && globals.stateDir) argv.push("--state-dir", globals.stateDir);
+  argv.push(command);
+  for (const [key, value] of Object.entries(args)) {
+    if (value === undefined || value === null || key === "root" || key === "stateDir") continue;
+    const flag = `--${kebabCase(key)}`;
+    if (value === true) {
+      argv.push(flag);
+    } else {
+      argv.push(flag, typeof value === "object" ? JSON.stringify(value) : String(value));
+    }
+  }
+  return argv;
+}
+
+function parseCliJson(stdout: string): unknown {
+  const text = stdout.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+
+function execFile(
+  file: string,
+  args: string[],
+  options: { timeout: number; rejectOnError: false },
+): Promise<{ stdout: string; stderr: string; error?: Error & { code?: number | string | null; signal?: string | null } }> {
+  return new Promise((resolve) => {
+    nodeExecFile(file, args, { timeout: options.timeout }, (error, stdout, stderr) => {
+      resolve({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error as (Error & { code?: number | string | null; signal?: string | null }) | undefined,
+      });
+    });
+  });
+}
+
+function kebabCase(value: string): string {
+  return value.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }

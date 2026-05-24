@@ -48,7 +48,7 @@ export async function accessibilityCommand(
   if (!["tree", "inspect", "audit", "focus"].includes(action)) throw new Error(`Unknown accessibility action: ${action}`);
   if (action === "focus") {
     const ref = requireString(args.ref ?? positionals[1], "ref");
-    if (!deps.refActionCommand) throw new Error("accessibility focus requires refActionCommand dependency.");
+    if (!deps.refActionCommand) return toolJson({ available: false, action, ref, reason: "No ref action adapter is configured." });
     const result = unwrapToolJson(await deps.refActionCommand({ ...args, command: "focus", ref }));
     return toolJson({
       ...result,
@@ -79,6 +79,12 @@ const defaultAccessibilityDependencies: AccessibilityDependencies = {
   commandPath: defaultCommandPath,
   resolveIosDevice: (device, options) => resolveIosDevice(typeof device === "string" ? device : null, options),
   execFile: defaultExecFile,
+  refActionCommand: (args) => toolJson({
+    available: false,
+    action: "focus",
+    ref: args.ref ?? null,
+    reason: "Accessibility focus requires a current ref action adapter.",
+  }),
 };
 
 function defaultCommandPath(command: string): Promise<string | null> {
@@ -115,8 +121,8 @@ export async function accessibilityTreePayload(
   const semanticBridge = await semanticBridgeTree(args, deps);
   const axe = deps.commandPath ? await deps.commandPath("axe") : null;
   if (!axe) return { available: false, action: "tree", reason: "axe CLI is not installed or not on PATH.", semanticBridge };
-  if (!deps.resolveIosDevice) throw new Error("accessibility tree requires resolveIosDevice dependency.");
-  if (!deps.execFile) throw new Error("accessibility tree requires execFile dependency.");
+  if (!deps.resolveIosDevice) return { available: false, action: "tree", reason: "No iOS device resolver is configured." };
+  if (!deps.execFile) return { available: false, action: "tree", reason: "No subprocess adapter is configured." };
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
   const result = await deps.execFile(axe, ["describe-ui", "--udid", String(device.udid)], {
     timeout: 12_000,

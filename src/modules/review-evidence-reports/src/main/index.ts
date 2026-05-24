@@ -1,5 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { openExpoRoute } from "../../../route-url-actions/src/main/index.ts";
+import { captureScreenshot } from "../../../screenshot-capture/src/main/index.ts";
 
 export interface ToolTextResult {
   content: Array<{ type: "text"; text: string }>;
@@ -38,7 +40,7 @@ export function toolJson(value: unknown): ToolTextResult {
 
 export async function reviewCommand(
   args: Record<string, unknown> = {},
-  deps: ReviewDiffDependencies = {},
+  deps: ReviewDiffDependencies = defaultReviewDiffDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString(args.action ?? positionals[0] ?? "report", "action");
@@ -58,7 +60,7 @@ export async function reviewCommand(
 
 export async function diffCommand(
   args: Record<string, unknown> = {},
-  deps: ReviewDiffDependencies = {},
+  deps: ReviewDiffDependencies = defaultReviewDiffDependencies,
 ): Promise<ToolTextResult> {
   const positionals = Array.isArray(args._) ? args._ : [];
   const kind = requireString(args.kind ?? positionals[0], "kind");
@@ -90,6 +92,13 @@ export async function diffCommand(
   await writeJsonFile(outputPath, payload);
   return toolJson(payload);
 }
+
+const defaultReviewDiffDependencies: ReviewDiffDependencies = {
+  openExpoRoute,
+  captureScreenshot,
+  now: () => new Date(),
+  nowMs: () => Date.now(),
+};
 
 export function reviewReportPayload(args: {
   stateRoot: string;
@@ -148,12 +157,12 @@ export function reviewMatrixPayload(args: {
 
 export async function routeDiffPayload(
   args: Record<string, unknown> = {},
-  deps: ReviewDiffDependencies = {},
+  deps: ReviewDiffDependencies = defaultReviewDiffDependencies,
 ): Promise<Record<string, unknown>> {
   const routeA = requireString(args.routeA, "routeA");
   const routeB = requireString(args.routeB, "routeB");
   const screenshot = args.screenshot === true;
-  if (!deps.openExpoRoute) throw new Error("routeDiffPayload requires openExpoRoute dependency.");
+  if (!deps.openExpoRoute) return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
   const openedA = unwrapToolJson(await deps.openExpoRoute({ ...args, route: routeA }));
   const shotA = screenshot
     ? await captureRouteScreenshot(args, deps, `route-a-${nowMs(deps)}.png`)

@@ -1783,8 +1783,8 @@ function classifyExpoReactNativeCompatibility(expoVersion, reactNativeVersion) {
 }
 async function normalizeCwd(cwd) {
   const resolved = path.resolve(cwd ?? process.cwd());
-  const stat5 = await fs.stat(resolved).catch(() => null);
-  if (!stat5?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  const stat9 = await fs.stat(resolved).catch(() => null);
+  if (!stat9?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp(startDir, filename) {
@@ -2034,6 +2034,23 @@ async function expoRouterSitemap(args = {}, dependencies = {}) {
   const { routes, specialFiles } = await collectRoutes(appDir, deps, { sortSpecialFiles: true });
   return toolJson3({ cwd, appDir, routeCount: routes.length, routes, specialFiles });
 }
+async function expoRouteContext(cwd, dependencies = {}) {
+  const deps = resolveDependencies(dependencies);
+  const appDir = deps.path.join(cwd, "app");
+  const appExists = await deps.fs.pathExists(appDir);
+  const { routes, specialFiles } = appExists ? await collectRoutes(appDir, deps) : { routes: [], specialFiles: [] };
+  const typedRoutesPath = deps.path.join(cwd, ".expo", "types", "router.d.ts");
+  const hasTypedRoutes = await deps.fs.pathExists(typedRoutesPath);
+  const typedRoutes = hasTypedRoutes ? parseTypedRoutes(await deps.fs.readFile(typedRoutesPath, "utf8")) : [];
+  return {
+    appDir: appExists ? appDir : null,
+    routeCount: routes.length,
+    routes,
+    specialFiles,
+    typedRoutesPath: hasTypedRoutes ? typedRoutesPath : null,
+    typedRoutes
+  };
+}
 async function collectRoutes(appDir, deps, options = {}) {
   const files = await walkFiles(appDir, { fs: deps.fs, path: deps.path });
   const routeFiles = files.filter((file) => /\.(jsx?|tsx?)$/.test(file));
@@ -2057,10 +2074,13 @@ function formatRouteSegment(segment) {
   if (/^\[.+\]$/.test(segment)) return `:${segment.slice(1, -1)}`;
   return segment;
 }
+function parseTypedRoutes(source2) {
+  return [...new Set(source2.match(/pathname:\s*`([^`]+)`/g)?.map((match) => match.replace(/^pathname:\s*`|`$/g, "")) ?? [])].sort();
+}
 async function normalizeCwd2(cwd, deps) {
   const resolved = deps.path.resolve(cwd ?? deps.processCwd);
-  const stat5 = await deps.fs.stat(resolved);
-  if (!stat5?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  const stat9 = await deps.fs.stat(resolved);
+  if (!stat9?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 function toolJson3(value) {
@@ -2551,6 +2571,18 @@ function clampNumber3(value, min, max) {
 }
 
 // src/modules/target-management/src/main/target-record.ts
+function normalizeDeviceState(state) {
+  if (state === "Booted") {
+    return "booted";
+  }
+  if (state === "Shutdown") {
+    return "shutdown";
+  }
+  if (state === "connected") {
+    return "connected";
+  }
+  return "unknown";
+}
 function stableIdPart(value) {
   return String(value ?? "unknown").toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
 }
@@ -2627,6 +2659,13 @@ function compareTargets(left, right) {
 function deviceName(target) {
   return target.device.name ?? "";
 }
+function normalizeSimulatorDevices(rawDevices) {
+  return rawDevices.map((device) => ({
+    id: String(device.udid ?? ""),
+    name: typeof device.name === "string" ? device.name : String(device.udid ?? ""),
+    state: normalizeDeviceState(device.state)
+  })).sort((left, right) => Number(right.state === "booted") - Number(left.state === "booted") || String(left.name).localeCompare(String(right.name)));
+}
 function normalizeMetroTargets(payload) {
   if (!Array.isArray(payload)) {
     return [];
@@ -2652,12 +2691,15 @@ function optionalString(value) {
 }
 
 // src/modules/target-management/src/main/target-service.ts
-async function listTargets(args, deps) {
+import { execFile as nodeExecFile2 } from "node:child_process";
+import { mkdir as mkdir5, readdir as readdir2, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join5 } from "node:path";
+async function listTargets(args, deps = defaultTargetDependencies) {
   const session = await deps.readLatestSession(args.stateRoot);
   const targets = await discoverTargets({ ...args, selectedTargetId: session?.activeTargetId ?? null }, deps);
   return { available: targets.length > 0, targets };
 }
-async function selectTarget(args, deps) {
+async function selectTarget(args, deps = defaultTargetDependencies) {
   const session = await deps.readLatestSession(args.stateRoot);
   if (!session) {
     return { available: false, reason: "No session exists. Run `expo-ios --json session new review` first." };
@@ -2677,7 +2719,7 @@ async function selectTarget(args, deps) {
   await deps.writePersistedTarget(args.stateRoot, session.sessionId, selected);
   return selected;
 }
-async function getCurrentTarget(args, deps) {
+async function getCurrentTarget(args, deps = defaultTargetDependencies) {
   const session = await deps.readLatestSession(args.stateRoot);
   if (!session) {
     return { available: false, reason: "No session exists. Run `expo-ios --json session new review` first." };
@@ -2706,18 +2748,74 @@ async function getCurrentTarget(args, deps) {
     target: persisted ? { ...persisted, selected: true, stale: true } : { targetId: session.activeTargetId, selected: true, stale: true }
   };
 }
-async function targetCommand(args, deps) {
+async function targetCommand(args, deps = defaultTargetDependencies) {
+  const effectiveArgs = { ...args, stateRoot: args.stateRoot ?? resolveExpoStateRoot2(args) };
   const action = requireString2(args.action ?? "list", "action");
   if (!["list", "select", "current"].includes(action)) {
     throw new Error(`Unknown target action: ${action}`);
   }
   if (action === "list") {
-    return listTargets(args, deps);
+    return listTargets(effectiveArgs, deps);
   }
   if (action === "select") {
-    return selectTarget(args, deps);
+    return selectTarget(effectiveArgs, deps);
   }
-  return getCurrentTarget(args, deps);
+  return getCurrentTarget(effectiveArgs, deps);
+}
+var defaultTargetDependencies = {
+  readLatestSession: async (stateRoot) => {
+    const sessionsRoot = join5(stateRoot, "sessions");
+    const entries = await readdir2(sessionsRoot, { withFileTypes: true }).catch(() => []);
+    const sessions = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const record = await readJson(join5(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      if (record) sessions.push(record);
+    }
+    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    return sessions[0] ?? null;
+  },
+  updateSessionRecord: async (stateRoot, record) => {
+    await mkdir5(sessionDirectory(stateRoot, record.sessionId), { recursive: true });
+    await writeJson(sessionJsonPath(stateRoot, record.sessionId), record);
+    return record;
+  },
+  readPersistedTarget: async (stateRoot, sessionId) => {
+    return readJson(join5(sessionDirectory(stateRoot, sessionId), "target.json")).catch(() => null);
+  },
+  writePersistedTarget: async (stateRoot, sessionId, target) => {
+    await mkdir5(sessionDirectory(stateRoot, sessionId), { recursive: true });
+    await writeJson(join5(sessionDirectory(stateRoot, sessionId), "target.json"), target);
+  },
+  listIosSimulatorTargets: async () => {
+    const result = await execFile2("xcrun", ["simctl", "list", "devices", "available", "--json"], { timeout: 2e4 });
+    const parsed = JSON.parse(result.stdout || "{}");
+    return normalizeSimulatorDevices(Object.values(parsed.devices ?? {}).flat());
+  },
+  fetchMetroTargets: async (port) => {
+    const response = await fetch(`http://localhost:${port}/json/list`);
+    if (!response.ok) return [];
+    return response.json();
+  }
+};
+async function execFile2(file, args, options) {
+  return new Promise((resolve15, reject) => {
+    nodeExecFile2(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        Object.assign(error, { stdout, stderr });
+        reject(error);
+        return;
+      }
+      resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+    });
+  });
+}
+async function readJson(file) {
+  return JSON.parse(await readFile3(file, "utf8"));
+}
+async function writeJson(file, value) {
+  await writeFile2(file, `${JSON.stringify(value, null, 2)}
+`, "utf8");
 }
 
 // src/modules/snapshot-evidence/src/main/filters.ts
@@ -2972,20 +3070,22 @@ async function persistSnapshotArtifacts(stateRoot, session, snapshot, semanticBr
 }
 
 // src/modules/snapshot-evidence/src/main/ref-commands.ts
-async function refsCommand(args, deps) {
-  const cache = await readLatestRefCache(args.stateRoot, deps);
+import { readdir as readdir3, readFile as readFile4 } from "node:fs/promises";
+import { join as join6 } from "node:path";
+async function refsCommand(args = {}, deps = defaultRefCommandDependencies) {
+  const cache = await readLatestRefCache(resolveStateRoot(args), deps);
   if (!cache) {
     return { available: false, reason: "No snapshot exists for the current session." };
   }
   return { available: true, ...cache };
 }
-async function getRefCommand(args, deps) {
+async function getRefCommand(args, deps = defaultRefCommandDependencies) {
   const field = requireString3(args.field, "field");
   const ref = requireString3(args.ref, "ref");
   if (!/^@e\d+$/.test(ref)) {
     return { available: false, reason: "Ref must look like @e1.", ref };
   }
-  const cache = await readLatestRefCache(args.stateRoot, deps);
+  const cache = await readLatestRefCache(resolveStateRoot(args), deps);
   if (!cache) {
     return { available: false, reason: "No snapshot exists for the current session." };
   }
@@ -2999,6 +3099,27 @@ async function getRefCommand(args, deps) {
     stale: record.stale,
     value: refFieldValue(record, field)
   };
+}
+var defaultRefCommandDependencies = {
+  readLatestSession: async (stateRoot) => {
+    const sessionsRoot = join6(stateRoot, "sessions");
+    const entries = await readdir3(sessionsRoot, { withFileTypes: true }).catch(() => []);
+    const sessions = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const record = await readJson2(join6(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      if (record) sessions.push(record);
+    }
+    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    return sessions[0] ?? null;
+  },
+  readJsonFile: readJson2
+};
+function resolveStateRoot(args) {
+  return args.stateRoot ?? resolveExpoStateRoot2(args);
+}
+async function readJson2(file) {
+  return JSON.parse(await readFile4(file, "utf8"));
 }
 function refFieldValue(record, field) {
   switch (field) {
@@ -3043,8 +3164,11 @@ function requireString3(value, name) {
 }
 
 // src/modules/snapshot-evidence/src/main/snapshot-command.ts
-async function snapshotCommand(args, deps) {
-  const stateRoot = args.stateRoot ?? "";
+import { execFile as nodeExecFile3 } from "node:child_process";
+import { mkdir as mkdir6, readdir as readdir4, readFile as readFile5, writeFile as writeFile3 } from "node:fs/promises";
+import { join as join7 } from "node:path";
+async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
+  const stateRoot = args.stateRoot ?? resolveExpoStateRoot2(args);
   const session = await deps.readLatestSession(stateRoot);
   if (!session) {
     return {
@@ -3105,6 +3229,66 @@ async function snapshotCommand(args, deps) {
     accessibilityTree: JSON.parse(result.stdout || "[]")
   }, deps);
 }
+var defaultSnapshotDependencies = {
+  now: () => /* @__PURE__ */ new Date(),
+  randomSuffix: randomBase36Suffix,
+  ensureDirectory: (path14) => mkdir6(path14, { recursive: true }),
+  writeJsonFile: writeJson2,
+  updateSessionRecord: async (stateRoot, record) => {
+    await mkdir6(sessionDirectory(stateRoot, record.sessionId), { recursive: true });
+    await writeJson2(sessionJsonPath(stateRoot, record.sessionId), record);
+    return record;
+  },
+  readLatestSession: async (stateRoot) => {
+    const sessionsRoot = join7(stateRoot, "sessions");
+    const entries = await readdir4(sessionsRoot, { withFileTypes: true }).catch(() => []);
+    const sessions = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const record = await readJson3(join7(sessionsRoot, entry.name, "session.json")).catch(() => null);
+      if (record) sessions.push(record);
+    }
+    sessions.sort((left, right) => String(right.updatedAt ?? right.createdAt).localeCompare(String(left.updatedAt ?? left.createdAt)));
+    return sessions[0] ?? null;
+  },
+  readSelectedTarget: async (stateRoot, session) => {
+    return readJson3(join7(sessionDirectory(stateRoot, session.sessionId), "target.json")).catch(() => null);
+  },
+  captureSemanticBridge: async (args) => ({
+    available: false,
+    source: "plugin-bridge-semantic",
+    code: "no-runtime-target",
+    reason: "Semantic bridge adapter is not configured.",
+    metroPort: args.metroPort ?? 8081
+  }),
+  findAxeCli: () => commandPath2("axe"),
+  describeNativeUi: (axePath, deviceId) => execFile3(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12e3 })
+};
+function commandPath2(command) {
+  return new Promise((resolve15) => {
+    nodeExecFile3("which", [command], { timeout: 5e3 }, (error, stdout) => {
+      resolve15(error ? null : String(stdout ?? "").trim() || null);
+    });
+  });
+}
+function execFile3(file, args, options) {
+  return new Promise((resolve15) => {
+    nodeExecFile3(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve15({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : void 0
+      });
+    });
+  });
+}
+async function readJson3(file) {
+  return JSON.parse(await readFile5(file, "utf8"));
+}
+async function writeJson2(file, value) {
+  await writeFile3(file, `${JSON.stringify(value, null, 2)}
+`, "utf8");
+}
 function formatError6(error) {
   if (!error) {
     return "Unknown error";
@@ -3156,8 +3340,88 @@ function normalizeFinderText(value) {
   return String(value ?? "").toLowerCase().trim();
 }
 
+// src/modules/ref-actions-wait/src/main/defaults.ts
+import { readdir as readdir5, readFile as readFile6 } from "node:fs/promises";
+import { join as join8 } from "node:path";
+
+// src/modules/ref-actions-wait/src/main/ref-actions.ts
+async function planRefAction(args, deps = defaultRefActionDependencies) {
+  const action = requireString4(args.action, "action");
+  const ref = requireString4(args.ref, "ref");
+  const cache = await deps.readLatestRefCache(args);
+  if (!cache) {
+    return { available: false, reason: "No snapshot exists for the current session." };
+  }
+  const record = cache.refs.find((item) => item.ref === ref);
+  if (!record) {
+    return { available: false, reason: "Ref not found in the latest snapshot.", ref };
+  }
+  if (record.stale) {
+    return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  }
+  if (!record.actions.includes(action)) {
+    return {
+      available: false,
+      reason: "Action is not available for this ref.",
+      ref,
+      action,
+      availableActions: record.actions
+    };
+  }
+  return {
+    available: true,
+    dryRun: true,
+    plan: {
+      action,
+      ref,
+      targetId: record.targetId,
+      box: record.box ?? null,
+      point: record.box ? centerPoint(record.box) : null
+    }
+  };
+}
+function centerPoint(box) {
+  return {
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2
+  };
+}
+
+// src/modules/ref-actions-wait/src/main/defaults.ts
+var defaultRefActionDependencies = {
+  readLatestRefCache: readLatestRefCache2,
+  planFinderAction: (args) => planRefAction(args, defaultRefActionDependencies)
+};
+async function readLatestRefCache2(args = {}) {
+  const stateRoot = resolveExpoStateRoot2(args);
+  const session = await readLatestSession2(stateRoot);
+  if (!session?.sessionId || !session.lastSnapshotId) return null;
+  try {
+    return await readJson4(join8(stateRoot, "sessions", session.sessionId, "refs.json"));
+  } catch {
+    return null;
+  }
+}
+async function readLatestSession2(stateRoot) {
+  const sessionsRoot = join8(stateRoot, "sessions");
+  const entries = await readdir5(sessionsRoot, { withFileTypes: true }).catch(() => []);
+  const sessions = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const session = await readJson4(join8(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    if (session && typeof session === "object") sessions.push(session);
+  }
+  sessions.sort(
+    (left, right) => String(right.updatedAt ?? right.createdAt ?? "").localeCompare(String(left.updatedAt ?? left.createdAt ?? ""))
+  );
+  return sessions[0] ?? null;
+}
+async function readJson4(path14) {
+  return JSON.parse(await readFile6(path14, "utf8"));
+}
+
 // src/modules/ref-actions-wait/src/main/find.ts
-async function findCommand(args, deps) {
+async function findCommand(args, deps = defaultRefActionDependencies) {
   const kind = requireString4(args.kind, "kind").toLowerCase();
   const value = requireString4(args.value, "value");
   const cache = await deps.readLatestRefCache(args);
@@ -3233,7 +3497,7 @@ async function planUnavailable(action) {
 }
 
 // src/modules/ref-actions-wait/src/main/wait.ts
-async function waitCommand(args, deps) {
+async function waitCommand(args, deps = defaultRefActionDependencies) {
   const now6 = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
   const started = now6();
@@ -3247,7 +3511,14 @@ async function waitCommand(args, deps) {
   }
   if (predicate.kind === "metro-ready" || predicate.kind === "app-ready" || predicate.kind === "fn") {
     if (!deps.waitRuntimePredicate) {
-      throw new Error("Runtime wait predicate requires waitRuntimePredicate dependency.");
+      return toolJson6({
+        matched: false,
+        available: false,
+        reason: "Runtime wait predicates require a runtime adapter.",
+        predicate,
+        timeoutMs,
+        elapsedMs: now6() - started
+      });
     }
     const runtimeResult = await deps.waitRuntimePredicate(predicate, args, { started, timeoutMs, intervalMs });
     return toolJson6(runtimeResult);
@@ -3771,7 +4042,8 @@ function commandArgs2(command, args, globals = {}) {
 }
 
 // src/modules/batch-orchestration/src/main/batch.ts
-async function batchCommand(args, deps) {
+import { execFile as nodeExecFile4 } from "node:child_process";
+async function batchCommand(args, deps = defaultBatchDependencies) {
   const steps = normalizeBatchSteps(args.steps ?? []);
   const bail = args.bail === true;
   const results = [];
@@ -3800,6 +4072,9 @@ async function batchCommand(args, deps) {
     steps: results
   });
 }
+var defaultBatchDependencies = {
+  runTool: runToolViaCli
+};
 function normalizeBatchSteps(steps) {
   if (!Array.isArray(steps)) {
     throw new CliUsageError4("batch requires one or more command steps.");
@@ -3831,9 +4106,65 @@ async function runBatchStep(step, batchArgs, deps) {
   const result = await deps.runTool(toolName, effectiveArgs, { command, globals: mergedGlobals, silent: true });
   return { command, data: redactValue4(unwrapToolJson4(result)) };
 }
+async function runToolViaCli(_toolName, args, options) {
+  const cliPath = process.argv[1];
+  if (!cliPath) {
+    throw new Error("batch requires a CLI entrypoint to run steps.");
+  }
+  const argv = cliArgv2(options.command, args, options.globals);
+  const result = await execFile4(process.execPath, [cliPath, ...argv], {
+    timeout: 12e4,
+    rejectOnError: false
+  });
+  if (result.error) {
+    const message = [result.error.message, result.stderr].filter(Boolean).join("\n");
+    throw new Error(message || `Batch step failed: ${options.command}`);
+  }
+  const parsed = parseCliJson(result.stdout);
+  return parsed && typeof parsed === "object" && "data" in parsed ? parsed.data : parsed;
+}
+function cliArgv2(command, args, globals) {
+  const argv = ["--json", "--quiet"];
+  if (typeof globals.root === "string" && globals.root) argv.push("--root", globals.root);
+  if (typeof globals.stateDir === "string" && globals.stateDir) argv.push("--state-dir", globals.stateDir);
+  argv.push(command);
+  for (const [key, value] of Object.entries(args)) {
+    if (value === void 0 || value === null || key === "root" || key === "stateDir") continue;
+    const flag = `--${kebabCase(key)}`;
+    if (value === true) {
+      argv.push(flag);
+    } else {
+      argv.push(flag, typeof value === "object" ? JSON.stringify(value) : String(value));
+    }
+  }
+  return argv;
+}
+function parseCliJson(stdout) {
+  const text = stdout.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+function execFile4(file, args, options) {
+  return new Promise((resolve15) => {
+    nodeExecFile4(file, args, { timeout: options.timeout }, (error, stdout, stderr) => {
+      resolve15({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error
+      });
+    });
+  });
+}
+function kebabCase(value) {
+  return value.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+}
 
 // src/modules/app-lifecycle-actions/src/main/index.ts
-import { execFile as nodeExecFile2 } from "node:child_process";
+import { execFile as nodeExecFile5 } from "node:child_process";
 import * as fs3 from "node:fs/promises";
 import { homedir } from "node:os";
 import { join as joinPath, resolve as resolvePath } from "node:path";
@@ -3984,7 +4315,7 @@ async function attachIosCrashEvidence(payload, options, deps) {
     reason: `The app generated ${crashReports.length} matching iOS crash report(s) after ${String(options.action)}.`
   };
 }
-async function iosCrashEvidence(args, deps) {
+async function iosCrashEvidence(args, deps = defaultAppLifecycleDependencies) {
   const sinceMs = finiteNumber(args.sinceMs ?? deps.now());
   const delay = clampNumber6(args.waitMs ?? 0, 0, 3e4);
   if (delay > 0) await deps.wait(delay);
@@ -4169,7 +4500,7 @@ function iosLogPredicate(args) {
 }
 function defaultExecFile(file, args, options = {}) {
   return new Promise((resolve15, reject) => {
-    nodeExecFile2(file, args, {
+    nodeExecFile5(file, args, {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer ?? MAX_OUTPUT5
     }, (error, stdout, stderr) => {
@@ -4264,13 +4595,13 @@ async function defaultListDiagnosticReports() {
   const entries = await fs3.readdir(directory, { withFileTypes: true }).catch(() => []);
   const reports = await Promise.all(entries.filter((entry) => entry.isFile() && /\.(ips|crash)$/.test(entry.name)).map(async (entry) => {
     const file = joinPath(directory, entry.name);
-    const stat5 = await fs3.stat(file);
+    const stat9 = await fs3.stat(file);
     return {
       name: entry.name,
       path: file,
       isFile: true,
-      mtimeMs: stat5.mtimeMs,
-      mtimeIso: stat5.mtime.toISOString(),
+      mtimeMs: stat9.mtimeMs,
+      mtimeIso: stat9.mtime.toISOString(),
       content: await fs3.readFile(file, "utf8").catch(() => "")
     };
   }));
@@ -4340,7 +4671,7 @@ function stringFrom(value) {
 }
 
 // src/modules/route-url-actions/src/main/index.ts
-import { execFile as nodeExecFile3 } from "node:child_process";
+import { execFile as nodeExecFile6 } from "node:child_process";
 import * as fs4 from "node:fs/promises";
 import path3 from "node:path";
 var MAX_OUTPUT6 = 4e4;
@@ -4396,8 +4727,8 @@ async function resolveIosDevice(requested, options = {}, deps = {}) {
   if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
     return { udid: requested, name: requested, state: "unknown" };
   }
-  const execFile4 = deps.execFile ?? defaultExecFile2;
-  const { stdout } = await execFile4("xcrun", ["simctl", "list", "devices", "available", "--json"], {
+  const execFile11 = deps.execFile ?? defaultExecFile2;
+  const { stdout } = await execFile11("xcrun", ["simctl", "list", "devices", "available", "--json"], {
     timeout: 2e4,
     maxBuffer: 4 * 1024 * 1024
   });
@@ -4425,14 +4756,14 @@ async function openUrl(args, deps = {}) {
   const platform = args.platform ?? "ios";
   const url = requireString6(args.url, "url");
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
-  const execFile4 = deps.execFile ?? defaultExecFile2;
+  const execFile11 = deps.execFile ?? defaultExecFile2;
   if (platform === "android") {
     const adbArgs = androidDeviceArgs2(args.device, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
-    const result2 = await execFile4("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
+    const result2 = await execFile11("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
     return toolJson8(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate7(result2.stdout), stderr: truncate7(result2.stderr) }));
   }
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
-  const result = await execFile4("xcrun", ["simctl", "openurl", device.udid, url], {
+  const result = await execFile11("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
@@ -4443,8 +4774,8 @@ async function openExpoRoute(args, deps = {}) {
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const url = args.url ? requireString6(args.url, "url") : await buildExpoRouteUrl(cwd, args);
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
-  const execFile4 = deps.execFile ?? defaultExecFile2;
-  const result = await execFile4("xcrun", ["simctl", "openurl", device.udid, url], {
+  const execFile11 = deps.execFile ?? defaultExecFile2;
+  const result = await execFile11("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
@@ -4466,8 +4797,8 @@ async function normalizeProjectCwd(cwd, options = {}) {
 }
 async function normalizeCwd3(cwd) {
   const resolved = path3.resolve(cwd ?? ".");
-  const stat5 = await fs4.stat(resolved).catch(() => null);
-  if (!stat5?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  const stat9 = await fs4.stat(resolved).catch(() => null);
+  if (!stat9?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
   return resolved;
 }
 async function findUp2(startDir, filename) {
@@ -4536,7 +4867,7 @@ function isRecord5(value) {
 }
 var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve15, reject) => {
   const { timeout = 6e4, maxBuffer = MAX_OUTPUT6, rejectOnError = true } = options;
-  nodeExecFile3(file, [...args], { timeout: Number(timeout), maxBuffer: Number(maxBuffer) }, (error, stdout, stderr) => {
+  nodeExecFile6(file, [...args], { timeout: Number(timeout), maxBuffer: Number(maxBuffer) }, (error, stdout, stderr) => {
     if (error && rejectOnError) {
       Object.assign(error, { stdout, stderr });
       reject(error);
@@ -4551,23 +4882,470 @@ var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve15, rej
 });
 
 // src/modules/interaction-actions/src/main/index.ts
-import { execFile as nodeExecFile4, spawn as nodeSpawn } from "node:child_process";
-import * as fs6 from "node:fs/promises";
+import { execFile as nodeExecFile7, spawn as nodeSpawn } from "node:child_process";
+import * as fs7 from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { basename as basename4, join as joinPath2 } from "node:path";
 
-// src/modules/interaction-trace-expression/src/main/index.ts
-async function traceInteraction(args = {}, deps) {
+// src/modules/metro-probes/src/main/index.ts
+import { promises as fs5 } from "node:fs";
+import path4 from "node:path";
+var LIMITATIONS = [
+  "This command probes existing Metro HTTP endpoints only and never starts Metro implicitly.",
+  "Connected targets can be stale when multiple apps or devices are attached."
+];
+var MAX_OUTPUT7 = 16384;
+function toolJson9(value) {
+  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+}
+function clampNumber7(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(`Expected a finite number, got ${String(value)}.`);
+  }
+  return Math.min(Math.max(number, min), max);
+}
+function formatError8(error) {
+  if (!error) return "Unknown error";
+  const record = asRecord2(error);
+  const message = record ? record.message : void 0;
+  const parts = [message == null ? String(error) : String(message)];
+  if (record?.stdout) parts.push(`stdout:
+${truncate8(record.stdout)}`);
+  if (record?.stderr) parts.push(`stderr:
+${truncate8(record.stderr)}`);
+  return parts.join("\n\n");
+}
+function targetSummary(target) {
+  if (!target) return null;
+  return {
+    id: target.id ?? null,
+    title: target.title ?? null,
+    description: target.description ?? null,
+    appId: target.appId ?? null,
+    deviceName: target.deviceName ?? null,
+    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
+    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
+    reactNative: target.reactNative ?? null,
+    capabilities: target.capabilities ?? {
+      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      reactNative: Boolean(target.reactNative)
+    }
+  };
+}
+async function metroCommand(args = {}, deps = {}) {
+  const action = requireString7(args.action ?? "status", "action");
+  if (action === "reload") return toolJson9(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
+  if (action === "symbolicate") {
+    return toolJson9(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
+  }
+  if (action !== "status") throw new Error(`Unknown metro action: ${action}`);
+  return toolJson9(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
+}
+async function metroStatusPayload(args = {}, deps = {}) {
   const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
+  return new MetroInspectorClient(metroPort, deps).statusPayload();
+}
+async function metroTargets(metroPort, deps = {}) {
+  const result = await new MetroInspectorClient(metroPort, deps).targets();
+  return result.targets;
+}
+var MetroInspectorClient = class {
+  constructor(metroPort, deps = {}) {
+    this.metroPort = metroPort;
+    this.baseUrl = `http://127.0.0.1:${metroPort}`;
+    this.fetchLocalText = deps.fetchLocalText ?? defaultFetchLocalText;
+    this.fetchLocalJson = deps.fetchLocalJson ?? defaultFetchLocalJson;
+    this.fetchLocalLoopback = deps.fetchLocalLoopback ?? defaultFetchLocalLoopback;
+  }
+  baseUrl;
+  fetchLocalText;
+  fetchLocalJson;
+  fetchLocalLoopback;
+  async status() {
+    try {
+      const text = await this.fetchLocalText(`${this.baseUrl}/status`, { timeoutMs: 1500 });
+      return { available: true, endpoint: "/status", text, error: null };
+    } catch (error) {
+      return { available: false, endpoint: "/status", text: null, error: formatError8(error) };
+    }
+  }
+  async version() {
+    try {
+      const value = await this.fetchLocalJson(`${this.baseUrl}/json/version`, { timeoutMs: 1500 });
+      return { available: true, endpoint: "/json/version", value, error: null };
+    } catch (error) {
+      return { available: false, endpoint: "/json/version", value: null, error: formatError8(error) };
+    }
+  }
+  async targets() {
+    let raw;
+    try {
+      raw = await this.fetchLocalJson(`${this.baseUrl}/json/list`, { timeoutMs: 2500 });
+    } catch (error) {
+      return {
+        available: false,
+        endpoint: "/json/list",
+        targets: [],
+        malformedTargets: [],
+        reason: formatError8(error)
+      };
+    }
+    if (!Array.isArray(raw)) {
+      return {
+        available: false,
+        endpoint: "/json/list",
+        targets: [],
+        malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) }],
+        reason: "Metro target list was malformed."
+      };
+    }
+    const targets = [];
+    const malformedTargets = [];
+    raw.forEach((target, index) => {
+      const normalized = this.normalizeTarget(target, index);
+      if (normalized.target) targets.push(normalized.target);
+      if (normalized.error) malformedTargets.push(normalized.error);
+    });
+    return {
+      available: true,
+      endpoint: "/json/list",
+      targets,
+      malformedTargets,
+      reason: malformedTargets.length > 0 ? "Some Metro targets were malformed and skipped." : null
+    };
+  }
+  normalizeTarget(target, index = 0) {
+    const record = asRecord2(target);
+    if (!record || Array.isArray(target)) {
+      return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape(target) } };
+    }
+    const normalized = {
+      id: optionalString3(record.id),
+      title: optionalString3(record.title),
+      description: optionalString3(record.description),
+      appId: optionalString3(record.appId),
+      deviceName: optionalString3(record.deviceName),
+      devtoolsFrontendUrl: optionalString3(record.devtoolsFrontendUrl),
+      webSocketDebuggerUrl: optionalString3(record.webSocketDebuggerUrl),
+      reactNative: record.reactNative && typeof record.reactNative === "object" ? record.reactNative : null,
+      capabilities: {
+        hermesRuntime: typeof record.webSocketDebuggerUrl === "string" && record.webSocketDebuggerUrl.startsWith("ws"),
+        devtoolsFrontend: typeof record.devtoolsFrontendUrl === "string" && record.devtoolsFrontendUrl.length > 0,
+        reactNative: Boolean(record.reactNative)
+      }
+    };
+    if (!normalized.id && !normalized.title && !normalized.webSocketDebuggerUrl && !normalized.devtoolsFrontendUrl) {
+      return {
+        target: null,
+        error: {
+          index,
+          reason: "Target did not include any stable identifying metadata.",
+          shape: responseShape(target)
+        }
+      };
+    }
+    return { target: normalized, error: null };
+  }
+  async symbolicate(stack) {
+    try {
+      const response = await this.fetchLocalLoopback(`${this.baseUrl}/symbolicate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stack }),
+        timeoutMs: 1500
+      });
+      const value = response.ok ? await response.json().catch(() => null) : null;
+      return {
+        available: response.ok,
+        endpoint: "/symbolicate",
+        status: response.status,
+        reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`,
+        value
+      };
+    } catch (error) {
+      return {
+        available: false,
+        endpoint: "/symbolicate",
+        status: null,
+        reason: formatError8(error),
+        value: null
+      };
+    }
+  }
+  async probeSymbolication() {
+    const result = await this.symbolicate([]);
+    return {
+      available: result.available,
+      endpoint: "/symbolicate",
+      status: result.status,
+      reason: result.reason
+    };
+  }
+  async statusPayload() {
+    const statusResult = await this.status();
+    const targetsResult = statusResult.available ? await this.targets() : {
+      available: false,
+      endpoint: "/json/list",
+      targets: [],
+      malformedTargets: [],
+      reason: "Metro is unavailable."
+    };
+    const versionResult = statusResult.available ? await this.version() : { available: false, endpoint: "/json/version", value: null, error: "Metro is unavailable." };
+    const symbolication = statusResult.available ? await this.probeSymbolication() : { available: false, reason: "Metro is unavailable.", endpoint: "/symbolicate" };
+    return {
+      available: statusResult.available,
+      reason: statusResult.available ? null : "Metro is not reachable on the requested port.",
+      metroPort: this.metroPort,
+      status: statusResult.available ? "available" : "unavailable",
+      statusText: statusResult.text,
+      error: statusResult.error ?? null,
+      version: versionResult.value,
+      versionError: versionResult.error ?? null,
+      targetCount: targetsResult.targets.length,
+      targets: targetsResult.targets.map(targetSummary),
+      targetDiscovery: {
+        endpoint: "/json/list",
+        available: targetsResult.available,
+        reason: targetsResult.reason,
+        malformedTargets: targetsResult.malformedTargets
+      },
+      symbolication,
+      limitations: LIMITATIONS
+    };
+  }
+};
+function optionalString3(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function requireString7(value, field) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${field} must be a non-empty string.`);
+  }
+  return value.trim();
+}
+function responseShape(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) return { type: "array", length: value.length };
+  if (typeof value !== "object") return { type: typeof value };
+  const record = value;
+  const shape = { type: "object", keys: Object.keys(record).slice(0, 20) };
+  if (typeof record.type === "string") shape.resultType = record.type;
+  if (record.result && typeof record.result === "object") shape.result = responseShape(record.result);
+  return shape;
+}
+function truncate8(value, limit = MAX_OUTPUT7) {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}
+[truncated ${text.length - limit} characters]`;
+}
+function asRecord2(value) {
+  return value && typeof value === "object" ? value : null;
+}
+async function metroReloadPayload(args, deps = {}) {
+  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
+  const targets = await metroTargets(metroPort, deps);
+  const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
+  if (!webSocketDebuggerUrl) {
+    return { available: false, action: "reload", reason: "No Metro inspector target.", metroPort };
+  }
+  const evaluate = deps.evaluateHermesExpression ?? defaultEvaluateHermesExpression;
+  const result = await evaluate(webSocketDebuggerUrl, `(() => {
+    const devSettings = globalThis.NativeModules?.DevSettings || globalThis.__fbBatchedBridgeConfig?.remoteModuleConfig?.DevSettings;
+    if (globalThis.location && typeof globalThis.location.reload === 'function') { globalThis.location.reload(); return { available: true, strategy: 'location.reload' }; }
+    if (devSettings && typeof devSettings.reload === 'function') { devSettings.reload(); return { available: true, strategy: 'DevSettings.reload' }; }
+    return { available: false, reason: 'No runtime reload hook was available.' };
+  })()`, { timeoutMs: 3e3 });
+  const value = result.result?.result?.value;
+  return {
+    ...isPlainObject(value) ? value : { available: false, reason: result.error ?? "Runtime reload did not return a value." },
+    action: "reload",
+    metroPort,
+    target: targetSummary(targets[0])
+  };
+}
+async function metroSymbolicatePayload(args, deps = {}) {
+  const stackFile = requireString7(args.stackFile ?? positionalArg(args._, 0) ?? args.file, "stackFile");
+  const resolvePath2 = deps.resolvePath ?? path4.resolve;
+  const readTextFile = deps.readTextFile ?? fs5.readFile;
+  const resolvedStackFile = resolvePath2(stackFile);
+  const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
+  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
+  const result = await postMetroSymbolicate(metroPort, stack, deps);
+  return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
+}
+function parseComponentStackFrames(stack) {
+  const frames = [];
+  for (const line of String(stack).split("\n")) {
+    const match = /^\s*at\s+(.*?)\s+\((http.*):(\d+):(\d+)\)$/.exec(line);
+    if (!match) continue;
+    frames.push({
+      methodName: match[1]?.trim() || "<anonymous>",
+      file: match[2] ?? "",
+      lineNumber: Number(match[3]),
+      column: Number(match[4])
+    });
+  }
+  return frames;
+}
+async function postMetroSymbolicate(metroPort, stack, deps = {}) {
+  const result = await new MetroInspectorClient(metroPort, deps).symbolicate(stack);
+  if (!result.available) throw new Error(result.reason ?? "Metro symbolication failed.");
+  return result.value;
+}
+function positionalArg(value, index) {
+  return Array.isArray(value) ? value[index] : void 0;
+}
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+async function defaultEvaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs = 3e3 } = {}) {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const client = new HermesCdpClient(webSocketDebuggerUrl);
+  try {
+    await client.connect({ timeoutMs: 2500 });
+    const enable = await client.call("Runtime.enable", {}, { timeoutMs: 1500 });
+    if (enable.error) return { error: enable.error };
+    return await client.call("Runtime.evaluate", {
+      expression,
+      returnByValue: true,
+      awaitPromise: true
+    }, { timeoutMs });
+  } catch (error) {
+    return { error: formatError8(error) };
+  } finally {
+    client.close();
+  }
+}
+var HermesCdpClient = class {
+  constructor(webSocketDebuggerUrl) {
+    this.webSocketDebuggerUrl = webSocketDebuggerUrl;
+  }
+  ws = null;
+  nextId = 1;
+  pending = /* @__PURE__ */ new Map();
+  connect({ timeoutMs }) {
+    return new Promise((resolve15, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Timed out waiting for Hermes websocket connection.")), timeoutMs);
+      const ws = new WebSocket(this.webSocketDebuggerUrl);
+      this.ws = ws;
+      ws.onopen = () => {
+        clearTimeout(timeout);
+        resolve15();
+      };
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error("Hermes websocket error."));
+      };
+      ws.onmessage = (event) => this.handleMessage(event);
+    });
+  }
+  call(method, params, { timeoutMs }) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.resolve({ error: "Hermes websocket is not connected." });
+    }
+    const id = this.nextId;
+    this.nextId += 1;
+    return new Promise((resolve15) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        resolve15({ error: `Timed out waiting for ${method}.` });
+      }, timeoutMs);
+      this.pending.set(id, { resolve: resolve15, timeout });
+      this.ws?.send(JSON.stringify({ id, method, params }));
+    });
+  }
+  close() {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout);
+      pending.resolve({ error: "Hermes websocket closed." });
+    }
+    this.pending.clear();
+    try {
+      this.ws?.close();
+    } catch {
+    }
+  }
+  handleMessage(event) {
+    let payload;
+    try {
+      payload = JSON.parse(String(event.data));
+    } catch {
+      return;
+    }
+    const record = asRecord2(payload);
+    if (!record || typeof record.id !== "number") return;
+    const pending = this.pending.get(record.id);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pending.delete(record.id);
+    pending.resolve(record.error ? { error: formatError8(record.error) } : record);
+  }
+};
+async function defaultFetchLocalText(url, options) {
+  const response = await defaultFetchLocalLoopback(url, options);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
+async function defaultFetchLocalJson(url, options) {
+  return JSON.parse(await defaultFetchLocalText(url, options));
+}
+async function defaultFetchLocalLoopback(url, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 1500;
+  const { timeoutMs: _timeoutMs, ...request } = options;
+  const candidates = loopbackUrlCandidates(url);
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return await fetchWithTimeout(candidate, timeoutMs, request);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("Local fetch failed");
+}
+function loopbackUrlCandidates(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [url];
+  }
+  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) return [url];
+  const candidates = [];
+  for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
+    const candidate = new URL(url);
+    candidate.host = `${host}${parsed.port ? `:${parsed.port}` : ""}`;
+    if (!candidates.includes(candidate.toString())) candidates.push(candidate.toString());
+  }
+  return candidates;
+}
+async function fetchWithTimeout(url, timeoutMs, init) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// src/modules/interaction-trace-expression/src/main/index.ts
+async function traceInteraction(args = {}, deps = defaultTraceInteractionDependencies) {
+  const metroPort = clampNumber8(args.metroPort ?? 8081, 1, 65535);
   const action = args.action;
-  const maxEvents = clampNumber7(args.maxEvents ?? 300, 1, 2e3);
+  const maxEvents = clampNumber8(args.maxEvents ?? 300, 1, 2e3);
   const includeEvents = args.includeEvents === true;
   const componentFilter = requireOptionalString3(args.componentFilter);
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
-  const webSocketDebuggerUrl = asString(asRecord2(targetList[0])?.webSocketDebuggerUrl);
+  const webSocketDebuggerUrl = asString(asRecord3(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
-    return toolJson9({
+    return toolJson10({
       available: false,
       action,
       reason: "No Metro inspector target.",
@@ -4580,16 +5358,20 @@ async function traceInteraction(args = {}, deps) {
   }
   const expression = interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8e3 });
-  return toolJson9({
+  return toolJson10({
     action,
     metroPort,
-    target: targetSummary(targetList[0]),
+    target: targetSummary2(targetList[0]),
     trace: getPath(result, ["result", "result", "value"]) ?? null,
-    protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord2(result)?.error ?? null,
-    cdp: asRecord2(result)?.diagnostics ?? asRecord2(result)?.cdp ?? null
+    protocolError: getPath(result, ["result", "exceptionDetails"]) ?? asRecord3(result)?.error ?? null,
+    cdp: asRecord3(result)?.diagnostics ?? asRecord3(result)?.cdp ?? null
   });
 }
-function toolJson9(value) {
+var defaultTraceInteractionDependencies = {
+  fetchMetroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression
+};
+function toolJson10(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
 }
@@ -5029,8 +5811,8 @@ function interactionTraceExpression({ action, maxEvents, componentFilter, includ
     return { available: false, reason: 'Unknown trace action: ' + action };
   })()`;
 }
-function targetSummary(target) {
-  const record = asRecord2(target);
+function targetSummary2(target) {
+  const record = asRecord3(target);
   if (!record) return null;
   return {
     title: record.title,
@@ -5042,41 +5824,84 @@ function targetSummary(target) {
 function requireOptionalString3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber7(value, min, max) {
+function clampNumber8(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
   }
   return Math.min(Math.max(numberValue, min), max);
 }
-function getPath(value, path8) {
+function getPath(value, path14) {
   let current = value;
-  for (const key of path8) {
-    current = asRecord2(current)?.[key];
+  for (const key of path14) {
+    current = asRecord3(current)?.[key];
   }
   return current;
 }
 function asString(value) {
   return typeof value === "string" && value.trim() ? value : null;
 }
-function asRecord2(value) {
+function asRecord3(value) {
   return value && typeof value === "object" ? value : null;
+}
+async function evaluateHermesExpression(webSocketDebuggerUrl, expression, options) {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage(ws, 2, options.timeoutMs);
+  } finally {
+    ws.close();
+  }
+}
+function waitForOpen(ws, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve15();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+function waitForMessage(ws, id, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve15(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
 }
 
 // src/modules/screenshot-capture/src/main/index.ts
-import * as fs5 from "node:fs/promises";
+import * as fs6 from "node:fs/promises";
 import * as os from "node:os";
-import * as path4 from "node:path";
-import { execFile as execFile2, spawn } from "node:child_process";
-var MAX_OUTPUT7 = 4e4;
+import * as path5 from "node:path";
+import { execFile as execFile5, spawn } from "node:child_process";
+var MAX_OUTPUT8 = 4e4;
 async function automationTakeScreenshot(args, deps = {}) {
   if (args.full === true) {
-    return toolJson10(await (deps.captureFullScreenshot ?? captureFullScreenshot)(args, deps));
+    return toolJson11(await (deps.captureFullScreenshot ?? captureFullScreenshot)(args, deps));
   }
   if (args.annotate === true) {
-    return toolJson10(await (deps.annotatedScreenshot ?? annotatedScreenshot)(args, deps));
+    return toolJson11(await (deps.annotatedScreenshot ?? annotatedScreenshot)(args, deps));
   }
-  return toolJson10(await (deps.captureScreenshot ?? captureScreenshot)(args, deps));
+  return toolJson11(await (deps.captureScreenshot ?? captureScreenshot)(args, deps));
 }
 async function captureFullScreenshot(args, deps = {}) {
   const platform = args.platform ?? "ios";
@@ -5088,7 +5913,7 @@ async function captureFullScreenshot(args, deps = {}) {
       platform
     };
   }
-  const axe = await commandPath2("axe", deps);
+  const axe = await commandPath3("axe", deps);
   if (!axe) {
     return {
       available: false,
@@ -5097,7 +5922,7 @@ async function captureFullScreenshot(args, deps = {}) {
       platform
     };
   }
-  const magick = await commandPath2("magick", deps);
+  const magick = await commandPath3("magick", deps);
   if (!magick) {
     return {
       available: false,
@@ -5107,14 +5932,14 @@ async function captureFullScreenshot(args, deps = {}) {
     };
   }
   const device = await resolveIosDevice2(args.device, deps);
-  const outputPath = path4.resolve(
-    args.outputPath ?? path4.join(os.tmpdir(), "expo-ios-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`)
+  const outputPath = path5.resolve(
+    args.outputPath ?? path5.join(os.tmpdir(), "expo-ios-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`)
   );
-  const segmentCount = clampNumber8(args.fullSegments ?? args.segments ?? 3, 1, 12);
-  const segmentDir = path4.join(path4.dirname(outputPath), `${path4.basename(outputPath, path4.extname(outputPath))}-segments`);
-  await mkdir6(segmentDir, deps);
+  const segmentCount = clampNumber9(args.fullSegments ?? args.segments ?? 3, 1, 12);
+  const segmentDir = path5.join(path5.dirname(outputPath), `${path5.basename(outputPath, path5.extname(outputPath))}-segments`);
+  await mkdir8(segmentDir, deps);
   const segments = [];
-  const firstPath = path4.join(segmentDir, "segment-000.png");
+  const firstPath = path5.join(segmentDir, "segment-000.png");
   const first = await (deps.captureScreenshot ?? captureScreenshot)(
     { ...args, full: false, annotate: false, outputPath: firstPath, device: device.udid, platform },
     deps
@@ -5146,13 +5971,13 @@ async function captureFullScreenshot(args, deps = {}) {
     ], { timeout: 1e4, rejectOnError: false }, deps);
     gestureResults.push({
       index,
-      stdout: truncate8(gesture.stdout),
-      stderr: truncate8(gesture.stderr),
+      stdout: truncate9(gesture.stdout),
+      stderr: truncate9(gesture.stderr),
       error: gesture.error ?? null
     });
     if (gesture.error) break;
     await wait(300, deps);
-    const segmentPath = path4.join(segmentDir, `segment-${String(index).padStart(3, "0")}.png`);
+    const segmentPath = path5.join(segmentDir, `segment-${String(index).padStart(3, "0")}.png`);
     const segment = await (deps.captureScreenshot ?? captureScreenshot)(
       { ...args, full: false, annotate: false, outputPath: segmentPath, device: device.udid, platform },
       deps
@@ -5177,7 +6002,7 @@ async function captureFullScreenshot(args, deps = {}) {
       device.udid
     ], { timeout: 1e4, rejectOnError: false }, deps);
   }
-  await mkdir6(path4.dirname(outputPath), deps);
+  await mkdir8(path5.dirname(outputPath), deps);
   const stitch = await execFilePromise2(magick, [...segments, "-append", outputPath], {
     timeout: 3e4,
     rejectOnError: false
@@ -5193,8 +6018,8 @@ async function captureFullScreenshot(args, deps = {}) {
       segmentDir,
       segments,
       stitch: {
-        stdout: truncate8(stitch.stdout),
-        stderr: truncate8(stitch.stderr),
+        stdout: truncate9(stitch.stdout),
+        stderr: truncate9(stitch.stderr),
         error: stitch.error
       }
     };
@@ -5213,8 +6038,8 @@ async function captureFullScreenshot(args, deps = {}) {
     limitation: "iOS Simulator does not expose a stable native full-page screenshot API for arbitrary React Native views; this artifact stitches real viewport screenshots captured after simulator scroll gestures.",
     gestures: gestureResults,
     stitch: {
-      stdout: truncate8(stitch.stdout),
-      stderr: truncate8(stitch.stderr)
+      stdout: truncate9(stitch.stdout),
+      stderr: truncate9(stitch.stderr)
     }
   };
 }
@@ -5230,10 +6055,10 @@ async function imageDimensions(magick, imagePath, deps = {}) {
 }
 async function captureScreenshot(args, deps = {}) {
   const platform = args.platform ?? "ios";
-  const outputPath = path4.resolve(
-    args.outputPath ?? path4.join(os.tmpdir(), "expo-ios-screenshots", `screenshot-${safeTimestamp(deps)}.png`)
+  const outputPath = path5.resolve(
+    args.outputPath ?? path5.join(os.tmpdir(), "expo-ios-screenshots", `screenshot-${safeTimestamp(deps)}.png`)
   );
-  await mkdir6(path4.dirname(outputPath), deps);
+  await mkdir8(path5.dirname(outputPath), deps);
   if (platform === "android") {
     await adbScreenshot(args.device, outputPath, deps);
     return { platform, device: args.device ?? null, outputPath };
@@ -5250,8 +6075,8 @@ async function captureScreenshot(args, deps = {}) {
       platform,
       device,
       outputPath,
-      stdout: truncate8(result.stdout),
-      stderr: truncate8(result.stderr),
+      stdout: truncate9(result.stdout),
+      stderr: truncate9(result.stderr),
       error: result.error
     };
   }
@@ -5259,22 +6084,22 @@ async function captureScreenshot(args, deps = {}) {
     platform,
     device,
     outputPath,
-    stdout: truncate8(result.stdout),
-    stderr: truncate8(result.stderr)
+    stdout: truncate9(result.stdout),
+    stderr: truncate9(result.stderr)
   };
 }
 async function annotatedScreenshot(args, deps = {}) {
-  const cache = await readLatestRefCache2(args, deps);
+  const cache = await readLatestRefCache3(args, deps);
   if (!cache) {
     return { available: false, reason: "No snapshot exists for the current session." };
   }
   const labelMap = buildScreenshotLabelMap(cache);
   if (labelMap.available === false) return labelMap;
-  const screenshot = asRecord3(await captureScreenshot({ ...args, annotate: false }, deps));
+  const screenshot = asRecord4(await captureScreenshot({ ...args, annotate: false }, deps));
   if (screenshot.available === false) return screenshot;
   const outputPath = String(screenshot.outputPath);
   const artifacts = annotatedScreenshotArtifactPaths(outputPath);
-  const labels = asRecord3(labelMap).labels ?? [];
+  const labels = asRecord4(labelMap).labels ?? [];
   await writeJsonFile2(artifacts.labelMap, {
     schemaVersion: 1,
     createdAt: deps.nowIso?.() ?? (/* @__PURE__ */ new Date()).toISOString(),
@@ -5284,7 +6109,7 @@ async function annotatedScreenshot(args, deps = {}) {
     targetId: cache.targetId,
     labels
   }, deps);
-  await writeFile3(artifacts.annotatedImage, annotatedScreenshotSvg({ screenshotPath: outputPath, labels }), "utf8", deps);
+  await writeFile5(artifacts.annotatedImage, annotatedScreenshotSvg({ screenshotPath: outputPath, labels }), "utf8", deps);
   return {
     ...screenshot,
     available: true,
@@ -5348,7 +6173,7 @@ function buildScreenshotLabelMap(cache) {
   };
 }
 function annotatedScreenshotArtifactPaths(outputPath) {
-  const ext = path4.extname(outputPath);
+  const ext = path5.extname(outputPath);
   const base = ext ? outputPath.slice(0, -ext.length) : outputPath;
   return {
     labelMap: `${base}.labels.json`,
@@ -5357,7 +6182,7 @@ function annotatedScreenshotArtifactPaths(outputPath) {
 }
 function annotatedScreenshotSvg(args) {
   const { width, height } = screenshotOverlaySize(args.labels);
-  const imageHref = escapeHtml(path4.basename(args.screenshotPath));
+  const imageHref = escapeHtml(path5.basename(args.screenshotPath));
   const labelSvg = args.labels.map((label) => {
     const box = label.box;
     const textX = Math.max(0, box.x);
@@ -5383,14 +6208,14 @@ function screenshotOverlaySize(labels) {
 function escapeHtml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber8(value, min, max) {
+function clampNumber9(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function truncate8(value, limit = MAX_OUTPUT7) {
+function truncate9(value, limit = MAX_OUTPUT8) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -5399,7 +6224,7 @@ function truncate8(value, limit = MAX_OUTPUT7) {
 async function pathExists3(file, deps) {
   return deps.access(file).then(() => true, () => false);
 }
-function toolJson10(value) {
+function toolJson11(value) {
   return {
     content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }],
@@ -5409,7 +6234,7 @@ function toolJson10(value) {
 async function execFilePromise2(file, args, options, deps = {}) {
   if (deps.execFile) return deps.execFile(file, args, options);
   return new Promise((resolve15, reject) => {
-    execFile2(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT7 }, (error, stdout, stderr) => {
+    execFile5(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT8 }, (error, stdout, stderr) => {
       if (error && options.rejectOnError !== false) {
         reject(error);
         return;
@@ -5423,7 +6248,7 @@ async function execFilePromise2(file, args, options, deps = {}) {
     });
   });
 }
-async function commandPath2(command, deps) {
+async function commandPath3(command, deps) {
   if (deps.commandPath) return deps.commandPath(command);
   const result = await execFilePromise2("sh", ["-lc", `command -v ${command}`], {
     timeout: 5e3,
@@ -5485,7 +6310,7 @@ async function adbScreenshot(device, outputPath, deps) {
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        fs5.writeFile(outputPath, Buffer.concat(chunks2, byteLength)).then(resolve15, reject);
+        fs6.writeFile(outputPath, Buffer.concat(chunks2, byteLength)).then(resolve15, reject);
       } else {
         reject(new Error(`adb screenshot failed with code ${code}: ${stderr}`));
       }
@@ -5498,27 +6323,27 @@ function spawnProcess(file, args, deps) {
 }
 async function defaultPathExists2(file, deps) {
   if (deps.pathExists) return deps.pathExists(file);
-  return pathExists3(file, { access: fs5.access });
+  return pathExists3(file, { access: fs6.access });
 }
-async function mkdir6(directory, deps) {
+async function mkdir8(directory, deps) {
   if (deps.mkdir) return deps.mkdir(directory, { recursive: true });
-  await fs5.mkdir(directory, { recursive: true });
+  await fs6.mkdir(directory, { recursive: true });
 }
-async function readLatestRefCache2(args, deps) {
+async function readLatestRefCache3(args, deps) {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot3(args);
-  const session = await readLatestSession2(stateRoot, deps);
+  const session = await readLatestSession3(stateRoot, deps);
   if (!session?.lastSnapshotId || typeof session.sessionId !== "string") return null;
-  return readJsonFile4(path4.join(stateRoot, "sessions", session.sessionId, "refs.json"), deps).then((value) => asRecord3(value)).catch(() => null);
+  return readJsonFile4(path5.join(stateRoot, "sessions", session.sessionId, "refs.json"), deps).then((value) => asRecord4(value)).catch(() => null);
 }
 async function writeJsonFile2(file, value, deps) {
   if (deps.writeJsonFile) return deps.writeJsonFile(file, value);
-  await fs5.writeFile(file, `${JSON.stringify(value, null, 2)}
+  await fs6.writeFile(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-async function writeFile3(file, contents, encoding, deps) {
+async function writeFile5(file, contents, encoding, deps) {
   if (deps.writeFile) return deps.writeFile(file, contents, encoding);
-  await fs5.writeFile(file, contents, encoding);
+  await fs6.writeFile(file, contents, encoding);
 }
 async function wait(ms, deps) {
   if (deps.wait) return deps.wait(ms);
@@ -5530,40 +6355,40 @@ function safeTimestamp(deps) {
 function isUnavailable(value) {
   return Boolean(value && typeof value === "object" && value.available === false);
 }
-function asRecord3(value) {
+function asRecord4(value) {
   return value && typeof value === "object" ? value : {};
 }
 function resolveExpoStateRoot3(args = {}) {
   if (args.stateDir) {
-    const resolved = path4.resolve(args.stateDir);
-    return path4.basename(resolved) === "runs" ? path4.dirname(resolved) : resolved;
+    const resolved = path5.resolve(args.stateDir);
+    return path5.basename(resolved) === "runs" ? path5.dirname(resolved) : resolved;
   }
-  const root = path4.resolve(args.root ?? args.cwd ?? process.env.PWD ?? ".");
-  return path4.join(root, ".scratch", "expo-ios");
+  const root = path5.resolve(args.root ?? args.cwd ?? process.env.PWD ?? ".");
+  return path5.join(root, ".scratch", "expo-ios");
 }
-async function readLatestSession2(stateRoot, deps) {
-  const sessionsRoot = path4.join(stateRoot, "sessions");
+async function readLatestSession3(stateRoot, deps) {
+  const sessionsRoot = path5.join(stateRoot, "sessions");
   const entries = await readDir(sessionsRoot, deps).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile4(path4.join(sessionsRoot, entry.name, "session.json"), deps).catch(() => null);
-    if (record) sessions.push(asRecord3(record));
+    const record = await readJsonFile4(path5.join(sessionsRoot, entry.name, "session.json"), deps).catch(() => null);
+    if (record) sessions.push(asRecord4(record));
   }
   sessions.sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)));
   return sessions[0] ?? null;
 }
 async function readDir(directory, deps) {
   if (deps.readDir) return deps.readDir(directory, { withFileTypes: true });
-  return fs5.readdir(directory, { withFileTypes: true });
+  return fs6.readdir(directory, { withFileTypes: true });
 }
 async function readJsonFile4(file, deps) {
   if (deps.readJsonFile) return deps.readJsonFile(file);
-  return JSON.parse(await fs5.readFile(file, "utf8"));
+  return JSON.parse(await fs6.readFile(file, "utf8"));
 }
 
 // src/modules/interaction-actions/src/main/index.ts
-var MAX_OUTPUT8 = 4e4;
+var MAX_OUTPUT9 = 4e4;
 var defaultInteractionDependencies = {
   commandPath: defaultCommandPath,
   execFile: defaultExecFile3,
@@ -5578,7 +6403,7 @@ var defaultInteractionDependencies = {
   wait: (ms) => new Promise((resolve15) => setTimeout(resolve15, ms)),
   now: () => /* @__PURE__ */ new Date(),
   tmpdir: osTmpdir,
-  mkdir: (path8, options) => fs6.mkdir(path8, options),
+  mkdir: (path14, options) => fs7.mkdir(path14, options),
   joinPath: joinPath2
 };
 async function automationTap(args, deps = defaultInteractionDependencies) {
@@ -5590,34 +6415,34 @@ async function automationTapInternal(args, deps, policyChecked) {
   if (args.ref) {
     const planned = await deps.planRefAction({ ...args, action: "tap" });
     if (args.dryRun === true || planned.available === false) return planned;
-    const point = asRecord4(asRecord4(planned.plan).point);
+    const point = asRecord5(asRecord5(planned.plan).point);
     if (!isFinitePoint(point)) {
       return { available: false, reason: "Ref does not include tappable bounds.", ref: args.ref };
     }
     return automationTapInternal({ ...args, ref: void 0, x: point.x, y: point.y }, deps, true);
   }
   const platform = platformArg2(args.platform);
-  const x = String(clampNumber9(args.x, 0, Number.MAX_SAFE_INTEGER));
-  const y = String(clampNumber9(args.y, 0, Number.MAX_SAFE_INTEGER));
+  const x = String(clampNumber10(args.x, 0, Number.MAX_SAFE_INTEGER));
+  const y = String(clampNumber10(args.y, 0, Number.MAX_SAFE_INTEGER));
   if (args.dryRun === true) {
     const iosTool = platform === "ios" ? await resolveIosInteractionTool(deps) : null;
-    const iosCommand = iosTool?.tool === "axe" ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString3(args.device) ?? "<booted-device>"] : ["idb", "ui", "tap", x, y, "--udid", optionalString3(args.device) ?? "<booted-device>"];
+    const iosCommand = iosTool?.tool === "axe" ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString4(args.device) ?? "<booted-device>"] : ["idb", "ui", "tap", x, y, "--udid", optionalString4(args.device) ?? "<booted-device>"];
     return {
       available: true,
       dryRun: true,
       platform,
-      device: optionalString3(args.device),
+      device: optionalString4(args.device),
       tool: platform === "android" ? "adb" : iosTool?.tool ?? "idb",
       point: { x: Number(x), y: Number(y) },
-      command: platform === "android" ? ["adb", ...androidDeviceArgs3(optionalString3(args.device), ["shell", "input", "tap", x, y])] : iosCommand
+      command: platform === "android" ? ["adb", ...androidDeviceArgs3(optionalString4(args.device), ["shell", "input", "tap", x, y])] : iosCommand
     };
   }
   if (platform === "android") {
-    const result2 = await deps.execFile("adb", androidDeviceArgs3(optionalString3(args.device), ["shell", "input", "tap", x, y]), {
+    const result2 = await deps.execFile("adb", androidDeviceArgs3(optionalString4(args.device), ["shell", "input", "tap", x, y]), {
       timeout: 2e4,
       rejectOnError: false
     });
-    return { platform, device: optionalString3(args.device), x: Number(x), y: Number(y), stdout: truncate9(result2.stdout), stderr: truncate9(result2.stderr) };
+    return { platform, device: optionalString4(args.device), x: Number(x), y: Number(y), stdout: truncate10(result2.stdout), stderr: truncate10(result2.stderr) };
   }
   const tool = await resolveIosInteractionTool(deps);
   if (!tool) {
@@ -5625,13 +6450,13 @@ async function automationTapInternal(args, deps, policyChecked) {
       "iOS coordinate taps require the idb or axe CLI, but neither is installed or on PATH. Install idb or axe for iOS coordinate automation."
     );
   }
-  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
   const command = tool.tool === "axe" ? ["tap", "-x", x, "-y", y, "--udid", device.udid] : ["ui", "tap", x, y, "--udid", device.udid];
   const result = await deps.execFile(tool.path, command, { timeout: 2e4, rejectOnError: false });
-  return { platform, device, tool: tool.tool, x: Number(x), y: Number(y), stdout: truncate9(result.stdout), stderr: truncate9(result.stderr) };
+  return { platform, device, tool: tool.tool, x: Number(x), y: Number(y), stdout: truncate10(result.stdout), stderr: truncate10(result.stderr) };
 }
 async function refActionCommand(args, deps = defaultInteractionDependencies) {
-  const command = requireString7(args.command, "command");
+  const command = requireString8(args.command, "command");
   if (command === "scroll-into-view") {
     const record = await deps.readRefRecord(args.ref, args);
     return record.available === false ? record : { available: true, action: command, ref: args.ref, reason: "Ref is present in the current snapshot.", record: record.record };
@@ -5650,8 +6475,8 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
   if (command === "fill") {
     const policyDenied = await policyGate(args, "ref.fill", "ref", deps);
     if (policyDenied) return policyDenied;
-    const ref = requireString7(args.ref, "ref");
-    const text = requireString7(args.text, "text");
+    const ref = requireString8(args.ref, "ref");
+    const text = requireString8(args.text, "text");
     if (args.dryRun === true) {
       return { available: true, dryRun: true, action: command, ref, textLength: text.length, steps: ["tap ref", "type text"] };
     }
@@ -5665,7 +6490,7 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
     if (policyDenied) return policyDenied;
     const point = await deps.refPoint(args.ref, args);
     if (point.available === false) return point;
-    const coordinates = asRecord4(point.point);
+    const coordinates = asRecord5(point.point);
     return automationGestureInternal({
       ...args,
       gesture: command === "long-press" ? "long-press" : "tap",
@@ -5685,10 +6510,10 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
     return automationGestureInternal({
       ...args,
       gesture: "drag",
-      startX: asRecord4(start.point).x,
-      startY: asRecord4(start.point).y,
-      endX: asRecord4(end.point).x,
-      endY: asRecord4(end.point).y,
+      startX: asRecord5(start.point).x,
+      startY: asRecord5(start.point).y,
+      endX: asRecord5(end.point).x,
+      endY: asRecord5(end.point).y,
       durationMs: args.durationMs ?? 600
     }, deps, true);
   }
@@ -5697,29 +6522,29 @@ async function refActionCommand(args, deps = defaultInteractionDependencies) {
     if (policyDenied) return policyDenied;
     const plan = await deps.scrollPlan(args);
     if (plan.available === false || args.dryRun === true) return plan;
-    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord4(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
+    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord5(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
   }
   throw new Error(`Unknown ref action command: ${command}`);
 }
 async function clipboardCommand(args, deps = defaultInteractionDependencies) {
-  const action = requireString7(args.action ?? "read", "action");
+  const action = requireString8(args.action ?? "read", "action");
   if (!["read", "write", "paste"].includes(action)) throw new Error(`Unknown clipboard action: ${action}`);
   if (action !== "read") {
     const policyDenied = await policyGate(args, `clipboard.${action}`, "clipboard", deps);
     if (policyDenied) return policyDenied;
   }
-  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: `clipboard.${action}`, device };
   }
   if (action === "read") {
     const result2 = await deps.execFile("xcrun", ["simctl", "pbpaste", device.udid], { timeout: 1e4, rejectOnError: false });
-    return { available: !result2.error, action, device, text: result2.stdout, stderr: truncate9(result2.stderr), error: result2.error ?? null };
+    return { available: !result2.error, action, device, text: result2.stdout, stderr: truncate10(result2.stderr), error: result2.error ?? null };
   }
   if (action === "write") {
-    const text = requireString7(args.text, "text");
+    const text = requireString8(args.text, "text");
     const result2 = await deps.execFile("xcrun", ["simctl", "pbcopy", device.udid], { input: text, timeout: 1e4, rejectOnError: false });
-    return { available: !result2.error, action, device, textLength: text.length, stdout: truncate9(result2.stdout), stderr: truncate9(result2.stderr), error: result2.error ?? null };
+    return { available: !result2.error, action, device, textLength: text.length, stdout: truncate10(result2.stdout), stderr: truncate10(result2.stderr), error: result2.error ?? null };
   }
   const axe = await deps.commandPath("axe");
   if (!axe) return { available: false, action, reason: "clipboard paste requires axe key-combo support.", device };
@@ -5727,28 +6552,28 @@ async function clipboardCommand(args, deps = defaultInteractionDependencies) {
     timeout: 1e4,
     rejectOnError: false
   });
-  return { available: !result.error, action, device, tool: "axe", stdout: truncate9(result.stdout), stderr: truncate9(result.stderr), error: result.error ?? null };
+  return { available: !result.error, action, device, tool: "axe", stdout: truncate10(result.stdout), stderr: truncate10(result.stderr), error: result.error ?? null };
 }
 async function keyboardCommand(args, deps = defaultInteractionDependencies) {
-  const action = requireString7(args.action ?? "type", "action");
+  const action = requireString8(args.action ?? "type", "action");
   if (!["type", "press"].includes(action)) throw new Error(`Unknown keyboard action: ${action}`);
   const policyDenied = await policyGate(args, `keyboard.${action}`, "keyboard", deps);
   if (policyDenied) return policyDenied;
-  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
   const axe = await deps.commandPath("axe");
   if (!axe) return { available: false, action, reason: "keyboard commands require the axe CLI.", device };
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: `keyboard.${action}`, device, tool: "axe" };
   }
   if (action === "type") {
-    const text = requireString7(args.text, "text");
+    const text = requireString8(args.text, "text");
     const result2 = await deps.execFile(axe, ["type", text, "--udid", device.udid], { timeout: 2e4, rejectOnError: false });
-    return { available: !result2.error, action, device, tool: "axe", textLength: text.length, stdout: truncate9(result2.stdout), stderr: truncate9(result2.stderr), error: result2.error ?? null };
+    return { available: !result2.error, action, device, tool: "axe", textLength: text.length, stdout: truncate10(result2.stdout), stderr: truncate10(result2.stderr), error: result2.error ?? null };
   }
-  const key = requireString7(args.key, "key");
+  const key = requireString8(args.key, "key");
   const keycode = keyCodeFor(key);
   const result = await deps.execFile(axe, ["key", String(keycode), "--udid", device.udid], { timeout: 1e4, rejectOnError: false });
-  return { available: !result.error, action, device, tool: "axe", key, keycode, stdout: truncate9(result.stdout), stderr: truncate9(result.stderr), error: result.error ?? null };
+  return { available: !result.error, action, device, tool: "axe", key, keycode, stdout: truncate10(result.stdout), stderr: truncate10(result.stderr), error: result.error ?? null };
 }
 function keyCodeFor(key) {
   const normalized = String(key).toLowerCase();
@@ -5763,30 +6588,30 @@ function keyCodeFor(key) {
     esc: 41
   };
   if (known[normalized]) return known[normalized];
-  if (/^\d+$/.test(normalized)) return clampNumber9(Number(normalized), 0, 255);
+  if (/^\d+$/.test(normalized)) return clampNumber10(Number(normalized), 0, 255);
   if (/^[a-z]$/.test(normalized)) return normalized.charCodeAt(0) - 93;
   throw new Error(`Unknown key: ${key}`);
 }
 function setEnvironmentPlan(domain, args, device) {
-  const value = optionalString3(args.value);
+  const value = optionalString4(args.value);
   const extra = Array.isArray(args.extra) ? args.extra : [];
   if (domain === "appearance") {
     if (!["dark", "light"].includes(value ?? "")) throw new Error("appearance must be dark or light.");
     return { available: true, action: domain, device, command: ["xcrun", "simctl", "ui", device.udid, "appearance", value] };
   }
   if (domain === "content-size") {
-    const mapped = value === "accessibility" ? "accessibility-large" : requireString7(value, "value");
+    const mapped = value === "accessibility" ? "accessibility-large" : requireString8(value, "value");
     return { available: true, action: domain, device, command: ["xcrun", "simctl", "ui", device.udid, "content_size", mapped] };
   }
   if (domain === "location") {
-    const lat = requireString7(value, "latitude");
-    const lon = requireString7(extra[0], "longitude");
+    const lat = requireString8(value, "latitude");
+    const lon = requireString8(extra[0], "longitude");
     return { available: true, action: domain, device, command: ["xcrun", "simctl", "location", device.udid, "set", `${lat},${lon}`] };
   }
   if (domain === "permissions") {
-    const spec = requireString7(value, "permission");
+    const spec = requireString8(value, "permission");
     const [service, state = "granted"] = spec.split("=");
-    const bundleId = optionalString3(args.bundleId) ?? optionalString3(extra[0]);
+    const bundleId = optionalString4(args.bundleId) ?? optionalString4(extra[0]);
     if (!bundleId) throw new Error("set permissions requires --bundle-id or a bundle id argument.");
     const action = state === "granted" ? "grant" : state === "denied" ? "revoke" : "reset";
     return { available: true, action: domain, device, command: ["xcrun", "simctl", "privacy", device.udid, action, service, bundleId] };
@@ -5803,8 +6628,8 @@ function setEnvironmentPlan(domain, args, device) {
   throw new Error(`Unknown set domain: ${domain}`);
 }
 async function setEnvironmentCommand(args, deps = defaultInteractionDependencies) {
-  const domain = requireString7(args.domain, "domain");
-  const device = await deps.resolveIosDevice(optionalString3(args.device) ?? void 0, { preferBooted: true });
+  const domain = requireString8(args.domain, "domain");
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
   const policy = await deps.policyDecision(args, `set.${domain}`, "device");
   if (!policy.allowed) return policyDeniedPayload2({ domain: "set", action: domain, policy });
   const planned = setEnvironmentPlan(domain, args, device);
@@ -5821,8 +6646,8 @@ async function setEnvironmentCommand(args, deps = defaultInteractionDependencies
     action: domain,
     device,
     command,
-    stdout: truncate9(result.stdout),
-    stderr: truncate9(result.stderr),
+    stdout: truncate10(result.stdout),
+    stderr: truncate10(result.stderr),
     error: result.error ?? null,
     policy
   };
@@ -5835,14 +6660,14 @@ async function automationGestureInternal(args, deps, policyChecked) {
   const gesture = normalizeGesture(args.gesture);
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber9(args.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber9(args.intervalMs ?? 250, 0, 1e4);
-  const durationMs = clampNumber9(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
-  const holdMs = args.holdMs === void 0 ? null : clampNumber9(args.holdMs, 0, 3e4);
-  const metroPort = clampNumber9(args.metroPort ?? 8081, 1, 65535);
-  const maxEvents = clampNumber9(args.maxEvents ?? 200, 1, 2e3);
-  const componentFilter = optionalString3(args.componentFilter);
-  const cwd = optionalString3(args.cwd) ?? ".";
+  const repeat = clampNumber10(args.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber10(args.intervalMs ?? 250, 0, 1e4);
+  const durationMs = clampNumber10(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
+  const holdMs = args.holdMs === void 0 ? null : clampNumber10(args.holdMs, 0, 3e4);
+  const metroPort = clampNumber10(args.metroPort ?? 8081, 1, 65535);
+  const maxEvents = clampNumber10(args.maxEvents ?? 200, 1, 2e3);
+  const componentFilter = optionalString4(args.componentFilter);
+  const cwd = optionalString4(args.cwd) ?? ".";
   const coordinates = normalizeGestureCoordinates(gesture, args);
   const plan = gestureCommandPlan({ platform, gesture, coordinates, durationMs, holdMs, repeat, intervalMs, device: args.device });
   const reviewQuestionsThisCanAnswer = reviewQuestions();
@@ -5865,7 +6690,7 @@ async function automationGestureInternal(args, deps, policyChecked) {
   }
   const evidence = { traceStart: null, traceRead: null, traceStop: null, screenshots: {} };
   if (args.captureBeforeAfter === true) {
-    asRecord4(evidence.screenshots).before = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "before" }, deps);
+    asRecord5(evidence.screenshots).before = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "before" }, deps);
   }
   if (args.includeTrace === true) {
     evidence.traceStart = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "start", componentFilter, maxEvents, includeEvents: false }));
@@ -5876,7 +6701,7 @@ async function automationGestureInternal(args, deps, policyChecked) {
     evidence.traceStop = unwrapToolPayload(await deps.traceInteraction({ cwd, metroPort, action: "stop", componentFilter, maxEvents, includeEvents: false }));
   }
   if (args.captureBeforeAfter === true) {
-    asRecord4(evidence.screenshots).after = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "after" }, deps);
+    asRecord5(evidence.screenshots).after = await captureGestureScreenshot({ platform, device: args.device, outputDir: args.outputDir, label: "after" }, deps);
   }
   return {
     available: execution.available,
@@ -5902,7 +6727,7 @@ async function automationGestureInternal(args, deps, policyChecked) {
   };
 }
 function normalizeGesture(value) {
-  const gesture = requireString7(value, "gesture");
+  const gesture = requireString8(value, "gesture");
   if (gesture === "tap-and-hold") return "long-press";
   if (!["tap", "long-press", "drag", "swipe"].includes(gesture)) throw new Error(`Unknown gesture: ${gesture}`);
   return gesture;
@@ -5916,21 +6741,21 @@ function defaultGestureDurationMs(gesture) {
 function normalizeGestureCoordinates(gesture, args) {
   if (gesture === "tap" || gesture === "long-press") {
     return {
-      x: clampNumber9(args.x, 0, Number.MAX_SAFE_INTEGER),
-      y: clampNumber9(args.y, 0, Number.MAX_SAFE_INTEGER)
+      x: clampNumber10(args.x, 0, Number.MAX_SAFE_INTEGER),
+      y: clampNumber10(args.y, 0, Number.MAX_SAFE_INTEGER)
     };
   }
   return {
-    startX: clampNumber9(args.startX, 0, Number.MAX_SAFE_INTEGER),
-    startY: clampNumber9(args.startY, 0, Number.MAX_SAFE_INTEGER),
-    endX: clampNumber9(args.endX, 0, Number.MAX_SAFE_INTEGER),
-    endY: clampNumber9(args.endY, 0, Number.MAX_SAFE_INTEGER)
+    startX: clampNumber10(args.startX, 0, Number.MAX_SAFE_INTEGER),
+    startY: clampNumber10(args.startY, 0, Number.MAX_SAFE_INTEGER),
+    endX: clampNumber10(args.endX, 0, Number.MAX_SAFE_INTEGER),
+    endY: clampNumber10(args.endY, 0, Number.MAX_SAFE_INTEGER)
   };
 }
 function gestureCommandPlan(args) {
   const platform = platformArg2(args.platform);
-  const gesture = requireString7(args.gesture, "gesture");
-  const coordinates = asRecord4(args.coordinates);
+  const gesture = requireString8(args.gesture, "gesture");
+  const coordinates = asRecord5(args.coordinates);
   const durationMs = Number(args.durationMs);
   const holdMs = args.holdMs === null ? null : Number(args.holdMs);
   const repeat = Number(args.repeat);
@@ -5938,7 +6763,7 @@ function gestureCommandPlan(args) {
   const durationSeconds = formatSeconds(durationMs);
   const holdSeconds = holdMs === null ? null : formatSeconds(holdMs);
   if (platform === "android") {
-    const deviceArgs = optionalString3(args.device) ? ["-s", String(args.device)] : [];
+    const deviceArgs = optionalString4(args.device) ? ["-s", String(args.device)] : [];
     const command2 = gesture === "tap" ? ["adb", ...deviceArgs, "shell", "input", "tap", String(coordinates.x), String(coordinates.y)] : gesture === "long-press" ? ["adb", ...deviceArgs, "shell", "input", "swipe", String(coordinates.x), String(coordinates.y), String(coordinates.x), String(coordinates.y), String(durationMs)] : ["adb", ...deviceArgs, "shell", "input", "swipe", String(coordinates.startX), String(coordinates.startY), String(coordinates.endX), String(coordinates.endY), String(durationMs)];
     return {
       tool: "adb",
@@ -5948,7 +6773,7 @@ function gestureCommandPlan(args) {
       notes: holdMs ? ["Android adb input swipe has duration but no separate hold-before-move primitive."] : []
     };
   }
-  const udidArgs = optionalString3(args.device) ? ["--udid", String(args.device)] : ["--udid", "<resolved-booted-simulator-udid>"];
+  const udidArgs = optionalString4(args.device) ? ["--udid", String(args.device)] : ["--udid", "<resolved-booted-simulator-udid>"];
   const command = gesture === "tap" ? ["idb", "ui", "tap", String(coordinates.x), String(coordinates.y), ...udidArgs] : gesture === "long-press" ? ["idb", "ui", "tap", String(coordinates.x), String(coordinates.y), "--duration", durationSeconds, ...udidArgs] : ["idb", "ui", "swipe", String(coordinates.startX), String(coordinates.startY), String(coordinates.endX), String(coordinates.endY), "--duration", durationSeconds, ...udidArgs];
   return {
     tool: "idb",
@@ -5961,11 +6786,11 @@ function gestureCommandPlan(args) {
 async function executeGesturePlanInternal(args, deps, policyChecked) {
   const platform = platformArg2(args.platform);
   const plan = asGesturePlan(args.plan);
-  const gesture = optionalString3(args.gesture) ?? "unknown";
+  const gesture = optionalString4(args.gesture) ?? "unknown";
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber9(args.repeat ?? plan.repeat, 1, 20);
-  const intervalMs = clampNumber9(args.intervalMs ?? plan.intervalMs, 0, 1e4);
+  const repeat = clampNumber10(args.repeat ?? plan.repeat, 1, 20);
+  const intervalMs = clampNumber10(args.intervalMs ?? plan.intervalMs, 0, 1e4);
   if (platform === "android") {
     const adb = await deps.commandPath("adb");
     if (!adb) return { available: false, reason: "Android gestures require adb, which is not installed or not on PATH.", plan };
@@ -5989,9 +6814,9 @@ async function executeGesturePlanInternal(args, deps, policyChecked) {
   return executeRepeatedCommandInternal(tool.path, command.slice(1), { repeat, intervalMs, device: resolvedDevice, tool: tool.tool, plannedCommand: command }, deps);
 }
 function axeGestureCommandFromPlan(args) {
-  const gesture = requireString7(args.gesture, "gesture");
+  const gesture = requireString8(args.gesture, "gesture");
   const plan = asGesturePlan(args.plan);
-  const udid = requireString7(args.udid, "udid");
+  const udid = requireString8(args.udid, "udid");
   const command = plan.command;
   if (gesture === "tap") return ["axe", "tap", "-x", command[3] ?? "", "-y", command[4] ?? "", "--udid", udid];
   if (gesture === "long-press") {
@@ -6018,8 +6843,8 @@ function axeGestureCommandFromPlan(args) {
   return axeCommand;
 }
 async function executeRepeatedCommandInternal(command, args, options, deps) {
-  const repeat = clampNumber9(options.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber9(options.intervalMs ?? 0, 0, 1e4);
+  const repeat = clampNumber10(options.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber10(options.intervalMs ?? 0, 0, 1e4);
   const runs = [];
   for (let index = 0; index < repeat; index += 1) {
     const result = await deps.execFile(command, args, { timeout: 35e3, rejectOnError: false });
@@ -6027,8 +6852,8 @@ async function executeRepeatedCommandInternal(command, args, options, deps) {
       index: index + 1,
       command: [command, ...args],
       exitCode: result.error?.code ?? 0,
-      stdout: truncate9(result.stdout),
-      stderr: truncate9(result.stderr)
+      stdout: truncate10(result.stdout),
+      stderr: truncate10(result.stderr)
     });
     if (index < repeat - 1 && intervalMs > 0) await deps.wait(intervalMs);
   }
@@ -6040,22 +6865,22 @@ async function executeRepeatedCommandInternal(command, args, options, deps) {
     runs
   };
 }
-async function captureGestureScreenshot(args, deps) {
-  const root = optionalString3(args.outputDir) ?? deps.joinPath(deps.tmpdir(), "expo-ios-gestures");
+async function captureGestureScreenshot(args, deps = defaultInteractionDependencies) {
+  const root = optionalString4(args.outputDir) ?? deps.joinPath(deps.tmpdir(), "expo-ios-gestures");
   await deps.mkdir(root, { recursive: true });
-  const outputPath = deps.joinPath(root, `${requireString7(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`);
+  const outputPath = deps.joinPath(root, `${requireString8(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`);
   return unwrapToolPayload(await deps.captureScreenshot({ platform: args.platform, device: args.device, outputPath }));
 }
 async function defaultCommandPath(command) {
   const result = await defaultExecFile3("which", [command], { timeout: 5e3, rejectOnError: false });
-  return result.error ? null : optionalString3(result.stdout);
+  return result.error ? null : optionalString4(result.stdout);
 }
 function defaultExecFile3(file, args, options = {}) {
   if (options.input !== void 0) {
     return defaultSpawnFile(file, args, options);
   }
   return new Promise((resolve15, reject) => {
-    nodeExecFile4(file, args, { timeout: options.timeout, maxBuffer: MAX_OUTPUT8 }, (error, stdout, stderr) => {
+    nodeExecFile7(file, args, { timeout: options.timeout, maxBuffer: MAX_OUTPUT9 }, (error, stdout, stderr) => {
       if (error && options.rejectOnError !== false) {
         Object.assign(error, { stdout, stderr });
         reject(error);
@@ -6128,11 +6953,11 @@ async function defaultResolveIosDevice2(requested) {
   const parsed = JSON.parse(String(stdout ?? "{}"));
   const devices = Object.entries(parsed.devices ?? {}).flatMap(
     ([runtime2, runtimeDevices]) => (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
-      const record = asRecord4(device);
+      const record = asRecord5(device);
       return {
         udid: String(record.udid ?? ""),
         name: String(record.name ?? ""),
-        state: optionalString3(record.state) ?? void 0,
+        state: optionalString4(record.state) ?? void 0,
         runtime: runtime2,
         isAvailable: record.isAvailable === void 0 ? void 0 : Boolean(record.isAvailable)
       };
@@ -6153,7 +6978,7 @@ async function defaultResolveIosDevice2(requested) {
   throw new Error("No available iOS simulators found.");
 }
 async function defaultPolicyDecision2(args, action, sideEffect) {
-  const policyPath = optionalString3(args.actionPolicy);
+  const policyPath = optionalString4(args.actionPolicy);
   if (!policyPath) {
     return {
       checked: true,
@@ -6164,7 +6989,7 @@ async function defaultPolicyDecision2(args, action, sideEffect) {
       reason: "No action policy allowed this state-changing operation."
     };
   }
-  const policy = JSON.parse(await fs6.readFile(policyPath, "utf8"));
+  const policy = JSON.parse(await fs7.readFile(policyPath, "utf8"));
   const allowed = Array.isArray(policy.allow) && policy.allow.includes(action) || policy.actions?.[action] === true || policy.actions?.[action] === "allow";
   return {
     checked: true,
@@ -6175,16 +7000,16 @@ async function defaultPolicyDecision2(args, action, sideEffect) {
     reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation."
   };
 }
-function requireString7(value, field) {
+function requireString8(value, field) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber9(value, min, max) {
+function clampNumber10(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${value}.`);
   return Math.min(Math.max(number, min), max);
 }
-function truncate9(value, limit = MAX_OUTPUT8) {
+function truncate10(value, limit = MAX_OUTPUT9) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -6220,17 +7045,17 @@ function androidDeviceArgs3(device, args) {
 function platformArg2(value) {
   return value === "android" ? "android" : "ios";
 }
-function optionalString3(value) {
+function optionalString4(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function asRecord4(value) {
+function asRecord5(value) {
   return value && typeof value === "object" ? value : {};
 }
 function isFinitePoint(value) {
   return Number.isFinite(value.x) && Number.isFinite(value.y);
 }
 function asGesturePlan(value) {
-  const record = asRecord4(value);
+  const record = asRecord5(value);
   return {
     tool: String(record.tool ?? ""),
     command: Array.isArray(record.command) ? record.command.map(String) : [],
@@ -6244,7 +7069,7 @@ function unwrapToolPayload(value) {
     const text = value.content[0]?.text ?? "{}";
     return JSON.parse(text);
   }
-  return asRecord4(value);
+  return asRecord5(value);
 }
 function formatSeconds(ms) {
   return (ms / 1e3).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
@@ -6259,6 +7084,9 @@ function reviewQuestions() {
 }
 
 // src/modules/ux-context-capture/src/main/index.ts
+import { execFile as nodeExecFile8 } from "node:child_process";
+import { stat as stat4 } from "node:fs/promises";
+import path6 from "node:path";
 var REVIEW_CONTEXT_QUESTIONS = [
   "Is the screen blank because of empty data, loading, failed network, or render failure?",
   "Which route/source file likely owns the visible screen?",
@@ -6269,15 +7097,15 @@ var REVIEW_CONTEXT_QUESTIONS = [
   "Does the app expose a usable simulator hierarchy, or is screenshot/coordinate review the only reliable UI surface?",
   "Are recent native logs showing failed requests, reloads, exceptions, or slow local calls during the reviewed state?"
 ];
-function toolJson11(value) {
+function toolJson12(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-async function captureUxContext(args = {}, deps) {
+async function captureUxContext(args = {}, deps = defaultUxContextDependencies) {
   const startedAt = nowMs(deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
-  const metroPort = clampNumber10(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber11(args.metroPort ?? 8081, 1, 65535);
   const context = {
     capturedAt: now(deps).toISOString(),
     cwd,
@@ -6356,13 +7184,67 @@ async function captureUxContext(args = {}, deps) {
     };
   }
   context.elapsedMs = nowMs(deps) - startedAt;
-  return toolJson11(context);
+  return toolJson12(context);
 }
+var defaultUxContextDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd,
+  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString4(device), options),
+  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson5(await projectInfo({ cwd })),
+  inspectMetro: async (metroPort) => {
+    const metro = await metroStatusPayload({ metroPort });
+    return { metro, runtime: { available: metro.available, targetCount: metro.targetCount, targets: metro.targets } };
+  },
+  iosInstalledAppInfo: async (udid, bundleId) => {
+    const result = await execFile6("xcrun", ["simctl", "get_app_container", udid, bundleId], {
+      timeout: 15e3,
+      rejectOnError: false
+    });
+    return {
+      available: !result.error,
+      bundleId,
+      containerPath: result.error ? null : String(result.stdout ?? "").trim(),
+      stderr: truncate11(result.stderr),
+      error: result.error ?? null
+    };
+  },
+  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson5(await automationTakeScreenshot({
+    platform: "ios",
+    device: udid,
+    outputPath
+  })),
+  analyzePngScreenshot: async (outputPath) => {
+    const details = await stat4(outputPath).catch(() => null);
+    return details ? { available: true, outputPath, bytes: details.size, modifiedAt: details.mtime.toISOString() } : { available: false, outputPath, reason: "Screenshot file was not found." };
+  },
+  expoRouteContext,
+  describeIosHierarchy: async (udid) => {
+    const result = await execFile6("axe", ["describe-ui", "--udid", udid], {
+      timeout: 2e4,
+      rejectOnError: false
+    });
+    return {
+      available: !result.error,
+      tool: "axe",
+      stdout: truncate11(result.stdout),
+      stderr: truncate11(result.stderr),
+      error: result.error ?? null
+    };
+  },
+  collectFilteredIosLogs: async (udid, options) => collectAppLogs({
+    platform: "ios",
+    device: udid,
+    last: options.last,
+    bundleId: options.bundleId ?? void 0,
+    processName: options.processName ?? void 0
+  }),
+  now: () => /* @__PURE__ */ new Date(),
+  nowMs: () => Date.now()
+};
 async function safeToolSection3(fn) {
   try {
     return { ok: true, value: await fn() };
   } catch (error) {
-    return { ok: false, error: formatError8(error) };
+    return { ok: false, error: formatError9(error) };
   }
 }
 function requireOptionalString4(value) {
@@ -6373,7 +7255,7 @@ function processNameFromBundleId2(bundleId) {
   const last = String(bundleId).split(".").filter(Boolean).at(-1);
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") : null;
 }
-function clampNumber10(value, min, max) {
+function clampNumber11(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -6381,16 +7263,16 @@ function clampNumber10(value, min, max) {
   return Math.min(Math.max(numberValue, min), max);
 }
 function firstMetroAppId(metro) {
-  const targets = asRecord5(metro)?.targets;
+  const targets = asRecord6(metro)?.targets;
   if (!Array.isArray(targets)) return null;
-  const target = targets.find((candidate) => asRecord5(candidate)?.appId);
+  const target = targets.find((candidate) => asRecord6(candidate)?.appId);
   return typeof target?.appId === "string" ? target.appId : null;
 }
 function appConfigBundleId(project) {
-  const bundleId = asRecord5(asRecord5(project)?.appConfig)?.iosBundleIdentifier;
+  const bundleId = asRecord6(asRecord6(project)?.appConfig)?.iosBundleIdentifier;
   return typeof bundleId === "string" && bundleId.length > 0 ? bundleId : null;
 }
-function asRecord5(value) {
+function asRecord6(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function now(deps) {
@@ -6398,15 +7280,6 @@ function now(deps) {
 }
 function nowMs(deps) {
   return deps.nowMs?.() ?? Date.now();
-}
-function formatError8(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-// src/modules/annotate-screen-artifacts/src/main/index.ts
-function toolJson12(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
 }
 function unwrapToolJson5(result) {
   const text = result?.content?.[0]?.text;
@@ -6417,7 +7290,53 @@ function unwrapToolJson5(result) {
     return { text };
   }
 }
-async function annotateScreen(args = {}, deps) {
+async function defaultNormalizeProjectCwd(cwd) {
+  const resolved = path6.resolve(requireOptionalString4(cwd) ?? ".");
+  const details = await stat4(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+function execFile6(file, args, options) {
+  return new Promise((resolve15) => {
+    nodeExecFile8(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve15({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error
+      });
+    });
+  });
+}
+function truncate11(value, limit = 4e4) {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}
+[truncated ${text.length - limit} characters]`;
+}
+function formatError9(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// src/modules/annotate-screen-artifacts/src/main/index.ts
+import { openSync } from "node:fs";
+import { copyFile, mkdir as mkdir10, stat as stat5, writeFile as writeFile6 } from "node:fs/promises";
+import { createServer } from "node:net";
+import path7 from "node:path";
+import { spawn as spawn2 } from "node:child_process";
+function toolJson13(value) {
+  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
+` }] };
+}
+function unwrapToolJson6(result) {
+  const text = result?.content?.[0]?.text;
+  if (typeof text !== "string") return result;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencies) {
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
   const timestamp = now2(deps).toISOString().replace(/[:.]/g, "-");
   const outputDir = deps.resolvePath(
@@ -6435,7 +7354,7 @@ async function annotateScreen(args = {}, deps) {
       capturedAt: now2(deps).toISOString()
     };
   } else if (args.includeUxContext !== false) {
-    context = unwrapToolJson5(await deps.captureUxContext({
+    context = unwrapToolJson6(await deps.captureUxContext({
       cwd,
       device: args.device,
       bundleId: args.bundleId,
@@ -6449,7 +7368,7 @@ async function annotateScreen(args = {}, deps) {
       includeLogs: false
     }));
   } else {
-    const shot = unwrapToolJson5(await deps.automationTakeScreenshot({
+    const shot = unwrapToolJson6(await deps.automationTakeScreenshot({
       platform: "ios",
       device: args.device,
       outputPath: screenshotPath
@@ -6476,7 +7395,7 @@ async function annotateScreen(args = {}, deps) {
   await deps.writeFile(htmlPath, (deps.annotationHtml ?? annotationHtml)({ title }), "utf8");
   let server = null;
   if (args.serve === true) {
-    const port = args.port ? clampNumber11(args.port, 1, 65535) : await deps.findAvailablePort(17654);
+    const port = args.port ? clampNumber12(args.port, 1, 65535) : await deps.findAvailablePort(17654);
     const logPath = deps.joinPath(outputDir, "annotation-server.log");
     const logFd = await deps.openLogFile(logPath, "a");
     const child = await deps.spawnDetached(deps.execPath, [
@@ -6498,7 +7417,7 @@ async function annotateScreen(args = {}, deps) {
       stop: `kill ${child.pid}`
     };
   }
-  return toolJson12({
+  return toolJson13({
     outputDir,
     htmlPath,
     screenshotPath,
@@ -6511,6 +7430,24 @@ async function annotateScreen(args = {}, deps) {
     ]
   });
 }
+var defaultAnnotateScreenDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd2,
+  fallbackCwd: () => process.cwd(),
+  resolvePath: (...parts) => path7.resolve(...parts.filter((part) => Boolean(part))),
+  joinPath: (...parts) => path7.join(...parts),
+  mkdir: mkdir10,
+  copyFile,
+  writeFile: writeFile6,
+  pathExists: async (file) => stat5(file).then(() => true, () => false),
+  captureUxContext,
+  automationTakeScreenshot,
+  findAvailablePort,
+  openLogFile: (file) => openSync(file, "a"),
+  spawnDetached: (command, argv, options) => spawn2(command, argv, options),
+  execPath: process.execPath,
+  scriptPath: process.argv[1] ?? "",
+  now: () => /* @__PURE__ */ new Date()
+};
 function annotationHtml({ title }) {
   const safeTitle = escapeHtml2(title);
   return `<!doctype html>
@@ -6662,7 +7599,7 @@ function annotationHtml({ title }) {
 function requireOptionalString5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber11(value, min, max) {
+function clampNumber12(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -6672,50 +7609,172 @@ function clampNumber11(value, min, max) {
 function now2(deps) {
   return deps.now?.() ?? /* @__PURE__ */ new Date();
 }
+async function defaultNormalizeProjectCwd2(cwd) {
+  const resolved = path7.resolve(requireOptionalString5(cwd) ?? ".");
+  const details = await stat5(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+function findAvailablePort(start) {
+  return new Promise((resolve15) => {
+    const tryPort = (port) => {
+      const server = createServer();
+      server.once("error", () => tryPort(port + 1));
+      server.once("listening", () => {
+        server.close(() => resolve15(port));
+      });
+      server.listen(port, "127.0.0.1");
+    };
+    tryPort(start);
+  });
+}
 function escapeHtml2(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // src/modules/runtime-inspector-actions/src/main/index.ts
+import { execFile as nodeExecFile9 } from "node:child_process";
 var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"];
-function toolJson13(value) {
+function toolJson14(value) {
   return {
     content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }],
     isError: false
   };
 }
-async function runtimeInspector(args, deps) {
-  const metroPort = clampNumber12(args.metroPort ?? 8081, 1, 65535);
+function unwrapToolJson7(value) {
+  const content = asRecord7(value)?.content;
+  if (!Array.isArray(content)) return value;
+  const first = asRecord7(content[0]);
+  if (first?.type !== "text" || typeof first.text !== "string") return value;
+  try {
+    return JSON.parse(first.text);
+  } catch {
+    return { text: first.text };
+  }
+}
+async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
+  const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
   const commentTitle = requireOptionalString6(args.commentTitle) ?? "Codex: Add UI comment";
-  const maxComments = clampNumber12(args.maxComments ?? 50, 1, 500);
+  const maxComments = clampNumber13(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
-    return toolJson13(await deps.openIosDevMenu({ ...args, metroPort }));
+    return toolJson14(await deps.openIosDevMenu({ ...args, metroPort }));
   }
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
-  const webSocketDebuggerUrl = asString2(asRecord6(targetList[0])?.webSocketDebuggerUrl);
+  const webSocketDebuggerUrl = asString2(asRecord7(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
-    return toolJson13({ available: false, action, reason: "No Metro inspector target.", metroPort });
+    return toolJson14({ available: false, action, reason: "No Metro inspector target.", metroPort });
   }
   const expression = runtimeInspectorExpression({ action, commentTitle, maxComments });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8e3 });
-  return toolJson13({
+  return toolJson14({
     action,
     metroPort,
-    target: targetSummary2(targetList[0]),
+    target: targetSummary3(targetList[0]),
     inspector: getPath2(result, ["result", "result", "value"]) ?? null,
-    protocolError: getPath2(result, ["result", "exceptionDetails"]) ?? asRecord6(result)?.error ?? null,
-    cdp: asRecord6(result)?.diagnostics ?? asRecord6(result)?.cdp ?? null
+    protocolError: getPath2(result, ["result", "exceptionDetails"]) ?? asRecord7(result)?.error ?? null,
+    cdp: asRecord7(result)?.diagnostics ?? asRecord7(result)?.cdp ?? null
   });
 }
+var defaultRuntimeInspectorDependencies = {
+  fetchMetroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression: evaluateHermesExpression2,
+  openIosDevMenu: (args) => openIosDevMenu(args, defaultOpenDevMenuDependencies)
+};
+var defaultOpenDevMenuDependencies = {
+  broadcastMetroMessage,
+  resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString6(device), options),
+  openDevClientForMessageSocket: async (args) => unwrapToolJson7(await openExpoRoute({
+    device: args.device.udid,
+    bundleId: args.bundleId,
+    url: args.devClientUrl
+  })),
+  execFile: execFile7,
+  truncate: truncate12
+};
 function normalizeRuntimeInspectorAction(value) {
-  const action = requireString8(value, "action");
+  const action = requireString9(value, "action");
   if (!INSPECTOR_ACTIONS.includes(action)) {
     throw new Error(`Unknown inspector action: ${action}`);
   }
   return action;
+}
+async function openIosDevMenu(args, deps) {
+  const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
+  let messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
+  if (messageSocket.available) {
+    return {
+      available: true,
+      action: "open-dev-menu",
+      platform: "ios",
+      transport: "metro-message-socket",
+      metroPort,
+      requestedDevice: args.device ?? null,
+      messageSocket,
+      note: "This uses Expo/Metro's /message websocket devMenu broadcast, matching the Expo CLI toggle developer menu path."
+    };
+  }
+  const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
+  const devClientUrl = requireOptionalString6(args.devClientUrl);
+  let devClientRepair = null;
+  if (devClientUrl) {
+    devClientRepair = await deps.openDevClientForMessageSocket({
+      device,
+      bundleId: args.bundleId,
+      devClientUrl,
+      restartDevClient: args.restartDevClient === true,
+      metroPort,
+      crashCheckMs: args.crashCheckMs
+    });
+    if (Array.isArray(devClientRepair.crashReports) && devClientRepair.crashReports.length > 0) {
+      return {
+        available: false,
+        action: "open-dev-menu",
+        platform: "ios",
+        device,
+        metroPort,
+        devClientRepair,
+        messageSocket,
+        reason: "The app generated an iOS crash report after opening the development client URL."
+      };
+    }
+    messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
+    if (messageSocket.available) {
+      return {
+        available: true,
+        action: "open-dev-menu",
+        platform: "ios",
+        transport: "metro-message-socket",
+        metroPort,
+        requestedDevice: args.device ?? null,
+        device,
+        devClientRepair,
+        messageSocket,
+        note: "Opened the supplied Expo development client URL, then used Metro's /message websocket devMenu broadcast."
+      };
+    }
+  }
+  const command = ["xcrun", "simctl", "io", device.udid, "shake"];
+  const result = await deps.execFile(command[0], command.slice(1), {
+    timeout: 15e3,
+    rejectOnError: false
+  });
+  const truncateFn = deps.truncate ?? truncate12;
+  return {
+    available: !result.error,
+    action: "open-dev-menu",
+    platform: "ios",
+    device,
+    command,
+    stdout: truncateFn(result.stdout),
+    stderr: truncateFn(result.stderr),
+    error: result.error,
+    messageSocket,
+    devClientRepair,
+    note: "Tried Expo/Metro's /message websocket devMenu broadcast first, then fell back to the simulator shake gesture."
+  };
 }
 function runtimeInspectorExpression(args) {
   return `(() => {
@@ -6810,8 +7869,8 @@ function runtimeInspectorExpression(args) {
     return { available: false, action, reason: 'Unknown inspector action: ' + action };
   })()`;
 }
-function targetSummary2(target) {
-  const record = asRecord6(target);
+function targetSummary3(target) {
+  const record = asRecord7(target);
   if (!record) return null;
   return {
     title: record.title,
@@ -6820,14 +7879,14 @@ function targetSummary2(target) {
     description: record.description
   };
 }
-function clampNumber12(value, min, max) {
+function clampNumber13(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function requireString8(value, field) {
+function requireString9(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -6835,12 +7894,18 @@ function requireString8(value, field) {
 }
 function requireOptionalString6(value) {
   if (value === void 0 || value === null || value === "") return null;
-  return requireString8(value, "value");
+  return requireString9(value, "value");
 }
-function getPath2(value, path8) {
+function truncate12(value, limit = 4e4) {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}
+[truncated ${text.length - limit} characters]`;
+}
+function getPath2(value, path14) {
   let current = value;
-  for (const part of path8) {
-    current = asRecord6(current)?.[part];
+  for (const part of path14) {
+    current = asRecord7(current)?.[part];
     if (current === void 0) return void 0;
   }
   return current;
@@ -6848,32 +7913,125 @@ function getPath2(value, path8) {
 function asString2(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
-function asRecord6(value) {
+function asRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+async function evaluateHermesExpression2(webSocketDebuggerUrl, expression, options) {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  return cdpCall(webSocketDebuggerUrl, [
+    { method: "Runtime.enable", params: {} },
+    { method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }
+  ], options.timeoutMs);
+}
+async function broadcastMetroMessage(metroPort, method, params) {
+  if (!method) return { available: false, reason: "No Metro message method was requested.", metroPort };
+  if (typeof WebSocket !== "function") return { available: false, reason: "This Node runtime does not expose a WebSocket client.", metroPort };
+  const url = `ws://127.0.0.1:${metroPort}/message?role=debugger&name=expo98`;
+  try {
+    await cdpMessage(url, { method, params: params ?? {} }, 2500);
+    return { available: true, metroPort, method, url };
+  } catch (error) {
+    return { available: false, metroPort, method, url, reason: formatError10(error) };
+  }
+}
+async function cdpCall(url, calls, timeoutMs) {
+  const results = [];
+  let id = 0;
+  const ws = new WebSocket(url);
+  await waitForOpen2(ws, Math.min(timeoutMs, 2500));
+  try {
+    for (const call of calls) {
+      id += 1;
+      ws.send(JSON.stringify({ id, method: call.method, params: call.params }));
+      results.push(await waitForMessage2(ws, id, timeoutMs));
+    }
+    return results.at(-1) ?? null;
+  } finally {
+    ws.close();
+  }
+}
+async function cdpMessage(url, payload, timeoutMs) {
+  const ws = new WebSocket(url);
+  await waitForOpen2(ws, timeoutMs);
+  try {
+    ws.send(JSON.stringify(payload));
+  } finally {
+    ws.close();
+  }
+}
+function waitForOpen2(ws, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve15();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+function waitForMessage2(ws, id, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve15(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+function execFile7(command, args, options) {
+  return new Promise((resolve15) => {
+    nodeExecFile9(command, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve15({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message } : null
+      });
+    });
+  });
+}
+function formatError10(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // src/modules/review-overlay-workflow/src/main/index.ts
+import { openSync as openSync2 } from "node:fs";
+import { mkdir as mkdir11, readFile as readFile11, stat as stat6, writeFile as writeFile7 } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
+import path8 from "node:path";
+import { spawn as spawn3 } from "node:child_process";
 var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
-function toolJson14(value) {
+function toolJson15(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-async function reviewOverlay(args = {}, deps) {
+async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies) {
   const action = requireOptionalString7(args.action) ?? "prepare";
   if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
     throw new Error(`Unknown review-overlay action: ${action}`);
   }
-  if (action === "scaffold") return toolJson14(await scaffoldReviewOverlay(args, deps));
+  if (action === "scaffold") return toolJson15(await scaffoldReviewOverlay(args, deps));
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
   const outputDir = deps.resolvePath(requireOptionalString7(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
   const eventsPath = deps.joinPath(outputDir, "events.json");
   if (action === "read") {
     const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
-    return toolJson14({ outputDir, eventsPath, ...data2 });
+    return toolJson15({ outputDir, eventsPath, ...data2 });
   }
   if (action === "clear") {
     const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
-    return toolJson14({ outputDir, eventsPath, cleared: true, ...data2 });
+    return toolJson15({ outputDir, eventsPath, cleared: true, ...data2 });
   }
   if (action === "server") {
     return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
@@ -6882,7 +8040,7 @@ async function reviewOverlay(args = {}, deps) {
   const data = await deps.createEventsFile({ outputDir, title, reset: false });
   let server = null;
   if (args.serve === true) {
-    const port = args.port ? clampNumber13(args.port, 1, 65535) : await deps.findAvailablePort(17655);
+    const port = args.port ? clampNumber14(args.port, 1, 65535) : await deps.findAvailablePort(17655);
     const endpointPath = normalizeEndpointPath(args.endpointPath);
     const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
     const logFd = await deps.openLogFile(logPath, "a");
@@ -6909,7 +8067,7 @@ async function reviewOverlay(args = {}, deps) {
       stop: `kill ${child.pid}`
     };
   }
-  return toolJson14({
+  return toolJson15({
     outputDir,
     eventsPath,
     server,
@@ -6921,6 +8079,24 @@ async function reviewOverlay(args = {}, deps) {
     ]
   });
 }
+var defaultReviewOverlayDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd3,
+  fallbackCwd: () => process.cwd(),
+  resolvePath: (...parts) => path8.resolve(...parts.filter((part) => Boolean(part))),
+  joinPath: (...parts) => path8.join(...parts),
+  relativePath: (from, to) => path8.relative(from, to),
+  createEventsFile,
+  readEvents,
+  reviewOverlayServer,
+  mkdir: mkdir11,
+  writeFile: writeFile7,
+  pathExists: async (file) => stat6(file).then(() => true, () => false),
+  findAvailablePort: findAvailablePort2,
+  openLogFile: (file) => openSync2(file, "a"),
+  spawnDetached: (command, argv, options) => spawn3(command, argv, options),
+  execPath: process.execPath,
+  scriptPath: process.argv[1] ?? ""
+};
 async function scaffoldReviewOverlay(args = {}, deps) {
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
   const overlayDir = deps.resolvePath(cwd, requireOptionalString7(args.overlayDir) ?? "codex-review-overlay");
@@ -6968,7 +8144,7 @@ function normalizeEndpointPath(value) {
 function requireOptionalString7(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber13(value, min, max) {
+function clampNumber14(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7058,11 +8234,99 @@ function relativePathFallback(from, to) {
   }
   return [...fromParts.map(() => ".."), ...toParts].join("/") || ".";
 }
+async function defaultNormalizeProjectCwd3(cwd) {
+  const resolved = path8.resolve(requireOptionalString7(cwd) ?? ".");
+  const details = await stat6(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+async function createEventsFile(args) {
+  await mkdir11(args.outputDir, { recursive: true });
+  const eventsPath = path8.join(args.outputDir, "events.json");
+  const existing = await readJson5(eventsPath).catch(() => null);
+  const payload = args.reset || !existing ? {
+    version: 1,
+    title: requireOptionalString7(args.title) ?? "Codex in-app review",
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    events: []
+  } : existing;
+  await writeFile7(eventsPath, `${JSON.stringify(payload, null, 2)}
+`, "utf8");
+  return { eventsPath, eventCount: Array.isArray(payload.events) ? payload.events.length : 0, title: payload.title ?? null };
+}
+async function readEvents(eventsPath, options = {}) {
+  const payload = await readJson5(eventsPath).catch(() => null);
+  if (!payload) {
+    return { available: false, reason: "No review overlay events file exists.", eventCount: 0, events: [], metroPort: options.metroPort ?? null };
+  }
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  return { available: true, eventCount: events.length, events, title: payload.title ?? null, metroPort: options.metroPort ?? null };
+}
+async function reviewOverlayServer(args) {
+  const dir = path8.resolve(args.dir);
+  const port = args.port ? clampNumber14(args.port, 1, 65535) : await findAvailablePort2(17655);
+  const endpointPath = normalizeEndpointPath(args.endpointPath);
+  await mkdir11(dir, { recursive: true });
+  await createEventsFile({ outputDir: dir, reset: false });
+  const server = createHttpServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", async () => {
+      const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
+      const eventsPath = path8.join(dir, "events.json");
+      if (request.method === "GET" && url.pathname === "/events.json") {
+        const text = await readFile11(eventsPath, "utf8").catch(() => '{"events":[]}\n');
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(text);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === endpointPath) {
+        const current = await readJson5(eventsPath).catch(() => ({ version: 1, events: [] }));
+        const events = Array.isArray(current.events) ? current.events : [];
+        events.push(JSON.parse(body || "{}"));
+        const next = { ...current, events, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+        await writeFile7(eventsPath, `${JSON.stringify(next, null, 2)}
+`, "utf8");
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(`${JSON.stringify({ ok: true, eventsPath, eventCount: events.length }, null, 2)}
+`);
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+      response.end('{"ok":false,"error":"not found"}\n');
+    });
+  });
+  await new Promise((resolve15) => server.listen(port, "127.0.0.1", () => resolve15()));
+  const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}
+`);
+  return await new Promise(() => {
+  });
+}
+async function readJson5(file) {
+  return JSON.parse(await readFile11(file, "utf8"));
+}
+function findAvailablePort2(start) {
+  return new Promise((resolve15) => {
+    const tryPort = (port) => {
+      const server = createNetServer();
+      server.once("error", () => tryPort(port + 1));
+      server.once("listening", () => {
+        server.close(() => resolve15(port));
+      });
+      server.listen(port, "127.0.0.1");
+    };
+    tryPort(start);
+  });
+}
 
 // src/modules/review-next-guidance/src/main/index.ts
 var SUBORDINATE_RULE = "Do not patch or call done until the current constraint is proven or deliberately elevated.";
 var NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigation model without a separate reason."];
-function toolJson15(value) {
+function toolJson16(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -7071,7 +8335,7 @@ async function reviewNextStep(args = {}) {
   const stage = args.stage ?? "intake";
   const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
   const cwd = requireOptionalString8(args.cwd) ?? ".";
-  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const componentFilter = requireOptionalString8(args.componentFilter);
   const verifierRule = requireOptionalString8(args.verifierRule);
   const flags = reviewFlags(args);
@@ -7079,7 +8343,7 @@ async function reviewNextStep(args = {}) {
   const suggestedCommands = reviewCommandSuggestions({ cwd, metroPort, componentFilter, flags, stage });
   const questionTriggers = reviewQuestionTriggers(flags, verifierRule);
   const constraint = chooseReviewConstraint({ stage, flags, verifierRule });
-  return toolJson15({
+  return toolJson16({
     issue,
     surface,
     stage,
@@ -7318,17 +8582,20 @@ function requireOptionalString8(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : void 0;
 }
-function clampNumber14(value, min, max) {
+function clampNumber15(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return min;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
 }
 
 // src/modules/annotation-server-http/src/main/index.ts
+import { createServer as createServer2 } from "node:http";
+import { readFile as readFile12, writeFile as writeFile8 } from "node:fs/promises";
+import path9 from "node:path";
 var ANNOTATION_BODY_LIMIT = 2 * 1024 * 1024;
-async function annotationServer(args = {}, deps) {
-  const dir = deps.resolvePath(requireString9(args.dir, "dir"));
-  const port = clampNumber15(args.port ?? 17654, 1, 65535);
+async function annotationServer(args = {}, deps = defaultAnnotationServerDependencies) {
+  const dir = deps.resolvePath(requireString10(args.dir, "dir"));
+  const port = clampNumber16(args.port ?? 17654, 1, 65535);
   await deps.listen({
     host: "127.0.0.1",
     port,
@@ -7342,6 +8609,17 @@ async function annotationServer(args = {}, deps) {
   }
   return payload;
 }
+var defaultAnnotationServerDependencies = {
+  joinPath: (...parts) => path9.join(...parts),
+  readFile: async (file) => readFile12(file, file.endsWith(".png") ? "base64" : "utf8"),
+  writeFile: writeFile8,
+  resolvePath: (file) => path9.resolve(file),
+  listen,
+  stdout: (text) => process.stdout.write(text),
+  waitForever: () => new Promise(() => {
+  }),
+  now: () => /* @__PURE__ */ new Date()
+};
 async function handleAnnotationRequest(request, options, deps) {
   try {
     const url = new URL(request.url ?? "/", `http://127.0.0.1:${options.port}`);
@@ -7369,7 +8647,7 @@ async function handleAnnotationRequest(request, options, deps) {
     }
     return sendJsonPayload({ ok: false, error: "not found" }, 404);
   } catch (error) {
-    return sendJsonPayload({ ok: false, error: formatError9(error) }, 500);
+    return sendJsonPayload({ ok: false, error: formatError11(error) }, 500);
   }
 }
 function sendFilePayload(body, contentType) {
@@ -7406,13 +8684,13 @@ async function readRequestBodyText(body, limit) {
 function annotationServerStartupPayload(dir, port) {
   return { ok: true, url: `http://127.0.0.1:${port}/`, dir };
 }
-function requireString9(value, field) {
+function requireString10(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber15(value, min, max) {
+function clampNumber16(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7427,10 +8705,31 @@ function chunks(text) {
   if (result.length === 0) result.push("");
   return result;
 }
+function listen(options) {
+  return new Promise((resolve15) => {
+    const server = createServer2((request, response) => {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        body += chunk;
+      });
+      request.on("end", async () => {
+        const payload = await options.handler({ method: request.method, url: request.url, body });
+        response.writeHead(payload.status, payload.headers);
+        if (payload.headers["content-type"] === "image/png") {
+          response.end(Buffer.from(payload.body, "base64"));
+        } else {
+          response.end(payload.body);
+        }
+      });
+    });
+    server.listen(options.port, options.host, () => resolve15(server));
+  });
+}
 function now3(deps) {
   return deps.now?.() ?? /* @__PURE__ */ new Date();
 }
-function formatError9(error) {
+function formatError11(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -7441,31 +8740,31 @@ var DEVTOOLS_EVENTS_LIMITATIONS = [
 var DIAGNOSTICS_LIMITATIONS = [
   "Start Metro and connect a debuggable Hermes target before reading JS diagnostics."
 ];
-var MAX_OUTPUT9 = 4e4;
+var MAX_OUTPUT10 = 4e4;
 var MAX_ARRAY_ITEMS = 500;
-function toolJson16(value) {
+function toolJson17(value) {
   return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
 }
-function requireString10(value, name) {
+function requireString11(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${name} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber16(value, min, max) {
+function clampNumber17(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function truncate10(value, max = MAX_OUTPUT9) {
+function truncate13(value, max = MAX_OUTPUT10) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
 ...[truncated ${text.length - max} chars]`;
 }
-function targetSummary3(target) {
+function targetSummary4(target) {
   if (!target) return null;
   return {
     id: target.id ?? null,
@@ -7484,18 +8783,18 @@ function targetSummary3(target) {
   };
 }
 async function devtoolsCommand(args = {}, deps = {}) {
-  const action = requireString10(args.action ?? "capabilities", "action");
-  if (action === "status" || action === "panels") return toolJson16(await devtoolsStatusPayload(args, action, deps));
-  if (action === "open") return toolJson16(await devtoolsOpenPayload(args, deps));
-  if (action === "events") return toolJson16(await devtoolsEventsPayload(args, deps));
+  const action = requireString11(args.action ?? "capabilities", "action");
+  if (action === "status" || action === "panels") return toolJson17(await devtoolsStatusPayload(args, action, deps));
+  if (action === "open") return toolJson17(await devtoolsOpenPayload(args, deps));
+  if (action === "events") return toolJson17(await devtoolsEventsPayload(args, deps));
   if (action !== "capabilities") throw new Error(`Unknown devtools action: ${action}`);
-  const metro = await metroStatusPayload(args, deps);
+  const metro = await metroStatusPayload2(args, deps);
   const rnDevTools = reactNativeDevToolsReport(metro);
   const hasTarget = metro.targets.length > 0;
   const hasRuntime = metro.targets.some((target) => target.webSocketDebuggerUrl);
   const hasDevtoolsFrontend = rnDevTools.frontend.available;
   const hasNetworkPanel = metro.targets.some(targetHasDevtoolsNetworkPanel);
-  return toolJson16({
+  return toolJson17({
     action,
     metroPort: metro.metroPort,
     reactNativeDevTools: rnDevTools,
@@ -7602,7 +8901,7 @@ async function devtoolsCommand(args = {}, deps = {}) {
   });
 }
 async function devtoolsStatusPayload(args = {}, action = "status", deps = {}) {
-  const metro = await metroStatusPayload(args, deps);
+  const metro = await metroStatusPayload2(args, deps);
   const reactNativeDevTools = reactNativeDevToolsReport(metro);
   const panels = reactNativeDevTools.panels;
   const payload = {
@@ -7702,7 +9001,7 @@ function reactNativeDevToolsReport(metro) {
   });
 }
 async function devtoolsOpenPayload(args = {}, deps = {}) {
-  const metro = await metroStatusPayload(args, deps);
+  const metro = await metroStatusPayload2(args, deps);
   const reactNativeDevTools = reactNativeDevToolsReport(metro);
   const target = reactNativeDevTools.target;
   const url = reactNativeDevTools.frontend.url;
@@ -7715,7 +9014,7 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
       reactNativeDevTools
     });
   }
-  const result = await execFile3(deps, "open", [url], { timeout: 1e4, rejectOnError: false });
+  const result = await execFile8(deps, "open", [url], { timeout: 1e4, rejectOnError: false });
   return sanitizePayload({
     available: !result.error,
     action: "open",
@@ -7725,24 +9024,24 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
     mirrorsUpstreamLaunch: true,
     attachmentState: reactNativeDevTools.attachmentState,
     attachmentRisk: reactNativeDevTools.attachmentRisk,
-    stdout: truncate10(result.stdout),
-    stderr: truncate10(result.stderr),
+    stdout: truncate13(result.stdout),
+    stderr: truncate13(result.stderr),
     error: result.error ?? null
   });
 }
 async function devtoolsEventsPayload(args = {}, deps = {}) {
-  const subaction = requireString10(args.subaction ?? "read", "subaction");
+  const subaction = requireString11(args.subaction ?? "read", "subaction");
   if (!["start", "read", "stop"].includes(subaction)) throw new Error(`Unknown devtools events action: ${subaction}`);
   const stateRoot = resolveExpoStateRoot4(args, deps);
   const eventsDir = joinPath3(stateRoot, "artifacts", "devtools-events");
-  await mkdir8(deps, eventsDir, { recursive: true });
+  await mkdir12(deps, eventsDir, { recursive: true });
   const file = joinPath3(eventsDir, "events.json");
   const existing = await readJsonFile5(deps, file).catch(() => ({ events: [] }));
-  const previousEvents = Array.isArray(asRecord7(existing)?.events) ? asRecord7(existing)?.events : [];
+  const previousEvents = Array.isArray(asRecord8(existing)?.events) ? asRecord8(existing)?.events : [];
   const event = {
     type: `devtools.${subaction}`,
     timestamp: now4(deps),
-    metro: sanitizePayload(await metroStatusPayload(args, deps))
+    metro: sanitizePayload(await metroStatusPayload2(args, deps))
   };
   const payload = {
     available: true,
@@ -7764,13 +9063,13 @@ async function errorsCommand(args = {}, deps = {}) {
 }
 async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
   const action = args.action ?? "read";
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber16(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
   const targetDiscovery = await metroTargetDiscovery(metroPort, deps);
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson16({
+    return toolJson17({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -7782,20 +9081,20 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
     });
   }
   if (action === "clear") {
-    const result2 = await evaluateHermesExpression(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
-    return toolJson16({
+    const result2 = await evaluateHermesExpression3(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
+    return toolJson17({
       ...valueFromHermes(result2) ?? { available: false, reason: result2?.error ?? "Runtime diagnostics did not return a value." },
       kind,
       action,
       metroPort,
-      target: targetSummary3(targets[0]),
+      target: targetSummary4(targets[0]),
       cdp: result2?.diagnostics ?? result2?.cdp ?? null
     });
   }
-  const result = await evaluateHermesExpression(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5e3 });
+  const result = await evaluateHermesExpression3(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5e3 });
   const value = valueFromHermes(result);
   if (!value) {
-    return toolJson16({
+    return toolJson17({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -7805,13 +9104,13 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = {}) {
       cdp: result?.diagnostics ?? result?.cdp ?? null
     });
   }
-  const record = asRecord7(value) ?? {};
+  const record = asRecord8(value) ?? {};
   const messages = Array.isArray(record.messages) ? record.messages.slice(-limit) : [];
-  return toolJson16({
+  return toolJson17({
     ...record,
     kind,
     metroPort,
-    target: targetSummary3(targets[0]),
+    target: targetSummary4(targets[0]),
     messages,
     limit,
     cdp: result?.diagnostics ?? result?.cdp ?? null
@@ -7896,9 +9195,9 @@ function frontendUrlForTarget(target, metroPort) {
   if (!url) return null;
   return url.startsWith("http") ? url : `http://127.0.0.1:${metroPort}${url}`;
 }
-async function metroStatusPayload(args, deps) {
+async function metroStatusPayload2(args, deps) {
   if (deps.metroStatusPayload) return deps.metroStatusPayload(args);
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
   const baseUrl = `http://127.0.0.1:${metroPort}`;
   const status = await fetchText(deps, `${baseUrl}/status`, 1500);
   if (!status.available) {
@@ -7916,7 +9215,7 @@ async function metroStatusPayload(args, deps) {
   }
   const targetDiscovery = await fetchMetroTargets(deps, metroPort);
   const version = await fetchJson(deps, `${baseUrl}/json/version`, 1500).catch((error) => ({
-    __error: formatError10(error)
+    __error: formatError12(error)
   }));
   const symbolication = await probeMetroSymbolication(deps, metroPort);
   return {
@@ -7925,8 +9224,8 @@ async function metroStatusPayload(args, deps) {
     metroPort,
     status: "available",
     statusText: status.text,
-    version: asRecord7(version)?.__error ? null : version,
-    versionError: asRecord7(version)?.__error ?? null,
+    version: asRecord8(version)?.__error ? null : version,
+    versionError: asRecord8(version)?.__error ?? null,
     symbolication,
     targetCount: targetDiscovery.targets.length,
     targets: targetDiscovery.targets,
@@ -7935,9 +9234,9 @@ async function metroStatusPayload(args, deps) {
 }
 async function fetchMetroTargets(deps, metroPort) {
   const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch((error2) => ({
-    __error: formatError10(error2)
+    __error: formatError12(error2)
   }));
-  const error = asRecord7(raw)?.__error;
+  const error = asRecord8(raw)?.__error;
   if (typeof error === "string") {
     return { available: false, endpoint: "/json/list", targets: [], malformedTargets: [], reason: error };
   }
@@ -7946,7 +9245,7 @@ async function fetchMetroTargets(deps, metroPort) {
       available: false,
       endpoint: "/json/list",
       targets: [],
-      malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape(raw) }],
+      malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape2(raw) }],
       reason: "Metro target list was malformed."
     };
   }
@@ -7978,14 +9277,14 @@ function clearDiagnosticsExpression(kind) {
       return { available: true, cleared: true };
     })()`;
 }
-async function evaluateHermesExpression(deps, webSocketDebuggerUrl, expression, options) {
+async function evaluateHermesExpression3(deps, webSocketDebuggerUrl, expression, options) {
   if (!deps.evaluateHermesExpression) return { error: "Hermes evaluator dependency is not configured." };
   return deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, options);
 }
 function valueFromHermes(result) {
   return result?.result?.result?.value;
 }
-async function execFile3(deps, file, args, options) {
+async function execFile8(deps, file, args, options) {
   if (deps.execFile) return deps.execFile(file, args, options);
   const childProcess = await import("node:child_process");
   return new Promise((resolve15) => {
@@ -7993,7 +9292,7 @@ async function execFile3(deps, file, args, options) {
       resolve15({
         stdout,
         stderr,
-        error: error ? formatError10(error) : null
+        error: error ? formatError12(error) : null
       });
     });
   });
@@ -8004,7 +9303,7 @@ function resolveExpoStateRoot4(args, deps) {
   if (explicit?.endsWith("/runs")) return explicit.slice(0, -"/runs".length);
   return explicit ?? joinPath3(typeof args.root === "string" ? args.root : ".", ".scratch", "expo-ios");
 }
-async function mkdir8(deps, dir, options) {
+async function mkdir12(deps, dir, options) {
   if (deps.mkdir) return deps.mkdir(dir, options);
   const fs10 = await import("node:fs/promises");
   return fs10.mkdir(dir, options);
@@ -8034,12 +9333,12 @@ function joinPath3(...parts) {
   const joined = parts.flatMap((part) => part.split("/")).filter((part, index) => part.length > 0 || absolute && index === 0).join("/");
   return absolute ? `/${joined}`.replace(/\/+/g, "/") : joined.replace(/\/+/g, "/");
 }
-function asRecord7(value) {
+function asRecord8(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 async function probeMetroSymbolication(deps, metroPort) {
   try {
-    const response = asFetchResponse(await fetchWithTimeout(deps, `http://127.0.0.1:${metroPort}/symbolicate`, {
+    const response = asFetchResponse(await fetchWithTimeout2(deps, `http://127.0.0.1:${metroPort}/symbolicate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ stack: [] }),
@@ -8052,23 +9351,23 @@ async function probeMetroSymbolication(deps, metroPort) {
       reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`
     };
   } catch (error) {
-    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError10(error) };
+    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError12(error) };
   }
 }
 async function fetchText(deps, url, timeoutMs) {
   try {
-    const response = asFetchResponse(await fetchWithTimeout(deps, url, { timeoutMs }));
+    const response = asFetchResponse(await fetchWithTimeout2(deps, url, { timeoutMs }));
     return { available: response.ok, text: await response.text(), error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {
-    return { available: false, text: null, error: formatError10(error) };
+    return { available: false, text: null, error: formatError12(error) };
   }
 }
 async function fetchJson(deps, url, timeoutMs) {
-  const response = asFetchResponse(await fetchWithTimeout(deps, url, { timeoutMs }));
+  const response = asFetchResponse(await fetchWithTimeout2(deps, url, { timeoutMs }));
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
-async function fetchWithTimeout(deps, url, options) {
+async function fetchWithTimeout2(deps, url, options) {
   const fetcher = deps.fetch ?? globalThis.fetch;
   if (!fetcher) throw new Error("fetch is not available in this runtime.");
   const timeoutMs = Number(options.timeoutMs ?? 1500);
@@ -8091,33 +9390,33 @@ function asFetchResponse(value) {
   };
 }
 function normalizeMetroTarget(value, index) {
-  const record = asRecord7(value);
+  const record = asRecord8(value);
   if (!record) {
-    return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape(value) } };
+    return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape2(value) } };
   }
   const target = {
-    id: optionalString4(record.id),
-    title: optionalString4(record.title),
-    description: optionalString4(record.description),
-    appId: optionalString4(record.appId),
-    deviceName: optionalString4(record.deviceName),
-    devtoolsFrontendUrl: optionalString4(record.devtoolsFrontendUrl),
-    webSocketDebuggerUrl: optionalString4(record.webSocketDebuggerUrl),
-    reactNative: asRecord7(record.reactNative),
+    id: optionalString5(record.id),
+    title: optionalString5(record.title),
+    description: optionalString5(record.description),
+    appId: optionalString5(record.appId),
+    deviceName: optionalString5(record.deviceName),
+    devtoolsFrontendUrl: optionalString5(record.devtoolsFrontendUrl),
+    webSocketDebuggerUrl: optionalString5(record.webSocketDebuggerUrl),
+    reactNative: asRecord8(record.reactNative),
     attached: record.attached
   };
   if (!target.id && !target.title && !target.webSocketDebuggerUrl && !target.devtoolsFrontendUrl) {
     return {
       target: null,
-      error: { index, reason: "Target did not include any stable identifying metadata.", shape: responseShape(value) }
+      error: { index, reason: "Target did not include any stable identifying metadata.", shape: responseShape2(value) }
     };
   }
   return { target, error: null };
 }
-function optionalString4(value) {
+function optionalString5(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
-function responseShape(value) {
+function responseShape2(value) {
   if (Array.isArray(value)) return { type: "array", length: value.length };
   if (value && typeof value === "object") return { type: "object", keys: Object.keys(value).slice(0, 20) };
   return { type: typeof value };
@@ -8126,16 +9425,16 @@ function sanitizePayload(value) {
   return boundValue(redactValue5(value));
 }
 function boundValue(value) {
-  if (typeof value === "string") return truncate10(value);
+  if (typeof value === "string") return truncate13(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
-  const record = asRecord7(value);
+  const record = asRecord8(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
 }
 function redactValue5(value) {
   if (typeof value === "string") return redactString(value);
   if (Array.isArray(value)) return value.map(redactValue5);
-  const record = asRecord7(value);
+  const record = asRecord8(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
@@ -8160,457 +9459,10 @@ function redactString(value) {
 function isSensitiveKey(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function formatError10(error) {
-  const record = asRecord7(error);
+function formatError12(error) {
+  const record = asRecord8(error);
   const message = record?.message;
   return message == null ? String(error) : String(message);
-}
-
-// src/modules/metro-probes/src/main/index.ts
-import { promises as fs7 } from "node:fs";
-import path5 from "node:path";
-var LIMITATIONS = [
-  "This command probes existing Metro HTTP endpoints only and never starts Metro implicitly.",
-  "Connected targets can be stale when multiple apps or devices are attached."
-];
-var MAX_OUTPUT10 = 16384;
-function toolJson17(value) {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
-}
-function clampNumber17(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    throw new Error(`Expected a finite number, got ${String(value)}.`);
-  }
-  return Math.min(Math.max(number, min), max);
-}
-function formatError11(error) {
-  if (!error) return "Unknown error";
-  const record = asRecord8(error);
-  const message = record ? record.message : void 0;
-  const parts = [message == null ? String(error) : String(message)];
-  if (record?.stdout) parts.push(`stdout:
-${truncate11(record.stdout)}`);
-  if (record?.stderr) parts.push(`stderr:
-${truncate11(record.stderr)}`);
-  return parts.join("\n\n");
-}
-function targetSummary4(target) {
-  if (!target) return null;
-  return {
-    id: target.id ?? null,
-    title: target.title ?? null,
-    description: target.description ?? null,
-    appId: target.appId ?? null,
-    deviceName: target.deviceName ?? null,
-    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
-    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
-    reactNative: target.reactNative ?? null,
-    capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
-      reactNative: Boolean(target.reactNative)
-    }
-  };
-}
-async function metroCommand(args = {}, deps = {}) {
-  const action = requireString11(args.action ?? "status", "action");
-  if (action === "reload") return toolJson17(await (deps.metroReloadPayload ?? ((nextArgs) => metroReloadPayload(nextArgs, deps)))(args));
-  if (action === "symbolicate") {
-    return toolJson17(await (deps.metroSymbolicatePayload ?? ((nextArgs) => metroSymbolicatePayload(nextArgs, deps)))(args));
-  }
-  if (action !== "status") throw new Error(`Unknown metro action: ${action}`);
-  return toolJson17(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload2(nextArgs, deps)))(args));
-}
-async function metroStatusPayload2(args = {}, deps = {}) {
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
-  return new MetroInspectorClient(metroPort, deps).statusPayload();
-}
-async function metroTargets(metroPort, deps = {}) {
-  const result = await new MetroInspectorClient(metroPort, deps).targets();
-  return result.targets;
-}
-var MetroInspectorClient = class {
-  constructor(metroPort, deps = {}) {
-    this.metroPort = metroPort;
-    this.baseUrl = `http://127.0.0.1:${metroPort}`;
-    this.fetchLocalText = deps.fetchLocalText ?? defaultFetchLocalText;
-    this.fetchLocalJson = deps.fetchLocalJson ?? defaultFetchLocalJson;
-    this.fetchLocalLoopback = deps.fetchLocalLoopback ?? defaultFetchLocalLoopback;
-  }
-  baseUrl;
-  fetchLocalText;
-  fetchLocalJson;
-  fetchLocalLoopback;
-  async status() {
-    try {
-      const text = await this.fetchLocalText(`${this.baseUrl}/status`, { timeoutMs: 1500 });
-      return { available: true, endpoint: "/status", text, error: null };
-    } catch (error) {
-      return { available: false, endpoint: "/status", text: null, error: formatError11(error) };
-    }
-  }
-  async version() {
-    try {
-      const value = await this.fetchLocalJson(`${this.baseUrl}/json/version`, { timeoutMs: 1500 });
-      return { available: true, endpoint: "/json/version", value, error: null };
-    } catch (error) {
-      return { available: false, endpoint: "/json/version", value: null, error: formatError11(error) };
-    }
-  }
-  async targets() {
-    let raw;
-    try {
-      raw = await this.fetchLocalJson(`${this.baseUrl}/json/list`, { timeoutMs: 2500 });
-    } catch (error) {
-      return {
-        available: false,
-        endpoint: "/json/list",
-        targets: [],
-        malformedTargets: [],
-        reason: formatError11(error)
-      };
-    }
-    if (!Array.isArray(raw)) {
-      return {
-        available: false,
-        endpoint: "/json/list",
-        targets: [],
-        malformedTargets: [{ index: null, reason: "Metro target list was not an array.", shape: responseShape2(raw) }],
-        reason: "Metro target list was malformed."
-      };
-    }
-    const targets = [];
-    const malformedTargets = [];
-    raw.forEach((target, index) => {
-      const normalized = this.normalizeTarget(target, index);
-      if (normalized.target) targets.push(normalized.target);
-      if (normalized.error) malformedTargets.push(normalized.error);
-    });
-    return {
-      available: true,
-      endpoint: "/json/list",
-      targets,
-      malformedTargets,
-      reason: malformedTargets.length > 0 ? "Some Metro targets were malformed and skipped." : null
-    };
-  }
-  normalizeTarget(target, index = 0) {
-    const record = asRecord8(target);
-    if (!record || Array.isArray(target)) {
-      return { target: null, error: { index, reason: "Target was not an object.", shape: responseShape2(target) } };
-    }
-    const normalized = {
-      id: optionalString5(record.id),
-      title: optionalString5(record.title),
-      description: optionalString5(record.description),
-      appId: optionalString5(record.appId),
-      deviceName: optionalString5(record.deviceName),
-      devtoolsFrontendUrl: optionalString5(record.devtoolsFrontendUrl),
-      webSocketDebuggerUrl: optionalString5(record.webSocketDebuggerUrl),
-      reactNative: record.reactNative && typeof record.reactNative === "object" ? record.reactNative : null,
-      capabilities: {
-        hermesRuntime: typeof record.webSocketDebuggerUrl === "string" && record.webSocketDebuggerUrl.startsWith("ws"),
-        devtoolsFrontend: typeof record.devtoolsFrontendUrl === "string" && record.devtoolsFrontendUrl.length > 0,
-        reactNative: Boolean(record.reactNative)
-      }
-    };
-    if (!normalized.id && !normalized.title && !normalized.webSocketDebuggerUrl && !normalized.devtoolsFrontendUrl) {
-      return {
-        target: null,
-        error: {
-          index,
-          reason: "Target did not include any stable identifying metadata.",
-          shape: responseShape2(target)
-        }
-      };
-    }
-    return { target: normalized, error: null };
-  }
-  async symbolicate(stack) {
-    try {
-      const response = await this.fetchLocalLoopback(`${this.baseUrl}/symbolicate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stack }),
-        timeoutMs: 1500
-      });
-      const value = response.ok ? await response.json().catch(() => null) : null;
-      return {
-        available: response.ok,
-        endpoint: "/symbolicate",
-        status: response.status,
-        reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`,
-        value
-      };
-    } catch (error) {
-      return {
-        available: false,
-        endpoint: "/symbolicate",
-        status: null,
-        reason: formatError11(error),
-        value: null
-      };
-    }
-  }
-  async probeSymbolication() {
-    const result = await this.symbolicate([]);
-    return {
-      available: result.available,
-      endpoint: "/symbolicate",
-      status: result.status,
-      reason: result.reason
-    };
-  }
-  async statusPayload() {
-    const statusResult = await this.status();
-    const targetsResult = statusResult.available ? await this.targets() : {
-      available: false,
-      endpoint: "/json/list",
-      targets: [],
-      malformedTargets: [],
-      reason: "Metro is unavailable."
-    };
-    const versionResult = statusResult.available ? await this.version() : { available: false, endpoint: "/json/version", value: null, error: "Metro is unavailable." };
-    const symbolication = statusResult.available ? await this.probeSymbolication() : { available: false, reason: "Metro is unavailable.", endpoint: "/symbolicate" };
-    return {
-      available: statusResult.available,
-      reason: statusResult.available ? null : "Metro is not reachable on the requested port.",
-      metroPort: this.metroPort,
-      status: statusResult.available ? "available" : "unavailable",
-      statusText: statusResult.text,
-      error: statusResult.error ?? null,
-      version: versionResult.value,
-      versionError: versionResult.error ?? null,
-      targetCount: targetsResult.targets.length,
-      targets: targetsResult.targets.map(targetSummary4),
-      targetDiscovery: {
-        endpoint: "/json/list",
-        available: targetsResult.available,
-        reason: targetsResult.reason,
-        malformedTargets: targetsResult.malformedTargets
-      },
-      symbolication,
-      limitations: LIMITATIONS
-    };
-  }
-};
-function optionalString5(value) {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-function requireString11(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string.`);
-  }
-  return value.trim();
-}
-function responseShape2(value) {
-  if (value == null) return null;
-  if (Array.isArray(value)) return { type: "array", length: value.length };
-  if (typeof value !== "object") return { type: typeof value };
-  const record = value;
-  const shape = { type: "object", keys: Object.keys(record).slice(0, 20) };
-  if (typeof record.type === "string") shape.resultType = record.type;
-  if (record.result && typeof record.result === "object") shape.result = responseShape2(record.result);
-  return shape;
-}
-function truncate11(value, limit = MAX_OUTPUT10) {
-  const text = String(value ?? "");
-  if (text.length <= limit) return text;
-  return `${text.slice(0, limit)}
-[truncated ${text.length - limit} characters]`;
-}
-function asRecord8(value) {
-  return value && typeof value === "object" ? value : null;
-}
-async function metroReloadPayload(args, deps = {}) {
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
-  const targets = await metroTargets(metroPort, deps);
-  const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
-  if (!webSocketDebuggerUrl) {
-    return { available: false, action: "reload", reason: "No Metro inspector target.", metroPort };
-  }
-  const evaluate = deps.evaluateHermesExpression ?? defaultEvaluateHermesExpression;
-  const result = await evaluate(webSocketDebuggerUrl, `(() => {
-    const devSettings = globalThis.NativeModules?.DevSettings || globalThis.__fbBatchedBridgeConfig?.remoteModuleConfig?.DevSettings;
-    if (globalThis.location && typeof globalThis.location.reload === 'function') { globalThis.location.reload(); return { available: true, strategy: 'location.reload' }; }
-    if (devSettings && typeof devSettings.reload === 'function') { devSettings.reload(); return { available: true, strategy: 'DevSettings.reload' }; }
-    return { available: false, reason: 'No runtime reload hook was available.' };
-  })()`, { timeoutMs: 3e3 });
-  const value = result.result?.result?.value;
-  return {
-    ...isPlainObject(value) ? value : { available: false, reason: result.error ?? "Runtime reload did not return a value." },
-    action: "reload",
-    metroPort,
-    target: targetSummary4(targets[0])
-  };
-}
-async function metroSymbolicatePayload(args, deps = {}) {
-  const stackFile = requireString11(args.stackFile ?? positionalArg(args._, 0) ?? args.file, "stackFile");
-  const resolvePath2 = deps.resolvePath ?? path5.resolve;
-  const readTextFile = deps.readTextFile ?? fs7.readFile;
-  const resolvedStackFile = resolvePath2(stackFile);
-  const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
-  const result = await postMetroSymbolicate(metroPort, stack, deps);
-  return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
-}
-function parseComponentStackFrames(stack) {
-  const frames = [];
-  for (const line of String(stack).split("\n")) {
-    const match = /^\s*at\s+(.*?)\s+\((http.*):(\d+):(\d+)\)$/.exec(line);
-    if (!match) continue;
-    frames.push({
-      methodName: match[1]?.trim() || "<anonymous>",
-      file: match[2] ?? "",
-      lineNumber: Number(match[3]),
-      column: Number(match[4])
-    });
-  }
-  return frames;
-}
-async function postMetroSymbolicate(metroPort, stack, deps = {}) {
-  const result = await new MetroInspectorClient(metroPort, deps).symbolicate(stack);
-  if (!result.available) throw new Error(result.reason ?? "Metro symbolication failed.");
-  return result.value;
-}
-function positionalArg(value, index) {
-  return Array.isArray(value) ? value[index] : void 0;
-}
-function isPlainObject(value) {
-  return value != null && typeof value === "object" && !Array.isArray(value);
-}
-async function defaultEvaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs = 3e3 } = {}) {
-  if (typeof WebSocket !== "function") {
-    return { error: "This Node runtime does not expose a WebSocket client." };
-  }
-  const client = new HermesCdpClient(webSocketDebuggerUrl);
-  try {
-    await client.connect({ timeoutMs: 2500 });
-    const enable = await client.call("Runtime.enable", {}, { timeoutMs: 1500 });
-    if (enable.error) return { error: enable.error };
-    return await client.call("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true
-    }, { timeoutMs });
-  } catch (error) {
-    return { error: formatError11(error) };
-  } finally {
-    client.close();
-  }
-}
-var HermesCdpClient = class {
-  constructor(webSocketDebuggerUrl) {
-    this.webSocketDebuggerUrl = webSocketDebuggerUrl;
-  }
-  ws = null;
-  nextId = 1;
-  pending = /* @__PURE__ */ new Map();
-  connect({ timeoutMs }) {
-    return new Promise((resolve15, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Timed out waiting for Hermes websocket connection.")), timeoutMs);
-      const ws = new WebSocket(this.webSocketDebuggerUrl);
-      this.ws = ws;
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        resolve15();
-      };
-      ws.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error("Hermes websocket error."));
-      };
-      ws.onmessage = (event) => this.handleMessage(event);
-    });
-  }
-  call(method, params, { timeoutMs }) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.resolve({ error: "Hermes websocket is not connected." });
-    }
-    const id = this.nextId;
-    this.nextId += 1;
-    return new Promise((resolve15) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        resolve15({ error: `Timed out waiting for ${method}.` });
-      }, timeoutMs);
-      this.pending.set(id, { resolve: resolve15, timeout });
-      this.ws?.send(JSON.stringify({ id, method, params }));
-    });
-  }
-  close() {
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timeout);
-      pending.resolve({ error: "Hermes websocket closed." });
-    }
-    this.pending.clear();
-    try {
-      this.ws?.close();
-    } catch {
-    }
-  }
-  handleMessage(event) {
-    let payload;
-    try {
-      payload = JSON.parse(String(event.data));
-    } catch {
-      return;
-    }
-    const record = asRecord8(payload);
-    if (!record || typeof record.id !== "number") return;
-    const pending = this.pending.get(record.id);
-    if (!pending) return;
-    clearTimeout(pending.timeout);
-    this.pending.delete(record.id);
-    pending.resolve(record.error ? { error: formatError11(record.error) } : record);
-  }
-};
-async function defaultFetchLocalText(url, options) {
-  const response = await defaultFetchLocalLoopback(url, options);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.text();
-}
-async function defaultFetchLocalJson(url, options) {
-  return JSON.parse(await defaultFetchLocalText(url, options));
-}
-async function defaultFetchLocalLoopback(url, options = {}) {
-  const timeoutMs = options.timeoutMs ?? 1500;
-  const { timeoutMs: _timeoutMs, ...request } = options;
-  const candidates = loopbackUrlCandidates(url);
-  let lastError = null;
-  for (const candidate of candidates) {
-    try {
-      return await fetchWithTimeout2(candidate, timeoutMs, request);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError ?? new Error("Local fetch failed");
-}
-function loopbackUrlCandidates(url) {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return [url];
-  }
-  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) return [url];
-  const candidates = [];
-  for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
-    const candidate = new URL(url);
-    candidate.host = `${host}${parsed.port ? `:${parsed.port}` : ""}`;
-    if (!candidates.includes(candidate.toString())) candidates.push(candidate.toString());
-  }
-  return candidates;
-}
-async function fetchWithTimeout2(url, timeoutMs, init) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 // src/modules/navigation-deeplinks/src/main/index.ts
@@ -8697,7 +9549,7 @@ async function navigationPolicyDecision(args, action, deps = {}) {
   }
   return deps.policyDecision(args, `navigation.${action}`, "device");
 }
-async function navigationCommand(args = {}, deps = {}) {
+async function navigationCommand(args = {}, deps = defaultNavigationDependencies) {
   const action = requireString12(args.action ?? "state", "action");
   if (!["state", "back", "pop-to-root", "tab", "deep-link"].includes(action)) {
     throw new Error(`Unknown navigation action: ${action}`);
@@ -8723,7 +9575,15 @@ async function navigationCommand(args = {}, deps = {}) {
   if (!webSocketDebuggerUrl) {
     return toolJson18(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
   }
-  if (!deps.evaluateHermesExpression) throw new Error("navigationCommand requires an evaluateHermesExpression adapter.");
+  if (!deps.evaluateHermesExpression) {
+    return toolJson18(navigationUnavailable({
+      action,
+      metroPort,
+      reason: "No Hermes evaluator is configured.",
+      target: targetSummary5(target),
+      policy
+    }));
+  }
   const result = await deps.evaluateHermesExpression(
     webSocketDebuggerUrl,
     navigationExpression({ action, tab: args.tab ?? args._?.[1] }),
@@ -8749,12 +9609,14 @@ async function navigationCommand(args = {}, deps = {}) {
     policy
   });
 }
-async function navigationDeepLink(args = {}, deps = {}) {
+async function navigationDeepLink(args = {}, deps = defaultNavigationDependencies) {
   const policy = await navigationPolicyDecision(args, "deep-link", deps);
   if (!policy.allowed) return { available: false, action: "deep-link", reason: policy.reason, policy };
-  if (!deps.openExpoRoute) throw new Error("navigationDeepLink requires an openExpoRoute adapter.");
+  if (!deps.openExpoRoute) {
+    return { available: false, action: "deep-link", reason: "No open-route adapter is configured.", policy };
+  }
   const route = args.route ?? args._?.[1] ?? args._?.[0];
-  const openedRaw = unwrapToolJson6(await deps.openExpoRoute({ ...args, route }));
+  const openedRaw = unwrapToolJson8(await deps.openExpoRoute({ ...args, route }));
   if (!openedRaw || typeof openedRaw !== "object" || Array.isArray(openedRaw)) {
     return {
       available: false,
@@ -8786,6 +9648,11 @@ async function navigationDeepLink(args = {}, deps = {}) {
     }
   };
 }
+var defaultNavigationDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression: evaluateHermesExpression4,
+  openExpoRoute
+};
 function navigationExpression(args) {
   return `(() => {
     const action = ${JSON.stringify(args.action)};
@@ -8905,7 +9772,7 @@ function toolJson18(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-function unwrapToolJson6(result) {
+function unwrapToolJson8(result) {
   if (isToolTextResult(result)) {
     const text = result.content[0]?.text;
     if (typeof text === "string") {
@@ -8940,10 +9807,53 @@ function redactSensitiveUrlQuery2(value) {
     "$1[redacted]"
   );
 }
+async function evaluateHermesExpression4(webSocketDebuggerUrl, expression, options) {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen3(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage3(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage3(ws, 2, options.timeoutMs);
+  } finally {
+    ws.close();
+  }
+}
+function waitForOpen3(ws, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve15();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+function waitForMessage3(ws, id, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve15(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
 
 // src/modules/network-evidence/src/main/index.ts
 import { promises as fs8 } from "node:fs";
-import path6 from "node:path";
+import path10 from "node:path";
 var CLI_NAME4 = "expo-ios";
 var CLI_VERSION5 = "0.1.0";
 var EXPO_IOS_BRIDGE_VERSION2 = "1.0.0";
@@ -8980,7 +9890,15 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
       reason: "No Metro inspector target."
     }));
   }
-  if (!deps.evaluateHermesExpression) throw new Error("networkCommand requires an evaluateHermesExpression adapter.");
+  if (!deps.evaluateHermesExpression) {
+    return toolJson19(networkUnavailable({
+      action: bridgeAction,
+      metroPort,
+      code: "transport-failure",
+      reason: "No Hermes evaluator is configured.",
+      target: targetSummary6(target)
+    }));
+  }
   const result = await deps.evaluateHermesExpression(
     webSocketDebuggerUrl,
     networkExpression({ action: bridgeAction, requestId: args.requestId, limit }),
@@ -9044,10 +9962,14 @@ var defaultNetworkDependencies = {
   evaluateHermesExpression: defaultEvaluateHermesExpression2
 };
 async function defaultMetroTargets(metroPort) {
-  const response = await fetch(`http://localhost:${metroPort}/json/list`);
-  if (!response.ok) return [];
-  const parsed = await response.json();
-  return Array.isArray(parsed) ? parsed.map((target) => target) : [];
+  try {
+    const response = await fetch(`http://localhost:${metroPort}/json/list`);
+    if (!response.ok) return [];
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? parsed.map((target) => target) : [];
+  } catch {
+    return [];
+  }
 }
 async function defaultEvaluateHermesExpression2(webSocketDebuggerUrl, expression, options) {
   if (typeof WebSocket !== "function") {
@@ -9454,9 +10376,9 @@ var systemClock2 = {
   now: () => /* @__PURE__ */ new Date()
 };
 var defaultPath2 = {
-  resolve: (filePath) => path6.resolve(filePath),
-  join: (...segments) => path6.join(...segments),
-  dirname: (filePath) => path6.dirname(filePath)
+  resolve: (filePath) => path10.resolve(filePath),
+  join: (...segments) => path10.join(...segments),
+  dirname: (filePath) => path10.dirname(filePath)
 };
 var defaultFileSystem = {
   mkdir: (filePath, options) => fs8.mkdir(filePath, options).then(() => void 0),
@@ -9469,13 +10391,15 @@ function defaultResolveExpoStateRoot(args) {
 }
 
 // src/modules/bridge-domain-actions/src/main/index.ts
+import { readFile as readFile13 } from "node:fs/promises";
+import path11 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
 var MAX_OUTPUT11 = 4e4;
 var MAX_ARRAY_ITEMS2 = 1e3;
 function toolJson20(value) {
   return { content: [{ type: "text", text: stringifyBoundedJson(value) }] };
 }
-async function storageCommand(args = {}, deps = {}) {
+async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const store = requireString14(args.store ?? positionals[0], "store");
   const action = requireString14(args.action ?? positionals[1] ?? "list", "action");
@@ -9499,7 +10423,7 @@ async function storageCommand(args = {}, deps = {}) {
     policy
   }, deps));
 }
-async function stateCommand(args = {}, deps = {}) {
+async function stateCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString14(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
@@ -9514,7 +10438,7 @@ async function stateCommand(args = {}, deps = {}) {
     policy
   }, deps));
 }
-async function controlsCommand(args = {}, deps = {}) {
+async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString14(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
@@ -9529,6 +10453,12 @@ async function controlsCommand(args = {}, deps = {}) {
     policy
   }, deps));
 }
+var defaultBridgeDomainDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression: evaluateHermesExpression5,
+  readJsonFile: async (file) => JSON.parse(await readFile13(file, "utf8")),
+  resolvePath: (file) => path11.resolve(file)
+};
 async function bridgeDomainCommand(input, deps = {}) {
   const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
@@ -9663,7 +10593,7 @@ function parseStorageValue(value) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    throw new Error(`Invalid JSON for --value: ${formatError12(error)}`);
+    throw new Error(`Invalid JSON for --value: ${formatError13(error)}`);
   }
 }
 function storageExpression(args) {
@@ -9861,7 +10791,7 @@ function bridgeActionSideEffect(domain, action) {
   return "unknown";
 }
 function boundValue2(value) {
-  if (typeof value === "string") return truncate12(value);
+  if (typeof value === "string") return truncate14(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS2).map(boundValue2);
   const record = asRecord9(value);
   if (!record) return value;
@@ -9895,7 +10825,7 @@ function redactString2(value) {
 function isSensitiveKey2(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function truncate12(value, max = MAX_OUTPUT11) {
+function truncate14(value, max = MAX_OUTPUT11) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
@@ -9904,14 +10834,57 @@ function truncate12(value, max = MAX_OUTPUT11) {
 function asRecord9(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-function formatError12(error) {
+function formatError13(error) {
   const record = asRecord9(error);
   return record?.message == null ? String(error) : String(record.message);
+}
+async function evaluateHermesExpression5(webSocketDebuggerUrl, expression, options) {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen4(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage4(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage4(ws, 2, options.timeoutMs);
+  } finally {
+    ws.close();
+  }
+}
+function waitForOpen4(ws, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve15();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+function waitForMessage4(ws, id, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve15(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
 }
 
 // src/modules/bridge-command-adapter/src/main/index.ts
 import { promises as fs9 } from "node:fs";
-import path7 from "node:path";
+import path12 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION4 = "1.0.0";
 var BRIDGE_SCHEMA_VERSION = 1;
 async function bridgeCommand(args = {}, dependencies = {}) {
@@ -10083,9 +11056,9 @@ function hasExplicitConfirmation(value, required) {
   return String(value ?? "").split(",").map((item) => item.trim()).includes(required);
 }
 async function normalizeProjectCwd2(cwd, options = {}) {
-  const resolved = path7.resolve(cwd ?? process.cwd());
-  const stat5 = await fs9.stat(resolved).catch(() => null);
-  if (!stat5?.isDirectory()) {
+  const resolved = path12.resolve(cwd ?? process.cwd());
+  const stat9 = await fs9.stat(resolved).catch(() => null);
+  if (!stat9?.isDirectory()) {
     throw new Error(`Directory does not exist: ${resolved}`);
   }
   if (options.allowMissingPackageJson) return resolved;
@@ -10111,8 +11084,8 @@ function bridgeCommandIo(dependencies) {
     writeJsonFile: dependencies.writeJsonFile ?? writeJsonFile4,
     writeFile: dependencies.writeFile ?? fs9.writeFile,
     rm: dependencies.rm ?? fs9.rm,
-    joinPath: dependencies.joinPath ?? path7.join,
-    resolvePath: dependencies.resolvePath ?? path7.resolve,
+    joinPath: dependencies.joinPath ?? path12.join,
+    resolvePath: dependencies.resolvePath ?? path12.resolve,
     currentCwd: dependencies.currentCwd ?? process.cwd
   };
 }
@@ -10166,9 +11139,9 @@ function asRecord10(value) {
 }
 
 // src/modules/accessibility-actions/src/main/index.ts
-import { readdir as readdir4, readFile as readFile7 } from "node:fs/promises";
-import { execFile as nodeExecFile5 } from "node:child_process";
-import { basename as basename5, join as join6, resolve as resolve5 } from "node:path";
+import { readdir as readdir8, readFile as readFile14 } from "node:fs/promises";
+import { execFile as nodeExecFile10 } from "node:child_process";
+import { basename as basename5, join as join10, resolve as resolve5 } from "node:path";
 var FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
 function toolJson22(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -10180,8 +11153,8 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
   if (!["tree", "inspect", "audit", "focus"].includes(action)) throw new Error(`Unknown accessibility action: ${action}`);
   if (action === "focus") {
     const ref = requireString16(args.ref ?? positionals[1], "ref");
-    if (!deps.refActionCommand) throw new Error("accessibility focus requires refActionCommand dependency.");
-    const result = unwrapToolJson7(await deps.refActionCommand({ ...args, command: "focus", ref }));
+    if (!deps.refActionCommand) return toolJson22({ available: false, action, ref, reason: "No ref action adapter is configured." });
+    const result = unwrapToolJson9(await deps.refActionCommand({ ...args, command: "focus", ref }));
     return toolJson22({
       ...result,
       action,
@@ -10191,13 +11164,13 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
   }
   if (action === "inspect") {
     const ref = requireString16(args.ref ?? positionals[1], "ref");
-    const cache = await readLatestRefCache3(args, deps);
+    const cache = await readLatestRefCache4(args, deps);
     if (!cache) return toolJson22({ available: false, action, reason: "No snapshot exists for the current session.", ref });
     const record = (cache.refs ?? []).find((item) => item.ref === ref);
     return toolJson22(record ? { available: true, action, ref, snapshotId: cache.snapshotId, targetId: cache.targetId, record } : { available: false, action, reason: "Ref not found in the latest snapshot.", ref });
   }
   if (action === "audit") {
-    const cache = await readLatestRefCache3(args, deps);
+    const cache = await readLatestRefCache4(args, deps);
     if (!cache) return toolJson22({ available: false, action, reason: "No snapshot exists for the current session.", issues: [] });
     const issues = auditAccessibilityRefs(cache);
     return toolJson22({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
@@ -10207,18 +11180,24 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
 var defaultAccessibilityDependencies = {
   commandPath: defaultCommandPath2,
   resolveIosDevice: (device, options) => resolveIosDevice(typeof device === "string" ? device : null, options),
-  execFile: defaultExecFile4
+  execFile: defaultExecFile4,
+  refActionCommand: (args) => toolJson22({
+    available: false,
+    action: "focus",
+    ref: args.ref ?? null,
+    reason: "Accessibility focus requires a current ref action adapter."
+  })
 };
 function defaultCommandPath2(command) {
   return new Promise((resolve15) => {
-    nodeExecFile5("which", [command], { timeout: 5e3 }, (error, stdout) => {
+    nodeExecFile10("which", [command], { timeout: 5e3 }, (error, stdout) => {
       resolve15(error ? null : String(stdout ?? "").trim() || null);
     });
   });
 }
 function defaultExecFile4(file, argv, options) {
   return new Promise((resolve15) => {
-    nodeExecFile5(file, argv, {
+    nodeExecFile10(file, argv, {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer
     }, (error, stdout, stderr) => {
@@ -10234,8 +11213,8 @@ async function accessibilityTreePayload(args, deps = {}) {
   const semanticBridge = await semanticBridgeTree(args, deps);
   const axe = deps.commandPath ? await deps.commandPath("axe") : null;
   if (!axe) return { available: false, action: "tree", reason: "axe CLI is not installed or not on PATH.", semanticBridge };
-  if (!deps.resolveIosDevice) throw new Error("accessibility tree requires resolveIosDevice dependency.");
-  if (!deps.execFile) throw new Error("accessibility tree requires execFile dependency.");
+  if (!deps.resolveIosDevice) return { available: false, action: "tree", reason: "No iOS device resolver is configured." };
+  if (!deps.execFile) return { available: false, action: "tree", reason: "No subprocess adapter is configured." };
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
   const result = await deps.execFile(axe, ["describe-ui", "--udid", String(device.udid)], {
     timeout: 12e3,
@@ -10243,7 +11222,7 @@ async function accessibilityTreePayload(args, deps = {}) {
     rejectOnError: false
   });
   if (result.error) {
-    return { available: false, action: "tree", reason: "Native accessibility tree failed.", stderr: truncate13(result.stderr), error: result.error, semanticBridge };
+    return { available: false, action: "tree", reason: "Native accessibility tree failed.", stderr: truncate15(result.stderr), error: result.error, semanticBridge };
   }
   const tree = JSON.parse(result.stdout || "[]");
   return {
@@ -10258,12 +11237,12 @@ async function accessibilityTreePayload(args, deps = {}) {
 function auditAccessibilityRefs(cache) {
   return (cache.refs ?? []).filter((record) => (record.actions ?? []).length > 0 && !record.label && !record.text).map((record) => ({ ref: record.ref, rule: "interactive-name", message: "Interactive ref has no label or text." }));
 }
-async function readLatestRefCache3(args = {}, deps = {}) {
+async function readLatestRefCache4(args = {}, deps = {}) {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot5(args);
-  const session = asRecord11(await readLatestSession3(stateRoot));
+  const session = asRecord11(await readLatestSession4(stateRoot));
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile7(join6(sessionDirectory2(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return readJsonFile7(join10(sessionDirectory2(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
 }
 async function semanticBridgeTree(args, deps = {}) {
   if (!deps.semanticBridgeSnapshot) return null;
@@ -10274,16 +11253,16 @@ async function semanticBridgeTree(args, deps = {}) {
       filters: { interactiveOnly: false, compact: false, depth: null, includeSource: true, includeBounds: true }
     });
   } catch (error) {
-    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError13(error) };
+    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError14(error) };
   }
 }
-async function readLatestSession3(stateRoot) {
-  const sessionsRoot = join6(stateRoot, "sessions");
-  const entries = await readdir4(sessionsRoot, { withFileTypes: true }).catch(() => []);
+async function readLatestSession4(stateRoot) {
+  const sessionsRoot = join10(stateRoot, "sessions");
+  const entries = await readdir8(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile7(join6(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile7(join10(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
   sessions.sort((a, b) => String(asRecord11(b)?.updatedAt ?? asRecord11(b)?.createdAt).localeCompare(String(asRecord11(a)?.updatedAt ?? asRecord11(a)?.createdAt)));
@@ -10292,30 +11271,30 @@ async function readLatestSession3(stateRoot) {
 function resolveExpoStateRoot5(args = {}) {
   if (args.stateDir) {
     const resolved = resolve5(args.stateDir);
-    return basename5(resolved) === "runs" ? resolve5(join6(resolved, "..")) : resolved;
+    return basename5(resolved) === "runs" ? resolve5(join10(resolved, "..")) : resolved;
   }
   const root = resolve5(args.root ?? args.cwd ?? process.cwd());
-  return join6(root, ".scratch", "expo-ios");
+  return join10(root, ".scratch", "expo-ios");
 }
 function sessionDirectory2(stateRoot, sessionId) {
-  return join6(stateRoot, "sessions", sessionId);
+  return join10(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile7(file) {
-  return JSON.parse(await readFile7(file, "utf8"));
+  return JSON.parse(await readFile14(file, "utf8"));
 }
 function requireString16(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function truncate13(value, max = 4e4) {
+function truncate15(value, max = 4e4) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...[truncated ${text.length - max} chars]`;
 }
-function unwrapToolJson7(result) {
+function unwrapToolJson9(result) {
   return JSON.parse(result.content[0]?.text ?? "null");
 }
-function formatError13(error) {
+function formatError14(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
@@ -10329,12 +11308,16 @@ var MAX_ARRAY_ITEMS3 = 1e3;
 function toolJson23(value) {
   return { content: [{ type: "text", text: stringifyBoundedJson2(value) }] };
 }
-async function dialogCommand(args = {}, deps = {}) {
+async function dialogCommand(args = {}, deps = defaultModalBridgeDependencies) {
   return modalBridgeCommand({ args, domain: "dialog", actions: ["status", "accept", "dismiss"] }, deps);
 }
-async function sheetCommand(args = {}, deps = {}) {
+async function sheetCommand(args = {}, deps = defaultModalBridgeDependencies) {
   return modalBridgeCommand({ args, domain: "sheet", actions: ["status", "dismiss"] }, deps);
 }
+var defaultModalBridgeDependencies = {
+  metroTargets: (metroPort) => metroTargets(metroPort),
+  evaluateHermesExpression: evaluateHermesExpression6
+};
 async function modalBridgeCommand(input, deps) {
   const positionals = Array.isArray(input.args._) ? input.args._ : [];
   const action = requireString17(input.args.action ?? positionals[0] ?? "status", "action");
@@ -10507,7 +11490,7 @@ function stringifyBoundedJson2(value) {
   return output;
 }
 function boundValue3(value) {
-  if (typeof value === "string") return truncate14(value);
+  if (typeof value === "string") return truncate16(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS3).map(boundValue3);
   const record = asRecord12(value);
   if (!record) return value;
@@ -10541,7 +11524,7 @@ function redactString3(value) {
 function isSensitiveKey3(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function truncate14(value, max = MAX_OUTPUT12) {
+function truncate16(value, max = MAX_OUTPUT12) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
@@ -10550,10 +11533,53 @@ function truncate14(value, max = MAX_OUTPUT12) {
 function asRecord12(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
+async function evaluateHermesExpression6(webSocketDebuggerUrl, expression, options) {
+  if (typeof WebSocket !== "function") {
+    return { error: "This Node runtime does not expose a WebSocket client." };
+  }
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await waitForOpen5(ws, Math.min(options.timeoutMs, 2500));
+  try {
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.enable", params: {} }));
+    await waitForMessage5(ws, 1, options.timeoutMs).catch(() => null);
+    ws.send(JSON.stringify({ id: 2, method: "Runtime.evaluate", params: { expression, returnByValue: true, awaitPromise: true } }));
+    return await waitForMessage5(ws, 2, options.timeoutMs);
+  } finally {
+    ws.close();
+  }
+}
+function waitForOpen5(ws, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
+    ws.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve15();
+    }, { once: true });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
+function waitForMessage5(ws, id, timeoutMs) {
+  return new Promise((resolve15, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for CDP response.")), timeoutMs);
+    ws.addEventListener("message", (event) => {
+      const parsed = JSON.parse(String(event.data));
+      if (parsed?.id !== id) return;
+      clearTimeout(timer);
+      resolve15(parsed);
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed."));
+    }, { once: true });
+  });
+}
 
 // src/modules/record-artifacts/src/main/index.ts
-import { access as access4, mkdir as mkdir9, readdir as readdir5, readFile as readFile8, writeFile as writeFile4 } from "node:fs/promises";
-import { basename as basename6, dirname as dirname4, join as join7, resolve as resolve6 } from "node:path";
+import { access as access4, mkdir as mkdir13, readdir as readdir9, readFile as readFile15, writeFile as writeFile9 } from "node:fs/promises";
+import { basename as basename6, dirname as dirname4, join as join11, resolve as resolve6 } from "node:path";
 var RECORD_LIMITATION = "This tracer-bullet command records metadata; native video capture is implemented by a later adapter.";
 function toolJson24(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -10564,9 +11590,9 @@ async function recordCommand(args = {}, deps = {}) {
   const action = requireString18(args.action ?? positionals[0] ?? "start", "action");
   if (!["start", "stop"].includes(action)) throw new Error(`Unknown record action: ${action}`);
   const stateRoot = resolveExpoStateRoot6(args);
-  const session = asRecord13(await readLatestSession4(stateRoot));
-  const recordDir = join7(stateRoot, "artifacts", "recordings");
-  await mkdir9(recordDir, { recursive: true });
+  const session = asRecord13(await readLatestSession5(stateRoot));
+  const recordDir = join11(stateRoot, "artifacts", "recordings");
+  await mkdir13(recordDir, { recursive: true });
   const metadataPath = runRecordMetadataPath(stateRoot);
   if (action === "start") {
     const metadata2 = {
@@ -10581,9 +11607,9 @@ async function recordCommand(args = {}, deps = {}) {
     await writeJsonFile5(metadataPath, metadata2);
     return toolJson24({ ...metadata2, metadataPath });
   }
-  const outputPath = resolve6(String(args.outputPath ?? positionals[1] ?? join7(recordDir, `recording-${isoStamp(deps)}.mov`)));
-  await mkdir9(dirname4(outputPath), { recursive: true });
-  if (!await pathExists5(outputPath)) await writeFile4(outputPath, "recording placeholder\n", "utf8");
+  const outputPath = resolve6(String(args.outputPath ?? positionals[1] ?? join11(recordDir, `recording-${isoStamp(deps)}.mov`)));
+  await mkdir13(dirname4(outputPath), { recursive: true });
+  if (!await pathExists5(outputPath)) await writeFile9(outputPath, "recording placeholder\n", "utf8");
   const metadata = {
     available: true,
     action,
@@ -10598,15 +11624,15 @@ async function recordCommand(args = {}, deps = {}) {
   return toolJson24(metadata);
 }
 function runRecordMetadataPath(stateRoot) {
-  return join7(stateRoot, "artifacts", "recordings", "recording.json");
+  return join11(stateRoot, "artifacts", "recordings", "recording.json");
 }
-async function readLatestSession4(stateRoot) {
-  const sessionsRoot = join7(stateRoot, "sessions");
-  const entries = await readdir5(sessionsRoot, { withFileTypes: true }).catch(() => []);
+async function readLatestSession5(stateRoot) {
+  const sessionsRoot = join11(stateRoot, "sessions");
+  const entries = await readdir9(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile8(join7(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile8(join11(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
   sessions.sort((a, b) => String(asRecord13(b)?.updatedAt ?? asRecord13(b)?.createdAt).localeCompare(String(asRecord13(a)?.updatedAt ?? asRecord13(a)?.createdAt)));
@@ -10615,16 +11641,16 @@ async function readLatestSession4(stateRoot) {
 function resolveExpoStateRoot6(args = {}) {
   if (args.stateDir) {
     const resolved = resolve6(args.stateDir);
-    return basename6(resolved) === "runs" ? resolve6(join7(resolved, "..")) : resolved;
+    return basename6(resolved) === "runs" ? resolve6(join11(resolved, "..")) : resolved;
   }
   const root = resolve6(args.root ?? args.cwd ?? process.cwd());
-  return join7(root, ".scratch", "expo-ios");
+  return join11(root, ".scratch", "expo-ios");
 }
 async function readJsonFile8(file) {
-  return JSON.parse(await readFile8(file, "utf8"));
+  return JSON.parse(await readFile15(file, "utf8"));
 }
 async function writeJsonFile5(file, value) {
-  await writeFile4(file, `${JSON.stringify(value, null, 2)}
+  await writeFile9(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 async function pathExists5(file) {
@@ -10650,29 +11676,29 @@ function asRecord13(value) {
 }
 
 // src/modules/review-evidence-reports/src/main/index.ts
-import { mkdir as mkdir10, readdir as readdir6, readFile as readFile9, stat as stat4, writeFile as writeFile5 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname5, join as join8, resolve as resolve7 } from "node:path";
+import { mkdir as mkdir14, readdir as readdir10, readFile as readFile16, stat as stat7, writeFile as writeFile10 } from "node:fs/promises";
+import { basename as basename7, dirname as dirname5, join as join12, resolve as resolve7 } from "node:path";
 var REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
 var ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
 function toolJson25(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-async function reviewCommand(args = {}, deps = {}) {
+async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString19(args.action ?? positionals[0] ?? "report", "action");
   if (!["report", "matrix"].includes(action)) throw new Error(`Unknown review action: ${action}`);
   const stateRoot = resolveExpoStateRoot7(args);
-  const session = await readLatestSession5(stateRoot);
-  const outputPath = resolve7(String(args.outputPath ?? join8(stateRoot, "artifacts", `review-${action}-${isoStamp2(deps)}.json`)));
-  await mkdir10(dirname5(outputPath), { recursive: true });
+  const session = await readLatestSession6(stateRoot);
+  const outputPath = resolve7(String(args.outputPath ?? join12(stateRoot, "artifacts", `review-${action}-${isoStamp2(deps)}.json`)));
+  await mkdir14(dirname5(outputPath), { recursive: true });
   const runs = await listRunRecords(stateRoot);
-  const latestRefs = await readLatestRefCache4(args);
+  const latestRefs = await readLatestRefCache5(args);
   const payload = action === "matrix" ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath }) : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
   await writeJsonFile6(outputPath, payload);
   return toolJson25(payload);
 }
-async function diffCommand(args = {}, deps = {}) {
+async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const kind = requireString19(args.kind ?? positionals[0], "kind");
   if (!["snapshot", "screenshot", "route"].includes(kind)) throw new Error(`Unknown diff kind: ${kind}`);
@@ -10685,9 +11711,9 @@ async function diffCommand(args = {}, deps = {}) {
     routeB: args.routeB ?? (kind === "route" ? positionals[2] : void 0)
   };
   const stateRoot = resolveExpoStateRoot7(normalizedArgs);
-  const session = await readLatestSession5(stateRoot);
-  const outputPath = resolve7(String(normalizedArgs.outputPath ?? join8(stateRoot, "artifacts", `diff-${kind}-${isoStamp2(deps)}.json`)));
-  await mkdir10(dirname5(outputPath), { recursive: true });
+  const session = await readLatestSession6(stateRoot);
+  const outputPath = resolve7(String(normalizedArgs.outputPath ?? join12(stateRoot, "artifacts", `diff-${kind}-${isoStamp2(deps)}.json`)));
+  await mkdir14(dirname5(outputPath), { recursive: true });
   const diff = kind === "snapshot" ? await snapshotDiffPayload(normalizedArgs) : kind === "route" ? await routeDiffPayload(normalizedArgs, deps) : await screenshotDiffPayload(normalizedArgs);
   const payload = {
     ...diff,
@@ -10699,6 +11725,12 @@ async function diffCommand(args = {}, deps = {}) {
   await writeJsonFile6(outputPath, payload);
   return toolJson25(payload);
 }
+var defaultReviewDiffDependencies = {
+  openExpoRoute,
+  captureScreenshot,
+  now: () => /* @__PURE__ */ new Date(),
+  nowMs: () => Date.now()
+};
 function reviewReportPayload(args) {
   const session = asRecord14(args.session);
   const artifacts = collectExpoIosArtifacts(args.stateRoot);
@@ -10740,14 +11772,14 @@ function reviewMatrixPayload(args) {
     runCount: args.runs.length
   };
 }
-async function routeDiffPayload(args = {}, deps = {}) {
+async function routeDiffPayload(args = {}, deps = defaultReviewDiffDependencies) {
   const routeA = requireString19(args.routeA, "routeA");
   const routeB = requireString19(args.routeB, "routeB");
   const screenshot = args.screenshot === true;
-  if (!deps.openExpoRoute) throw new Error("routeDiffPayload requires openExpoRoute dependency.");
-  const openedA = unwrapToolJson8(await deps.openExpoRoute({ ...args, route: routeA }));
+  if (!deps.openExpoRoute) return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
+  const openedA = unwrapToolJson10(await deps.openExpoRoute({ ...args, route: routeA }));
   const shotA = screenshot ? await captureRouteScreenshot(args, deps, `route-a-${nowMs2(deps)}.png`) : null;
-  const openedB = unwrapToolJson8(await deps.openExpoRoute({ ...args, route: routeB }));
+  const openedB = unwrapToolJson10(await deps.openExpoRoute({ ...args, route: routeB }));
   const shotB = screenshot ? await captureRouteScreenshot(args, deps, `route-b-${nowMs2(deps)}.png`) : null;
   return {
     available: true,
@@ -10778,7 +11810,7 @@ async function snapshotDiffPayload(args = {}) {
 async function screenshotDiffPayload(args = {}) {
   const baseline = resolve7(requireString19(args.baseline, "baseline"));
   const current = resolve7(requireString19(args.current, "current"));
-  const [before, after] = await Promise.all([stat4(baseline), stat4(current)]);
+  const [before, after] = await Promise.all([stat7(baseline), stat7(current)]);
   return {
     available: true,
     baseline,
@@ -10788,39 +11820,39 @@ async function screenshotDiffPayload(args = {}) {
   };
 }
 async function latestSnapshotJson(args = {}) {
-  const cache = await readLatestRefCache4(args);
+  const cache = await readLatestRefCache5(args);
   if (!cache?.snapshotId) return null;
   const stateRoot = resolveExpoStateRoot7(args);
-  const session = await readLatestSession5(stateRoot);
+  const session = await readLatestSession6(stateRoot);
   const sessionId = asRecord14(session)?.sessionId;
   if (!sessionId) return cache;
-  return readJsonFile9(join8(sessionDirectory3(stateRoot, String(sessionId)), "snapshots", `${cache.snapshotId}.json`)).catch(() => cache);
+  return readJsonFile9(join12(sessionDirectory3(stateRoot, String(sessionId)), "snapshots", `${cache.snapshotId}.json`)).catch(() => cache);
 }
-async function readLatestSession5(stateRoot) {
-  const sessionsRoot = join8(stateRoot, "sessions");
-  const entries = await readdir6(sessionsRoot, { withFileTypes: true }).catch(() => []);
+async function readLatestSession6(stateRoot) {
+  const sessionsRoot = join12(stateRoot, "sessions");
+  const entries = await readdir10(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile9(join8(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile9(join12(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
   sessions.sort((a, b) => String(asRecord14(b)?.updatedAt ?? asRecord14(b)?.createdAt).localeCompare(String(asRecord14(a)?.updatedAt ?? asRecord14(a)?.createdAt)));
   return sessions[0] ?? null;
 }
-async function readLatestRefCache4(args = {}) {
+async function readLatestRefCache5(args = {}) {
   const stateRoot = resolveExpoStateRoot7(args);
-  const session = asRecord14(await readLatestSession5(stateRoot));
+  const session = asRecord14(await readLatestSession6(stateRoot));
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile9(join8(sessionDirectory3(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return readJsonFile9(join12(sessionDirectory3(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
 }
 async function listRunRecords(stateRoot) {
-  const runsRoot = join8(stateRoot, "runs");
-  const entries = await readdir6(runsRoot, { withFileTypes: true }).catch(() => []);
+  const runsRoot = join12(stateRoot, "runs");
+  const entries = await readdir10(runsRoot, { withFileTypes: true }).catch(() => []);
   const records = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-    const file = join8(runsRoot, entry.name);
+    const file = join12(runsRoot, entry.name);
     const record = asRecord14(await readJsonFile9(file).catch(() => null));
     if (record) records.push({ ...record, path: file });
   }
@@ -10840,27 +11872,27 @@ function runSummary(run) {
 }
 function collectExpoIosArtifacts(stateRoot) {
   return {
-    runs: join8(stateRoot, "runs"),
-    sessions: join8(stateRoot, "sessions"),
-    artifacts: join8(stateRoot, "artifacts")
+    runs: join12(stateRoot, "runs"),
+    sessions: join12(stateRoot, "sessions"),
+    artifacts: join12(stateRoot, "artifacts")
   };
 }
 function resolveExpoStateRoot7(args = {}) {
   if (args.stateDir) {
     const resolved = resolve7(args.stateDir);
-    return basename7(resolved) === "runs" ? resolve7(join8(resolved, "..")) : resolved;
+    return basename7(resolved) === "runs" ? resolve7(join12(resolved, "..")) : resolved;
   }
   const root = resolve7(args.root ?? args.cwd ?? process.cwd());
-  return join8(root, ".scratch", "expo-ios");
+  return join12(root, ".scratch", "expo-ios");
 }
 function sessionDirectory3(stateRoot, sessionId) {
-  return join8(stateRoot, "sessions", sessionId);
+  return join12(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile9(file) {
-  return JSON.parse(await readFile9(file, "utf8"));
+  return JSON.parse(await readFile16(file, "utf8"));
 }
 async function writeJsonFile6(file, value) {
-  await writeFile5(file, `${JSON.stringify(value, null, 2)}
+  await writeFile10(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function requireString19(value, name) {
@@ -10874,10 +11906,10 @@ function refsFromSnapshot(snapshot) {
 }
 async function captureRouteScreenshot(args, deps, filename) {
   if (!deps.captureScreenshot) return null;
-  const outputPath = join8(resolveExpoStateRoot7(args), "artifacts", filename);
+  const outputPath = join12(resolveExpoStateRoot7(args), "artifacts", filename);
   return deps.captureScreenshot({ ...args, outputPath });
 }
-function unwrapToolJson8(result) {
+function unwrapToolJson10(result) {
   const text = result.content[0]?.text ?? "null";
   return JSON.parse(text);
 }
@@ -10892,8 +11924,8 @@ function asRecord14(value) {
 }
 
 // src/modules/debug-inspect-highlight/src/main/index.ts
-import { mkdir as fsMkdir, readdir as readdir7, readFile as readFile10, writeFile as fsWriteFile } from "node:fs/promises";
-import { basename as basename8, dirname as dirname6, join as join9, resolve as resolve8 } from "node:path";
+import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile17, writeFile as fsWriteFile } from "node:fs/promises";
+import { basename as basename8, dirname as dirname6, join as join13, resolve as resolve8 } from "node:path";
 function toolJson26(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
@@ -10946,7 +11978,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
       stale: record.stale === true
     },
     evidence: {
-      refCache: join9(sessionDirectory4(stateRoot, sessionId), "refs.json"),
+      refCache: join13(sessionDirectory4(stateRoot, sessionId), "refs.json"),
       snapshotId: found.cache.snapshotId
     },
     limitations: [
@@ -10971,7 +12003,7 @@ async function highlightCommand(args = {}, deps = {}) {
   }
   const stateRoot = resolveExpoStateRoot8(args);
   const timestamp = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  const outputPath = join9(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`);
+  const outputPath = join13(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`);
   await (deps.mkdir ?? fsMkdir)(dirname6(outputPath), { recursive: true });
   await (deps.writeFile ?? fsWriteFile)(outputPath, highlightSvg({ ref, record: found.record, durationMs: args.durationMs }), "utf8");
   return toolJson26({
@@ -11000,48 +12032,48 @@ function highlightSvg({ ref, record, durationMs }) {
 `;
 }
 async function readRefRecord(ref, args = {}, deps = {}) {
-  const cache = await readLatestRefCache5(args, deps);
+  const cache = await readLatestRefCache6(args, deps);
   if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
   const record = (cache.refs ?? []).find((item) => item.ref === ref);
   if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
   if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
   return { available: true, record, cache };
 }
-async function readLatestRefCache5(args = {}, deps = {}) {
+async function readLatestRefCache6(args = {}, deps = {}) {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot8(args);
-  const session = await readLatestSession6(stateRoot);
+  const session = await readLatestSession7(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile10(join9(sessionDirectory4(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
 }
-async function readLatestSession6(stateRoot) {
-  const sessionsRoot = join9(stateRoot, "sessions");
-  const entries = await readdir7(sessionsRoot, { withFileTypes: true }).catch(() => []);
+async function readLatestSession7(stateRoot) {
+  const sessionsRoot = join13(stateRoot, "sessions");
+  const entries = await readdir11(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile10(join9(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile10(join13(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
   sessions.sort((a, b) => String(asRecord15(b)?.updatedAt ?? asRecord15(b)?.createdAt).localeCompare(String(asRecord15(a)?.updatedAt ?? asRecord15(a)?.createdAt)));
   return asRecord15(sessions[0]);
 }
 async function readSelectedTarget(stateRoot, session) {
-  return readJsonFile10(join9(sessionDirectory4(stateRoot, String(session.sessionId)), "target.json")).then(asRecord15).catch(() => null);
+  return readJsonFile10(join13(sessionDirectory4(stateRoot, String(session.sessionId)), "target.json")).then(asRecord15).catch(() => null);
 }
 function resolveExpoStateRoot8(args = {}) {
   if (args.stateDir) {
     const resolved = resolve8(args.stateDir);
-    return basename8(resolved) === "runs" ? resolve8(join9(resolved, "..")) : resolved;
+    return basename8(resolved) === "runs" ? resolve8(join13(resolved, "..")) : resolved;
   }
   const root = resolve8(args.root ?? args.cwd ?? process.cwd());
-  return join9(root, ".scratch", "expo-ios");
+  return join13(root, ".scratch", "expo-ios");
 }
 function sessionDirectory4(stateRoot, sessionId) {
-  return join9(stateRoot, "sessions", sessionId);
+  return join13(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile10(file) {
-  return JSON.parse(await readFile10(file, "utf8"));
+  return JSON.parse(await readFile17(file, "utf8"));
 }
 function requireString20(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11056,7 +12088,7 @@ function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 async function latestSession(stateRoot, deps) {
-  return deps.readLatestSession ? deps.readLatestSession(stateRoot) : readLatestSession6(stateRoot);
+  return deps.readLatestSession ? deps.readLatestSession(stateRoot) : readLatestSession7(stateRoot);
 }
 async function selectedTarget(stateRoot, session, deps) {
   return deps.readSelectedTarget ? deps.readSelectedTarget(stateRoot, session) : readSelectedTarget(stateRoot, session);
@@ -11081,6 +12113,8 @@ function asRecord15(value) {
 }
 
 // src/modules/expo-introspection-actions/src/main/index.ts
+import { access as access5, readFile as readFile18, stat as stat8 } from "node:fs/promises";
+import path13 from "node:path";
 var EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"];
 function toolJson27(value) {
   return {
@@ -11089,7 +12123,7 @@ function toolJson27(value) {
     isError: false
   };
 }
-function unwrapToolJson9(value) {
+function unwrapToolJson11(value) {
   const text = asRecord16(value)?.content;
   if (!Array.isArray(text)) return value;
   const first = asRecord16(text[0]);
@@ -11100,7 +12134,7 @@ function unwrapToolJson9(value) {
     return { text: first.text };
   }
 }
-async function expoCommand(args = {}, deps) {
+async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   const action = requireString21(args.action ?? "modules", "action");
   if (!isExpoAction(action)) throw new Error(`Unknown Expo action: ${action}`);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(args.cwd ?? deps.currentWorkingDirectory()));
@@ -11111,11 +12145,11 @@ async function expoCommand(args = {}, deps) {
       action,
       sources: ["project", "native"],
       projectRoot: summary.projectRoot,
-      summary: unwrapToolJson9(await deps.doctor({ cwd: summary.projectRoot }))
+      summary: unwrapToolJson11(await deps.doctor({ cwd: summary.projectRoot }))
     });
   }
   if (action === "upstream-policy") {
-    const info = asRecord16(unwrapToolJson9(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
+    const info = asRecord16(unwrapToolJson11(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
     return toolJson27({
       available: Boolean(info.isExpoProject),
       action,
@@ -11165,6 +12199,35 @@ async function expoCommand(args = {}, deps) {
     ]
   });
 }
+var defaultExpoCommandDependencies = {
+  normalizeProjectCwd: defaultNormalizeProjectCwd4,
+  resolvePath: (input) => path13.resolve(input),
+  currentWorkingDirectory: () => process.cwd(),
+  runtimeSummary: async (cwd) => {
+    const info = asRecord16(unwrapToolJson11(await projectInfo({ cwd }))) ?? {};
+    return {
+      projectRoot: String(info.projectRoot ?? cwd),
+      expoDependency: info.expoDependency ?? null,
+      reactNativeDependency: info.reactNativeDependency ?? null,
+      appConfig: asRecord16(info.appConfig)
+    };
+  },
+  doctor,
+  projectInfo,
+  buildUpstreamDependencyReport,
+  findUp: findUp3,
+  readJsonFile: async (filePath) => JSON.parse(await readFile18(filePath, "utf8")),
+  joinPath: (...parts) => path13.join(...parts),
+  pathExists: async (filePath) => access5(filePath).then(() => true, () => false),
+  firstExisting: async (projectRoot, names) => {
+    for (const name of names) {
+      const candidate = path13.join(projectRoot, name);
+      if (await access5(candidate).then(() => true, () => false)) return candidate;
+    }
+    return null;
+  },
+  readTextFile: (filePath) => readFile18(filePath, "utf8")
+};
 async function expoModuleRecords(projectRoot, deps) {
   const packageJsonPath = await deps.findUp(projectRoot, "package.json");
   const packageJson = packageJsonPath ? asRecord16(await deps.readJsonFile(packageJsonPath)) ?? {} : {};
@@ -11255,10 +12318,26 @@ function isExpoAction(action) {
 function asRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
+async function defaultNormalizeProjectCwd4(cwd) {
+  const resolved = path13.resolve(cwd ?? ".");
+  const details = await stat8(resolved).catch(() => null);
+  if (!details?.isDirectory()) throw new Error(`Directory does not exist: ${resolved}`);
+  return resolved;
+}
+async function findUp3(projectRoot, filename) {
+  let current = path13.resolve(projectRoot);
+  while (true) {
+    const candidate = path13.join(current, filename);
+    if (await access5(candidate).then(() => true, () => false)) return candidate;
+    const parent = path13.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
 
 // src/modules/rn-introspection/src/main/index.ts
-import { readdir as readdir8, readFile as readFile11 } from "node:fs/promises";
-import { basename as basename9, join as join10, resolve as resolve9 } from "node:path";
+import { readdir as readdir12, readFile as readFile19 } from "node:fs/promises";
+import { basename as basename9, join as join14, resolve as resolve9 } from "node:path";
 function toolJson28(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
@@ -11333,7 +12412,7 @@ function clampNumber23(value, min, max) {
 async function rnInspectPayload(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const ref = requireString22(args.ref ?? positionals[1] ?? positionals[0], "ref");
-  const cache = await readLatestRefCache6(args, deps);
+  const cache = await readLatestRefCache7(args, deps);
   if (!cache) {
     return {
       available: false,
@@ -11391,20 +12470,20 @@ function rnLimitations(extra = []) {
     "private React Native hooks and fiber fields are version-dependent and may be incomplete or unavailable."
   ];
 }
-async function readLatestRefCache6(args = {}, deps = {}) {
+async function readLatestRefCache7(args = {}, deps = {}) {
   if (deps.readLatestRefCache) return deps.readLatestRefCache(args);
   const stateRoot = resolveExpoStateRoot9(args);
-  const session = await readLatestSession7(stateRoot);
+  const session = await readLatestSession8(stateRoot);
   if (!session?.lastSnapshotId) return null;
-  return readJsonFile11(join10(sessionDirectory5(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
+  return readJsonFile11(join14(sessionDirectory5(stateRoot, String(session.sessionId)), "refs.json")).catch(() => null);
 }
-async function readLatestSession7(stateRoot) {
-  const sessionsRoot = join10(stateRoot, "sessions");
-  const entries = await readdir8(sessionsRoot, { withFileTypes: true }).catch(() => []);
+async function readLatestSession8(stateRoot) {
+  const sessionsRoot = join14(stateRoot, "sessions");
+  const entries = await readdir12(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = await readJsonFile11(join10(sessionsRoot, entry.name, "session.json")).catch(() => null);
+    const record = await readJsonFile11(join14(sessionsRoot, entry.name, "session.json")).catch(() => null);
     if (record) sessions.push(record);
   }
   sessions.sort((a, b) => String(asRecord17(b)?.updatedAt ?? asRecord17(b)?.createdAt).localeCompare(String(asRecord17(a)?.updatedAt ?? asRecord17(a)?.createdAt)));
@@ -11413,16 +12492,16 @@ async function readLatestSession7(stateRoot) {
 function resolveExpoStateRoot9(args = {}) {
   if (args.stateDir) {
     const resolved = resolve9(args.stateDir);
-    return basename9(resolved) === "runs" ? resolve9(join10(resolved, "..")) : resolved;
+    return basename9(resolved) === "runs" ? resolve9(join14(resolved, "..")) : resolved;
   }
   const root = resolve9(args.root ?? args.cwd ?? process.cwd());
-  return join10(root, ".scratch", "expo-ios");
+  return join14(root, ".scratch", "expo-ios");
 }
 function sessionDirectory5(stateRoot, sessionId) {
-  return join10(stateRoot, "sessions", sessionId);
+  return join14(stateRoot, "sessions", sessionId);
 }
 async function readJsonFile11(file) {
-  return JSON.parse(await readFile11(file, "utf8"));
+  return JSON.parse(await readFile19(file, "utf8"));
 }
 function requireString22(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11433,8 +12512,8 @@ function asRecord17(value) {
 }
 
 // src/modules/perf-evidence/src/main/index.ts
-import { mkdir as fsMkdir2, readFile as readFile12, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
-import { basename as basename10, dirname as dirname7, join as join11, resolve as resolve10 } from "node:path";
+import { mkdir as fsMkdir2, readFile as readFile20, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
+import { basename as basename10, dirname as dirname7, join as join15, resolve as resolve10 } from "node:path";
 var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
 var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph"];
 function toolJson29(value) {
@@ -11462,7 +12541,7 @@ async function perfSummaryPayload(args = {}, deps = {}) {
   const unavailableSources = [];
   const packageJsonPath = await findUpFile(summary.projectRoot, "package.json", deps);
   if (packageJsonPath) {
-    const packageJson = await readJson(packageJsonPath, deps);
+    const packageJson = await readJson6(packageJsonPath, deps);
     metrics.push(perfMetric({
       name: "project.dependencies",
       value: Object.keys({ ...packageJson.dependencies ?? {}, ...packageJson.devDependencies ?? {} }).length,
@@ -11579,8 +12658,8 @@ function perfBridgeAction(action, subaction) {
 async function perfComparePayload(args = {}, deps = {}) {
   const baselinePath = resolve10(requireString23(args.baseline, "baseline"));
   const candidatePath = resolve10(requireString23(args.candidate, "candidate"));
-  const baseline = await readJson(baselinePath, deps);
-  const candidate = await readJson(candidatePath, deps);
+  const baseline = await readJson6(baselinePath, deps);
+  const candidate = await readJson6(candidatePath, deps);
   const candidateMetrics = metricMap(candidate.metrics ?? []);
   const deltas = [];
   for (const metric of baseline.metrics ?? []) {
@@ -11612,8 +12691,8 @@ async function perfBudgetPayload(args = {}, deps = {}) {
   if (subaction !== "check") throw new Error(`Unknown performance budget action: ${subaction}`);
   const budgetPath = resolve10(requireString23(args.file, "file"));
   const candidatePath = resolve10(requireString23(args.candidate, "candidate"));
-  const budget = await readJson(budgetPath, deps);
-  const candidate = await readJson(candidatePath, deps);
+  const budget = await readJson6(budgetPath, deps);
+  const candidate = await readJson6(candidatePath, deps);
   const metrics = metricMap(candidate.metrics ?? []);
   const checks = (budget.budgets ?? []).map((rule) => {
     const metric = metrics.get(rule.metric);
@@ -11666,7 +12745,7 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
   const allowed = profiler === "ettrace" ? ["start", "stop"] : ["capture"];
   if (!allowed.includes(subaction)) throw new Error(`Unknown ${profiler} action: ${subaction}`);
   const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
-  const nativeArtifact = resolve10(args.nativeArtifact ?? join11(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
+  const nativeArtifact = resolve10(args.nativeArtifact ?? join15(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
   await (deps.mkdir ?? fsMkdir2)(dirname7(nativeArtifact), { recursive: true });
   if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
     await (deps.writeFile ?? fsWriteFile2)(nativeArtifact, `${profiler} placeholder
@@ -11699,10 +12778,10 @@ async function perfBundlePayload(args = {}, deps = {}) {
   let bundlePath = null;
   if (bundleArtifact) {
     bundlePath = resolve10(bundleArtifact);
-    const stat5 = await fileStat(bundlePath, deps);
-    if (stat5?.isFile()) {
+    const stat9 = await fileStat(bundlePath, deps);
+    if (stat9?.isFile()) {
       available = true;
-      metrics.push(perfMetric({ name: "bundle.bytes", value: stat5.size, unit: "bytes", source: "metro", confidence: "high" }));
+      metrics.push(perfMetric({ name: "bundle.bytes", value: stat9.size, unit: "bytes", source: "metro", confidence: "high" }));
     } else {
       unavailableSources.push({ source: "bundle-artifact", reason: "Bundle artifact was not found.", path: bundlePath });
     }
@@ -11848,7 +12927,7 @@ function perfDevelopmentLimitations(extra = []) {
 }
 async function writePerfArtifact(args, action, payload, deps = {}) {
   const timestamp = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  const artifactPath = resolve10(args.outputPath ?? join11(resolveExpoStateRoot10(args), "artifacts", "perf", `${action}-${timestamp}.json`));
+  const artifactPath = resolve10(args.outputPath ?? join15(resolveExpoStateRoot10(args), "artifacts", "perf", `${action}-${timestamp}.json`));
   await (deps.mkdir ?? fsMkdir2)(dirname7(artifactPath), { recursive: true });
   const withArtifact = { ...payload, artifacts: [...payload.artifacts ?? [], artifactPath] };
   await writeJsonFile7(artifactPath, withArtifact, deps);
@@ -11875,10 +12954,10 @@ function targetSummary9(target) {
 function resolveExpoStateRoot10(args = {}) {
   if (args.stateDir) {
     const resolved = resolve10(args.stateDir);
-    return basename10(resolved) === "runs" ? resolve10(join11(resolved, "..")) : resolved;
+    return basename10(resolved) === "runs" ? resolve10(join15(resolved, "..")) : resolved;
   }
   const root = resolve10(args.root ?? args.cwd ?? process.cwd());
-  return join11(root, ".scratch", "expo-ios");
+  return join15(root, ".scratch", "expo-ios");
 }
 function requireString23(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11913,19 +12992,19 @@ async function evaluateHermes(url, expression, deps) {
 async function findUpFile(cwd, name, deps) {
   return deps.findUp ? deps.findUp(cwd, name) : null;
 }
-async function readJson(file, deps) {
+async function readJson6(file, deps) {
   if (deps.readJsonFile) return deps.readJsonFile(file);
-  return JSON.parse(await readFile12(file, "utf8"));
+  return JSON.parse(await readFile20(file, "utf8"));
 }
 async function writeJsonFile7(file, value, deps) {
   await (deps.writeFile ?? fsWriteFile2)(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-async function exists(path8, deps) {
-  return deps.pathExists ? deps.pathExists(path8) : fsStat(path8).then(() => true, () => false);
+async function exists(path14, deps) {
+  return deps.pathExists ? deps.pathExists(path14) : fsStat(path14).then(() => true, () => false);
 }
-async function fileStat(path8, deps) {
-  return deps.stat ? deps.stat(path8) : fsStat(path8).catch(() => null);
+async function fileStat(path14, deps) {
+  return deps.stat ? deps.stat(path14) : fsStat(path14).catch(() => null);
 }
 function redactValue8(value) {
   if (Array.isArray(value)) return value.map(redactValue8);
@@ -11941,8 +13020,8 @@ function firstPositional2(args) {
 }
 
 // src/modules/dashboard-observability/src/main/index.ts
-import { mkdir as mkdir11, readdir as readdir9, readFile as readFile13, writeFile as writeFile6 } from "node:fs/promises";
-import { basename as basename11, dirname as dirname8, join as join12, resolve as resolve11 } from "node:path";
+import { mkdir as mkdir15, readdir as readdir13, readFile as readFile21, writeFile as writeFile11 } from "node:fs/promises";
+import { basename as basename11, dirname as dirname8, join as join16, resolve as resolve11 } from "node:path";
 var DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
 function toolJson30(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
@@ -11953,9 +13032,9 @@ async function dashboardCommand(args = {}) {
   const action = requireString24(args.action ?? positionals[0] ?? "status", "action");
   if (!["start", "status", "stop"].includes(action)) throw new Error(`Unknown dashboard action: ${action}`);
   const stateRoot = resolveExpoStateRoot11(args);
-  const dashboardDir = join12(stateRoot, "dashboard");
-  const statePath = join12(dashboardDir, "dashboard-state.json");
-  await mkdir11(dashboardDir, { recursive: true });
+  const dashboardDir = join16(stateRoot, "dashboard");
+  const statePath = join16(dashboardDir, "dashboard-state.json");
+  await mkdir15(dashboardDir, { recursive: true });
   const previous = asRecord18(await readJsonFile12(statePath).catch(() => null));
   const previousArtifacts = asRecord18(previous?.artifacts);
   const status = action === "start" ? "running" : action === "stop" ? "stopped" : previous?.status ?? "stopped";
@@ -11967,8 +13046,8 @@ async function dashboardCommand(args = {}) {
     stateRoot,
     sessions: await dashboardSessions(stateRoot),
     artifacts: {
-      json: resolve11(String(args.outputPath ?? previousArtifacts?.json ?? join12(dashboardDir, "dashboard.json"))),
-      html: String(previousArtifacts?.html ?? join12(dashboardDir, "index.html"))
+      json: resolve11(String(args.outputPath ?? previousArtifacts?.json ?? join16(dashboardDir, "dashboard.json"))),
+      html: String(previousArtifacts?.html ?? join16(dashboardDir, "index.html"))
     },
     limitations: [DASHBOARD_LIMITATION]
   };
@@ -11978,11 +13057,11 @@ async function dashboardCommand(args = {}) {
   return toolJson30(payload);
 }
 async function dashboardSessions(stateRoot) {
-  const sessionsDir = join12(stateRoot, "sessions");
-  const names = await readdir9(sessionsDir).catch(() => []);
+  const sessionsDir = join16(stateRoot, "sessions");
+  const names = await readdir13(sessionsDir).catch(() => []);
   const sessions = [];
   for (const name of names.sort()) {
-    const sessionPath = join12(sessionsDir, name, "session.json");
+    const sessionPath = join16(sessionsDir, name, "session.json");
     const session = asRecord18(await readJsonFile12(sessionPath).catch(() => null));
     if (session) {
       sessions.push({
@@ -11998,8 +13077,8 @@ async function dashboardSessions(stateRoot) {
   return sessions;
 }
 async function writeDashboardHtml(file, payload) {
-  await mkdir11(dirname8(file), { recursive: true });
-  await writeFile6(file, `<!doctype html>
+  await mkdir15(dirname8(file), { recursive: true });
+  await writeFile11(file, `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>expo-ios dashboard</title></head>
 <body>
@@ -12014,17 +13093,17 @@ async function writeDashboardHtml(file, payload) {
 function resolveExpoStateRoot11(args = {}) {
   if (args.stateDir) {
     const resolved = resolve11(args.stateDir);
-    return basename11(resolved) === "runs" ? resolve11(join12(resolved, "..")) : resolved;
+    return basename11(resolved) === "runs" ? resolve11(join16(resolved, "..")) : resolved;
   }
   const root = resolve11(args.root ?? args.cwd ?? process.cwd());
-  return join12(root, ".scratch", "expo-ios");
+  return join16(root, ".scratch", "expo-ios");
 }
 async function readJsonFile12(file) {
-  return JSON.parse(await readFile13(file, "utf8"));
+  return JSON.parse(await readFile21(file, "utf8"));
 }
 async function writeJsonFile8(file, value) {
-  await mkdir11(dirname8(file), { recursive: true });
-  await writeFile6(file, `${JSON.stringify(value, null, 2)}
+  await mkdir15(dirname8(file), { recursive: true });
+  await writeFile11(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function escapeHtml4(value) {
@@ -12044,7 +13123,7 @@ function asRecord18(value) {
 }
 
 // src/modules/policy-redaction/src/main/command-boundary.ts
-import { mkdir as mkdir12, readFile as readFile14, writeFile as writeFile7 } from "node:fs/promises";
+import { mkdir as mkdir16, readFile as readFile22, writeFile as writeFile12 } from "node:fs/promises";
 import { dirname as dirname9, resolve as resolve12 } from "node:path";
 
 // src/modules/policy-redaction/src/main/domain.ts
@@ -12236,7 +13315,7 @@ async function policyCommand(args = {}) {
 }
 async function redactCommand(args = {}) {
   const file = resolve12(requireString25(args.file, "file"));
-  const raw = await readFile14(file, "utf8");
+  const raw = await readFile22(file, "utf8");
   let payload;
   try {
     payload = redactJson(JSON.parse(raw));
@@ -12246,9 +13325,9 @@ async function redactCommand(args = {}) {
   const outputPath = requireOptionalString10(args.outputPath);
   const resolvedOutputPath = outputPath ? resolve12(outputPath) : null;
   if (resolvedOutputPath) {
-    await mkdir12(dirname9(resolvedOutputPath), { recursive: true });
+    await mkdir16(dirname9(resolvedOutputPath), { recursive: true });
     const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
-    await writeFile7(resolvedOutputPath, `${text}
+    await writeFile12(resolvedOutputPath, `${text}
 `, "utf8");
   }
   return toolJson31({
@@ -12260,7 +13339,7 @@ async function redactCommand(args = {}) {
   });
 }
 async function readJsonFile13(file) {
-  return JSON.parse(await readFile14(file, "utf8"));
+  return JSON.parse(await readFile22(file, "utf8"));
 }
 function requireString25(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -12273,9 +13352,10 @@ function requireOptionalString10(value) {
 }
 
 // src/modules/plugin-self-management/src/main/index.ts
-import { access as access5, mkdir as mkdir13, mkdtemp, readdir as readdir10, readFile as readFile15, writeFile as writeFile8 } from "node:fs/promises";
+import { execFile as nodeExecFile11 } from "node:child_process";
+import { access as access6, mkdir as mkdir17, mkdtemp, readdir as readdir14, readFile as readFile23, writeFile as writeFile13 } from "node:fs/promises";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname10, join as join13, resolve as resolve13 } from "node:path";
+import { dirname as dirname10, join as join17, resolve as resolve13 } from "node:path";
 var CLI_NAME5 = "expo-ios";
 var CLI_VERSION6 = "0.1.0";
 function toolJson32(value) {
@@ -12301,13 +13381,13 @@ async function skillsCommand(args = {}, deps = {}) {
   return toolJson32({ available: true, action, pluginVersion: CLI_VERSION6, ...skill });
 }
 async function listBundledSkills(deps = {}) {
-  const skillsRoot = join13(pluginRoot(deps), "skills");
-  const entries = await readdir10(skillsRoot, { withFileTypes: true }).catch(() => []);
+  const skillsRoot = join17(pluginRoot(deps), "skills");
+  const entries = await readdir14(skillsRoot, { withFileTypes: true }).catch(() => []);
   const skills = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const file = join13(skillsRoot, entry.name, "SKILL.md");
-    const content = await readFile15(file, "utf8").catch(() => null);
+    const file = join17(skillsRoot, entry.name, "SKILL.md");
+    const content = await readFile23(file, "utf8").catch(() => null);
     if (!content) continue;
     const metadata = parseSkillFrontmatter(content);
     skills.push({
@@ -12333,8 +13413,8 @@ async function installCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString26(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown install action: ${action}`);
-  const prefix = resolve13(optionalString7(args.prefix) ?? join13(deps.homeDir ?? homedir2(), ".local"));
-  const binPath = join13(prefix, "bin", CLI_NAME5);
+  const prefix = resolve13(optionalString7(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
+  const binPath = join17(prefix, "bin", CLI_NAME5);
   return toolJson32({
     available: true,
     action,
@@ -12350,7 +13430,7 @@ async function upgradeCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString26(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown upgrade action: ${action}`);
-  const prefix = resolve13(optionalString7(args.prefix) ?? join13(deps.homeDir ?? homedir2(), ".local"));
+  const prefix = resolve13(optionalString7(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
   return toolJson32({
     available: true,
     action,
@@ -12361,16 +13441,16 @@ async function upgradeCommand(args = {}, deps = {}) {
     reason: "No packaged remote upgrade source is configured; local plugin version is authoritative."
   });
 }
-async function releaseCommand(args = {}, deps = {}) {
+async function releaseCommand(args = {}, deps = defaultPluginSelfManagementDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString26(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown release action: ${action}`);
-  const outsideCwd = resolve13(String(args.cwd ?? await mkdtemp(join13(deps.tmpDir ?? tmpdir2(), "expo-ios-release-"))));
-  await mkdir13(outsideCwd, { recursive: true });
-  const fixture = join13(outsideCwd, "routes-fixture");
-  await mkdir13(join13(fixture, "app"), { recursive: true });
-  await writeJsonFile9(join13(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
-  await writeFile8(join13(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
+  const outsideCwd = resolve13(String(args.cwd ?? await mkdtemp(join17(deps.tmpDir ?? tmpdir2(), "expo-ios-release-"))));
+  await mkdir17(outsideCwd, { recursive: true });
+  const fixture = join17(outsideCwd, "routes-fixture");
+  await mkdir17(join17(fixture, "app"), { recursive: true });
+  await writeJsonFile9(join17(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
+  await writeFile13(join17(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
   const checks = [
     await releaseCheck("version", ["--version"], outsideCwd, (result) => result.stdout.trim() === CLI_VERSION6, deps),
     await releaseCheck("help", ["--help"], outsideCwd, (result) => result.stdout.includes("perf") && result.stdout.includes("dashboard"), deps),
@@ -12386,9 +13466,12 @@ async function releaseCommand(args = {}, deps = {}) {
     limitations: ["Release checks verify local CLI packaging behavior; they do not publish or mutate git state."]
   });
 }
-async function releaseCheck(name, argv, cwd, predicate, deps = {}) {
+var defaultPluginSelfManagementDependencies = {
+  execFile: execFile9
+};
+async function releaseCheck(name, argv, cwd, predicate, deps = defaultPluginSelfManagementDependencies) {
   try {
-    if (!deps.execFile) throw new Error("releaseCheck requires execFile dependency.");
+    if (!deps.execFile) return { name, ok: false, exitCode: 1, error: "No subprocess adapter is configured." };
     const result = await deps.execFile(process.execPath, [cliWrapperPath(deps), ...argv], {
       cwd,
       timeout: 2e4,
@@ -12399,30 +13482,30 @@ async function releaseCheck(name, argv, cwd, predicate, deps = {}) {
       name,
       ok,
       exitCode: ok ? 0 : 1,
-      stdout: truncate15(result.stdout, 1e3),
-      stderr: truncate15(result.stderr, 1e3)
+      stdout: truncate17(result.stdout, 1e3),
+      stderr: truncate17(result.stderr, 1e3)
     };
   } catch (error) {
-    return { name, ok: false, exitCode: 1, error: formatError14(error) };
+    return { name, ok: false, exitCode: 1, error: formatError15(error) };
   }
 }
 function cliWrapperPath(deps = {}) {
-  return join13(pluginRoot(deps), "cli", "expo-ios.mjs");
+  return join17(pluginRoot(deps), "cli", "expo-ios.mjs");
 }
 function pluginRoot(deps = {}) {
-  return resolve13(deps.pluginRoot ?? join13(dirname10(new URL(import.meta.url).pathname), "..", ".."));
+  return resolve13(deps.pluginRoot ?? join17(dirname10(new URL(import.meta.url).pathname), "..", ".."));
 }
 async function pathExists6(file) {
   try {
-    await access5(file);
+    await access6(file);
     return true;
   } catch {
     return false;
   }
 }
 async function writeJsonFile9(file, value) {
-  await mkdir13(dirname10(file), { recursive: true });
-  await writeFile8(file, `${JSON.stringify(value, null, 2)}
+  await mkdir17(dirname10(file), { recursive: true });
+  await writeFile13(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function requireString26(value, name) {
@@ -12432,19 +13515,27 @@ function requireString26(value, name) {
 function optionalString7(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-function truncate15(value, max = 4e4) {
+function truncate17(value, max = 4e4) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...[truncated ${text.length - max} chars]`;
 }
-function formatError14(error) {
+function formatError15(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
+function execFile9(file, argv, options) {
+  return new Promise((resolve15) => {
+    nodeExecFile11(file, argv, { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (_error, stdout, stderr) => {
+      resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+    });
+  });
+}
 
 // src/modules/live-backlog/src/main/index.ts
+import { execFile as nodeExecFile12 } from "node:child_process";
 import { mkdir as fsMkdir3, readdir as fsReaddir, writeFile as fsWriteFile3 } from "node:fs/promises";
-import { join as join14, resolve as resolve14 } from "node:path";
+import { join as join18, resolve as resolve14 } from "node:path";
 var EXIT_SUCCESS2 = 0;
 var EXIT_INVALID_USAGE5 = 2;
 var COMMAND_ALIASES = {
@@ -12566,7 +13657,7 @@ function toolJson33(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-async function liveBacklogCommand(args = {}, deps = {}) {
+async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependencies) {
   const action = requireString27(args.action ?? firstPositional3(args) ?? "matrix", "action");
   if (!["matrix", "self-check", "run"].includes(action)) throw new Error(`Unknown live-backlog action: ${action}`);
   const cwd = resolve14(args.cwd ?? process.cwd());
@@ -12582,7 +13673,7 @@ async function liveBacklogCommand(args = {}, deps = {}) {
   if (!selfCheck.ok) {
     return toolJson33({ available: false, action, cwd, scope, source: matrix.source, selfCheck, reason: "Live backlog self-check failed before executing rows." });
   }
-  const outputDir = resolve14(args.outputDir ?? join14(cwd, ".scratch", "expo-ios", "live-backlog", isoStamp3(deps)));
+  const outputDir = resolve14(args.outputDir ?? join18(cwd, ".scratch", "expo-ios", "live-backlog", isoStamp3(deps)));
   await (deps.mkdir ?? fsMkdir3)(outputDir, { recursive: true });
   const rows = [];
   for (const row of matrix.rows) {
@@ -12606,10 +13697,13 @@ async function liveBacklogCommand(args = {}, deps = {}) {
       "Runtime rows can be classified environment-blocked when Metro/Hermes target evidence is absent; those rows are not live passes."
     ]
   };
-  const reportPath = join14(outputDir, "live-backlog-report.json");
+  const reportPath = join18(outputDir, "live-backlog-report.json");
   await writeJsonFile10(reportPath, report, deps);
   return toolJson33({ ...report, reportPath });
 }
+var defaultLiveBacklogDependencies = {
+  execFile: execFile10
+};
 function buildLiveBacklogMatrix(args = {}) {
   const dispatcherCommands = Object.keys(COMMAND_ALIASES).sort();
   const helpCommands = parseHelpCommandNames(cliHelpText2()).sort();
@@ -12874,27 +13968,27 @@ function liveBacklogSelfCheck(matrix) {
     }
   };
 }
-async function runLiveBacklogRow(row, args, deps = {}) {
-  const rowDir = join14(args.outputDir, row.id);
+async function runLiveBacklogRow(row, args, deps = defaultLiveBacklogDependencies) {
+  const rowDir = join18(args.outputDir, row.id);
   await (deps.mkdir ?? fsMkdir3)(rowDir, { recursive: true });
   for (const file of liveBacklogTemplate(row.command, args).setupFiles ?? []) {
-    await (deps.writeFile ?? fsWriteFile3)(join14(rowDir, file.path), file.content, "utf8");
+    await (deps.writeFile ?? fsWriteFile3)(join18(rowDir, file.path), file.content, "utf8");
   }
   if (row.argv.includes("__ACTION_POLICY__")) {
-    await writeJsonFile10(join14(rowDir, "action-policy.json"), {
+    await writeJsonFile10(join18(rowDir, "action-policy.json"), {
       allow: ["set.appearance", "install-app", "uninstall-app", "storage.set", "storage.clear", "state.load", "state.clear", "controls.press", "navigation.back", "navigation.tab"]
     }, deps);
   }
   if (row.argv.includes("__APP_PATH__")) {
-    await (deps.mkdir ?? fsMkdir3)(join14(rowDir, "missing.app"), { recursive: true });
+    await (deps.mkdir ?? fsMkdir3)(join18(rowDir, "missing.app"), { recursive: true });
   }
-  const stateDir = join14(rowDir, "runs");
+  const stateDir = join18(rowDir, "runs");
   const argv = ["--json", "--state-dir", stateDir, ...materializeLiveBacklogArgv(row.argv, args, rowDir)];
   const executable2 = deps.processExecPath ?? process.execPath;
-  const cli = deps.cliWrapperPath ?? join14(resolve14("."), "cli", "expo-ios.mjs");
+  const cli = deps.cliWrapperPath ?? join18(resolve14("."), "cli", "expo-ios.mjs");
   const exactCommand = [executable2, cli, ...argv];
   const startedAt = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString();
-  if (!deps.execFile) throw new Error("live-backlog run requires execFile dependency.");
+  if (!deps.execFile) throw new Error("No subprocess adapter is configured.");
   const result = await deps.execFile(executable2, [cli, ...argv], {
     cwd: args.cwd,
     timeout: 6e4,
@@ -12902,9 +13996,9 @@ async function runLiveBacklogRow(row, args, deps = {}) {
     rejectOnError: false
   });
   const exitCode = result.error?.code ?? 0;
-  const stdoutPath = join14(rowDir, "stdout.json");
-  const stderrPath = join14(rowDir, "stderr.log");
-  const exitCodePath = join14(rowDir, "exit-code.txt");
+  const stdoutPath = join18(rowDir, "stdout.json");
+  const stderrPath = join18(rowDir, "stderr.log");
+  const exitCodePath = join18(rowDir, "exit-code.txt");
   await (deps.writeFile ?? fsWriteFile3)(stdoutPath, result.stdout, "utf8");
   await (deps.writeFile ?? fsWriteFile3)(stderrPath, result.stderr, "utf8");
   await (deps.writeFile ?? fsWriteFile3)(exitCodePath, `${exitCode}
@@ -12937,10 +14031,10 @@ function materializeLiveBacklogArgv(argv, args, rowDir) {
     "__BUNDLE_ID__": args.bundleId ?? "com.maddie.console",
     "__DEVICE__": args.device ?? "booted",
     "__DEV_CLIENT_URL__": args.devClientUrl ?? "exp+maddie://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081",
-    "__ACTION_POLICY__": args.actionPolicy ?? join14(rowDir, "action-policy.json"),
+    "__ACTION_POLICY__": args.actionPolicy ?? join18(rowDir, "action-policy.json"),
     "__OUTPUT_DIR__": args.outputDir,
     "__ROW_DIR__": rowDir,
-    "__APP_PATH__": join14(rowDir, "missing.app")
+    "__APP_PATH__": join18(rowDir, "missing.app")
   };
   return argv.map((part) => {
     let materialized = part;
@@ -13004,7 +14098,7 @@ function summarizeBacklogPayload(parsed) {
 }
 async function listJsonFiles(dir, deps = {}) {
   const entries = await Promise.resolve((deps.readdir ?? fsReaddir)(dir)).catch(() => []);
-  return entries.filter((entry) => entry.endsWith(".json")).sort().map((entry) => join14(dir, entry));
+  return entries.filter((entry) => entry.endsWith(".json")).sort().map((entry) => join18(dir, entry));
 }
 function summarizeLiveBacklogRows(rows) {
   const classifications = {};
@@ -13040,6 +14134,21 @@ function isoStamp3(deps = {}) {
 }
 function firstPositional3(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
+}
+function execFile10(file, argv, options) {
+  return new Promise((resolve15) => {
+    nodeExecFile12(file, argv, {
+      cwd: options.cwd,
+      timeout: options.timeout,
+      maxBuffer: options.maxBuffer
+    }, (error, stdout, stderr) => {
+      resolve15({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error && typeof error === "object" && "code" in error ? { code: Number(error.code) } : error ? { code: 1 } : null
+      });
+    });
+  });
 }
 
 // src/bundled-cli.ts
