@@ -222,7 +222,7 @@ function normalizeSemanticBridgeSnapshot(value: Record<string, any>, filters: Sn
   limitations: string[];
 } {
   const source = typeof value.source === "string" ? value.source : "app-instrumentation";
-  const rawRefs = firstArray(value.refs, value.tree, value.nodes, value.elements, value.items);
+  const rawRefs = flattenSemanticNodes(firstArray(value.refs, value.tree, value.nodes, value.elements, value.items), filters);
   const refs = rawRefs
     .map((node) => normalizeSemanticRef(node, filters))
     .filter((node): node is Partial<RefRecord> & { raw?: unknown } => Boolean(node));
@@ -239,26 +239,50 @@ function normalizeSemanticBridgeSnapshot(value: Record<string, any>, filters: Sn
   };
 }
 
+function flattenSemanticNodes(nodes: unknown[], filters: SnapshotFilters): unknown[] {
+  const flattened: unknown[] = [];
+  const visit = (node: unknown, depth: number) => {
+    if (filters.depth !== null && depth > filters.depth) return;
+    flattened.push(node);
+    const record = asRecord(node);
+    const children = Array.isArray(record?.children) ? record.children : [];
+    for (const child of children) visit(child, depth + 1);
+  };
+  for (const node of nodes) visit(node, 1);
+  return flattened;
+}
+
 function normalizeSemanticRef(node: unknown, filters: SnapshotFilters): (Partial<RefRecord> & { raw?: unknown }) | null {
   const record = asRecord(node);
   if (!record) return null;
-  const role = stringOrNull(record.role ?? record.accessibilityRole ?? record.type);
-  const actions = actionsFrom(record.actions ?? record.accessibilityActions ?? record.handlers);
+  const element = asRecord(record.element);
+  const role = stringOrNull(record.role ?? element?.role ?? record.accessibilityRole ?? element?.accessibilityRole ?? record.type);
+  const explicitActions = actionsFrom(record.actions ?? element?.actions ?? record.accessibilityActions ?? element?.accessibilityActions ?? record.handlers);
+  const component = stringOrNull(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type);
+  const actions = explicitActions.length ? explicitActions : actionsForRoleOrComponent(role, component);
   if (filters.interactiveOnly && actions.length === 0 && !role) return null;
   return {
     role,
-    label: stringOrNull(record.label ?? record.accessibilityLabel ?? record.title ?? record.name),
-    text: stringOrNull(record.text ?? record.children ?? record.value),
-    placeholder: stringOrNull(record.placeholder ?? record.placeholderText),
-    testID: stringOrNull(record.testID ?? record.testId ?? record.testid),
-    nativeID: stringOrNull(record.nativeID ?? record.nativeId),
-    component: stringOrNull(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type),
-    source: record.source ?? record.sourceLocation ?? record._source ?? null,
-    box: normalizeBox(record.box ?? record.bounds ?? record.frame ?? record.layout),
+    label: stringOrNull(record.label ?? element?.label ?? record.accessibilityLabel ?? element?.accessibilityLabel ?? record.title ?? element?.title),
+    text: stringOrNull(record.text ?? element?.text ?? record.value ?? element?.value),
+    placeholder: stringOrNull(record.placeholder ?? element?.placeholder ?? record.placeholderText ?? element?.placeholderText),
+    testID: stringOrNull(record.testID ?? element?.testID ?? record.testId ?? element?.testId ?? record.testid),
+    nativeID: stringOrNull(record.nativeID ?? element?.nativeID ?? record.nativeId ?? element?.nativeId),
+    component,
+    source: record.source ?? element?.source ?? record.sourceLocation ?? element?.sourceLocation ?? record._source ?? element?._source ?? null,
+    box: normalizeBox(record.box ?? element?.box ?? record.bounds ?? element?.bounds ?? record.frame ?? element?.frame ?? record.layout ?? element?.layout),
     actions,
     disabled: typeof record.disabled === "boolean" ? record.disabled : undefined,
     raw: node,
   };
+}
+
+function actionsForRoleOrComponent(role: string | null, component: string | null): string[] {
+  if (role === "button" || role === "link") return ["tap", "inspect"];
+  if (role === "textbox") return ["tap", "fill", "focus", "inspect"];
+  if (role === "switch") return ["tap", "inspect"];
+  if (component && /TextInput/i.test(component)) return ["tap", "fill", "focus", "inspect"];
+  return [];
 }
 
 function firstArray(...values: unknown[]): unknown[] {

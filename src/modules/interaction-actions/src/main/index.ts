@@ -3,6 +3,8 @@ import * as fs from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { basename, join as joinPath } from "node:path";
 import { traceInteraction } from "../../../interaction-trace-expression/src/main/index.ts";
+import { planRefAction, refPoint, scrollPlan } from "../../../ref-actions-wait/src/main/index.ts";
+import { defaultRefActionDependencies } from "../../../ref-actions-wait/src/main/defaults.ts";
 import { automationTakeScreenshot } from "../../../screenshot-capture/src/main/index.ts";
 
 export const MAX_OUTPUT = 40_000;
@@ -121,10 +123,7 @@ const defaultInteractionDependencies: InteractionDependencies = {
   commandPath: defaultCommandPath,
   execFile: defaultExecFile,
   resolveIosDevice: defaultResolveIosDevice,
-  planRefAction: async () => ({ available: false, reason: "Ref actions require a current snapshot." }),
-  readRefRecord: async () => ({ available: false, reason: "No snapshot exists for the current session." }),
-  refPoint: async () => ({ available: false, reason: "Ref point lookup requires a current snapshot." }),
-  scrollPlan: async () => ({ available: false, reason: "Scroll planning requires a current snapshot." }),
+  ...createRefActionAdapter(defaultRefActionDependencies, { planRefAction, refPoint, scrollPlan }),
   policyDecision: defaultPolicyDecision,
   captureScreenshot: (args) => automationTakeScreenshot(args),
   traceInteraction: (args) => traceInteraction(args),
@@ -874,7 +873,7 @@ export function createRefActionAdapter(
   return {
     planRefAction: (args) => refActions.planRefAction(args, refDeps),
     readRefRecord: async (ref, args) => readRefRecordFromCache(ref, args, refDeps),
-    refPoint: (ref) => refActions.refPoint(ref, refDeps),
+    refPoint: async (ref, args) => refPointFromCache(ref, args, refDeps),
     scrollPlan: (args) => refActions.scrollPlan(args, refDeps),
   };
 }
@@ -905,6 +904,30 @@ async function readRefRecordFromCache(
   if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
   if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
   return { available: true, record, cache };
+}
+
+async function refPointFromCache(
+  refValue: unknown,
+  args: InteractionArgs,
+  deps: RefActionAdapterDependencies,
+): Promise<InteractionPayload> {
+  const ref = requireString(refValue, "ref");
+  const found = await readRefRecordFromCache(ref, args, deps);
+  if (found.available === false) return found;
+  const record = asRecord(found.record);
+  const box = asRecord(record.box);
+  if (!box) return { available: false, reason: "Ref does not include bounds.", ref };
+  const x = Number(box.x) + Number(box.width) / 2;
+  const y = Number(box.y) + Number(box.height) / 2;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return { available: false, reason: "Ref bounds are not finite.", ref, box };
+  }
+  return {
+    available: true,
+    ref,
+    point: { x, y },
+    box,
+  };
 }
 
 async function policyGate(

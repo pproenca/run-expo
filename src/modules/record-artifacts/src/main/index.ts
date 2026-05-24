@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -16,7 +17,7 @@ export interface StateRootArgs extends Record<string, unknown> {
   cwd?: string | null;
 }
 
-const RECORD_LIMITATION = "This tracer-bullet command records metadata; native video capture is implemented by a later adapter.";
+const RECORD_LIMITATION = "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
 
 export function toolJson(value: unknown): ToolTextResult {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}\n` }] };
@@ -34,31 +35,51 @@ export async function recordCommand(
   const recordDir = join(stateRoot, "artifacts", "recordings");
   await mkdir(recordDir, { recursive: true });
   const metadataPath = runRecordMetadataPath(stateRoot);
+  const defaultOutputPath = join(recordDir, `recording-${isoStamp(deps)}.mov`);
+  const outputPath = resolve(String(args.outputPath ?? positionals[1] ?? defaultOutputPath));
   if (action === "start") {
+    await mkdir(dirname(outputPath), { recursive: true });
+    const device = typeof args.device === "string" && args.device.trim() ? args.device.trim() : "booted";
+    const child = spawn("xcrun", ["simctl", "io", device, "recordVideo", outputPath], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
     const metadata = {
       available: true,
       action,
       startedAt: now(deps).toISOString(),
       sessionId: session?.sessionId ?? null,
       targetId: session?.activeTargetId ?? null,
+      outputPath,
       status: "recording",
+      pid: child.pid ?? null,
+      command: ["xcrun", "simctl", "io", device, "recordVideo", outputPath],
       limitations: [RECORD_LIMITATION],
     };
     await writeJsonFile(metadataPath, metadata);
     return toolJson({ ...metadata, metadataPath });
   }
-  const outputPath = resolve(String(args.outputPath ?? positionals[1] ?? join(recordDir, `recording-${isoStamp(deps)}.mov`)));
-  await mkdir(dirname(outputPath), { recursive: true });
-  if (!(await pathExists(outputPath))) await writeFile(outputPath, "recording placeholder\n", "utf8");
+  const previous = asRecord(await readJsonFile(metadataPath).catch(() => null));
+  const previousPid = Number(previous?.pid);
+  if (Number.isInteger(previousPid) && previousPid > 0) {
+    try {
+      process.kill(previousPid, "SIGINT");
+    } catch {}
+  }
+  const finalOutputPath = resolve(String(args.outputPath ?? previous?.outputPath ?? outputPath));
+  await waitForPath(finalOutputPath, 3000);
   const metadata = {
     available: true,
     action,
     stoppedAt: now(deps).toISOString(),
     sessionId: session?.sessionId ?? null,
     targetId: session?.activeTargetId ?? null,
-    outputPath,
+    outputPath: finalOutputPath,
     metadataPath,
     status: "stopped",
+    pid: Number.isInteger(previousPid) && previousPid > 0 ? previousPid : null,
+    fileExists: await pathExists(finalOutputPath),
   };
   await writeJsonFile(metadataPath, metadata);
   return toolJson(metadata);
@@ -109,6 +130,15 @@ export async function pathExists(file: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function waitForPath(file: string, timeoutMs: number): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await pathExists(file)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return pathExists(file);
 }
 
 export function requireString(value: unknown, name: string): string {

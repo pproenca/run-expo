@@ -343,6 +343,63 @@ describe("expo98 package bin", () => {
     }
   });
 
+  it("performs ref-backed tap actions from the current snapshot cache", async () => {
+    const project = await makeFixtureProject("expo98-ref-tap-");
+    const fakeBin = resolve(project, "bin");
+    const sessionDir = resolve(project, ".scratch", "expo-ios", "sessions", "s1");
+    const policyPath = resolve(project, "policy.json");
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(sessionDir, { recursive: true });
+      const simctlPayload = JSON.stringify({
+        devices: {
+          "com.apple.CoreSimulator.SimRuntime.iOS-99-0": [{
+            name: "iPhone Fixture",
+            udid: "00000000-0000-0000-0000-000000000123",
+            state: "Booted",
+            isAvailable: true,
+          }],
+        },
+      });
+      await writeFile(resolve(fakeBin, "xcrun"), `#!/bin/sh\nprintf '%s\\n' '${simctlPayload}'\n`, "utf8");
+      await writeFile(resolve(fakeBin, "idb"), "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFile(resolve(fakeBin, "axe"), "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(resolve(fakeBin, "xcrun"), 0o755);
+      await chmod(resolve(fakeBin, "idb"), 0o755);
+      await chmod(resolve(fakeBin, "axe"), 0o755);
+      await writeFile(policyPath, JSON.stringify({ allow: ["tap"] }), "utf8");
+      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
+        sessionId: "s1",
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+        lastSnapshotId: "snap1",
+      }), "utf8");
+      await writeFile(resolve(sessionDir, "refs.json"), JSON.stringify({
+        snapshotId: "snap1",
+        targetId: "target1",
+        refs: [{ ref: "@e1", stale: false, label: "Send", box: { x: 20, y: 40, width: 100, height: 50 }, actions: ["tap"] }],
+      }), "utf8");
+
+      const payload = await runJson([
+        "--root",
+        project,
+        "tap",
+        "@e1",
+        "--action-policy",
+        policyPath,
+      ], {
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ""}` },
+      });
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.x, 70);
+      assert.equal(payload.data.y, 65);
+      assert.equal(payload.data.stderr, "");
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
   it("uses Hermes CDP with a Metro Origin header for rn tree", async () => {
     const metro = await makeFakeHermesMetro({
       available: true,
@@ -536,6 +593,66 @@ describe("expo98 package bin", () => {
       assert.equal(payload.data.refs[0].box.width, 402);
       assert.equal(metro.origin, `http://127.0.0.1:${metro.port}`);
       assert.doesNotMatch(JSON.stringify(payload), oldSemanticBridgeMessagePattern);
+    } finally {
+      await metro.close();
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("flattens hierarchical semantic snapshot trees into actionable refs", async () => {
+    const project = await makeFixtureProject("expo98-semantic-tree-snapshot-");
+    const stateRoot = resolve(project, ".scratch", "expo-ios");
+    const sessionId = "session_test";
+    const targetId = "target_test";
+    const sessionDir = resolve(stateRoot, "sessions", sessionId);
+    const metro = await makeFakeHermesMetro({
+      available: true,
+      source: "native-inspector",
+      routeHint: "/",
+      tree: [{
+        name: "Root",
+        element: { frame: { left: 0, top: 0, width: 402, height: 874 } },
+        children: [{
+          name: "Pressable",
+          element: {
+            label: "Send sign-in link",
+            role: "button",
+            frame: { left: 28, top: 559, width: 345, height: 46 },
+          },
+        }],
+      }],
+    });
+    try {
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(resolve(sessionDir, "session.json"), JSON.stringify({
+        schemaVersion: 1,
+        sessionId,
+        name: "review",
+        artifactDir: sessionDir,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+        activeTargetId: targetId,
+        lastSnapshotId: null,
+        sidecars: [],
+      }), "utf8");
+      await writeFile(resolve(sessionDir, "target.json"), JSON.stringify({
+        targetId,
+        platform: "ios",
+        device: { id: "SIMULATOR-1", name: "iPhone 16", state: "Booted" },
+        app: {},
+        metro: {},
+        selected: true,
+        stale: false,
+      }), "utf8");
+
+      const payload = await runJson(["--root", project, "snapshot", "--bounds", "--metro-port", String(metro.port)]);
+
+      assert.equal(payload.ok, true);
+      assert.equal(payload.data.refs.length, 2);
+      assert.equal(payload.data.refs[1].component, "Pressable");
+      assert.equal(payload.data.refs[1].label, "Send sign-in link");
+      assert.equal(payload.data.refs[1].role, "button");
+      assert.equal(payload.data.refs[1].box.width, 345);
     } finally {
       await metro.close();
       await rm(project, { recursive: true, force: true });

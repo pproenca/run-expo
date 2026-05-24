@@ -621,6 +621,8 @@ function commandArgs(command, args, globals = {}) {
         outputPath: args.outputPath,
         buildKind: args.buildKind,
         samples: args.samples,
+        seconds: args.seconds,
+        pid: args.pid,
         metroPort: args.metroPort,
         cwd,
         root: globals.root,
@@ -3862,7 +3864,7 @@ function semanticBridgeExpression(filters) {
 }
 function normalizeSemanticBridgeSnapshot(value, filters) {
   const source2 = typeof value.source === "string" ? value.source : "app-instrumentation";
-  const rawRefs = firstArray(value.refs, value.tree, value.nodes, value.elements, value.items);
+  const rawRefs = flattenSemanticNodes(firstArray(value.refs, value.tree, value.nodes, value.elements, value.items), filters);
   const refs = rawRefs.map((node) => normalizeSemanticRef(node, filters)).filter((node) => Boolean(node));
   return {
     source: source2,
@@ -3876,26 +3878,48 @@ function normalizeSemanticBridgeSnapshot(value, filters) {
     ]
   };
 }
+function flattenSemanticNodes(nodes, filters) {
+  const flattened = [];
+  const visit = (node, depth) => {
+    if (filters.depth !== null && depth > filters.depth) return;
+    flattened.push(node);
+    const record = asRecord3(node);
+    const children = Array.isArray(record?.children) ? record.children : [];
+    for (const child of children) visit(child, depth + 1);
+  };
+  for (const node of nodes) visit(node, 1);
+  return flattened;
+}
 function normalizeSemanticRef(node, filters) {
   const record = asRecord3(node);
   if (!record) return null;
-  const role = stringOrNull3(record.role ?? record.accessibilityRole ?? record.type);
-  const actions = actionsFrom(record.actions ?? record.accessibilityActions ?? record.handlers);
+  const element = asRecord3(record.element);
+  const role = stringOrNull3(record.role ?? element?.role ?? record.accessibilityRole ?? element?.accessibilityRole ?? record.type);
+  const explicitActions = actionsFrom(record.actions ?? element?.actions ?? record.accessibilityActions ?? element?.accessibilityActions ?? record.handlers);
+  const component2 = stringOrNull3(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type);
+  const actions = explicitActions.length ? explicitActions : actionsForRoleOrComponent(role, component2);
   if (filters.interactiveOnly && actions.length === 0 && !role) return null;
   return {
     role,
-    label: stringOrNull3(record.label ?? record.accessibilityLabel ?? record.title ?? record.name),
-    text: stringOrNull3(record.text ?? record.children ?? record.value),
-    placeholder: stringOrNull3(record.placeholder ?? record.placeholderText),
-    testID: stringOrNull3(record.testID ?? record.testId ?? record.testid),
-    nativeID: stringOrNull3(record.nativeID ?? record.nativeId),
-    component: stringOrNull3(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type),
-    source: record.source ?? record.sourceLocation ?? record._source ?? null,
-    box: normalizeBox(record.box ?? record.bounds ?? record.frame ?? record.layout),
+    label: stringOrNull3(record.label ?? element?.label ?? record.accessibilityLabel ?? element?.accessibilityLabel ?? record.title ?? element?.title),
+    text: stringOrNull3(record.text ?? element?.text ?? record.value ?? element?.value),
+    placeholder: stringOrNull3(record.placeholder ?? element?.placeholder ?? record.placeholderText ?? element?.placeholderText),
+    testID: stringOrNull3(record.testID ?? element?.testID ?? record.testId ?? element?.testId ?? record.testid),
+    nativeID: stringOrNull3(record.nativeID ?? element?.nativeID ?? record.nativeId ?? element?.nativeId),
+    component: component2,
+    source: record.source ?? element?.source ?? record.sourceLocation ?? element?.sourceLocation ?? record._source ?? element?._source ?? null,
+    box: normalizeBox(record.box ?? element?.box ?? record.bounds ?? element?.bounds ?? record.frame ?? element?.frame ?? record.layout ?? element?.layout),
     actions,
     disabled: typeof record.disabled === "boolean" ? record.disabled : void 0,
     raw: node
   };
+}
+function actionsForRoleOrComponent(role, component2) {
+  if (role === "button" || role === "link") return ["tap", "inspect"];
+  if (role === "textbox") return ["tap", "fill", "focus", "inspect"];
+  if (role === "switch") return ["tap", "inspect"];
+  if (component2 && /TextInput/i.test(component2)) return ["tap", "fill", "focus", "inspect"];
+  return [];
 }
 function firstArray(...values) {
   for (const value of values) {
@@ -4045,6 +4069,83 @@ async function planRefAction(args, deps = defaultRefActionDependencies) {
       box: record.box ?? null,
       point: record.box ? centerPoint(record.box) : null
     }
+  };
+}
+async function refPoint(refValue, deps = defaultRefActionDependencies) {
+  const ref = requireString5(refValue, "ref");
+  const found = await readRefRecord(ref, deps);
+  if (found.available === false) {
+    return found;
+  }
+  const box = found.record.box;
+  if (!box) {
+    return { available: false, reason: "Ref does not include bounds.", ref };
+  }
+  return {
+    available: true,
+    ref,
+    point: centerPoint(box),
+    box
+  };
+}
+async function scrollPlan(args, deps = defaultRefActionDependencies) {
+  const maybeRef = /^@e\d+$/.test(String(args.ref ?? "")) ? args.ref : null;
+  const direction = requireString5(
+    maybeRef ? args.targetRef ?? args.direction : args.direction ?? args.ref,
+    "direction"
+  ).toLowerCase();
+  const amount = clampNumber7(args.amount ?? args.text ?? 600, 1, 5e3);
+  const origin = maybeRef ? await readRefPoint(maybeRef, args, deps) : { available: true, point: { x: 200, y: 700 } };
+  if (origin.available === false) {
+    return origin;
+  }
+  const point = origin.point;
+  const delta = {
+    down: { x: 0, y: -amount },
+    up: { x: 0, y: amount },
+    left: { x: amount, y: 0 },
+    right: { x: -amount, y: 0 }
+  }[direction];
+  if (!delta) {
+    return { available: false, reason: `Unknown scroll direction: ${direction}`, direction };
+  }
+  return {
+    available: true,
+    dryRun: true,
+    action: "scroll",
+    direction,
+    amount,
+    coordinates: {
+      startX: point.x,
+      startY: point.y,
+      endX: point.x + delta.x,
+      endY: point.y + delta.y
+    }
+  };
+}
+async function readRefRecord(ref, deps, args) {
+  const cache = await deps.readLatestRefCache(args);
+  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
+  const record = cache.refs.find((item) => item.ref === ref);
+  if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
+  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  return { available: true, record };
+}
+async function readRefPoint(refValue, args, deps) {
+  const ref = requireString5(refValue, "ref");
+  const found = await readRefRecord(ref, deps, args);
+  if (found.available === false) {
+    return found;
+  }
+  const box = found.record.box;
+  if (!box) {
+    return { available: false, reason: "Ref does not include bounds.", ref };
+  }
+  return {
+    available: true,
+    ref,
+    point: centerPoint(box),
+    box
   };
 }
 function centerPoint(box) {
@@ -5394,8 +5495,8 @@ async function resolveIosDevice(requested, options = {}, deps = {}) {
   if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
     return { udid: requested, name: requested, state: "unknown" };
   }
-  const execFile11 = deps.execFile ?? defaultExecFile2;
-  const { stdout } = await execFile11("xcrun", ["simctl", "list", "devices", "available", "--json"], {
+  const execFile12 = deps.execFile ?? defaultExecFile2;
+  const { stdout } = await execFile12("xcrun", ["simctl", "list", "devices", "available", "--json"], {
     timeout: 2e4,
     maxBuffer: 4 * 1024 * 1024
   });
@@ -5423,14 +5524,14 @@ async function openUrl(args, deps = {}) {
   const platform = args.platform ?? "ios";
   const url = requireString7(args.url, "url");
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
-  const execFile11 = deps.execFile ?? defaultExecFile2;
+  const execFile12 = deps.execFile ?? defaultExecFile2;
   if (platform === "android") {
     const adbArgs = androidDeviceArgs2(args.device, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
-    const result2 = await execFile11("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
+    const result2 = await execFile12("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
     return toolJson9(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate8(result2.stdout), stderr: truncate8(result2.stderr) }));
   }
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
-  const result = await execFile11("xcrun", ["simctl", "openurl", device.udid, url], {
+  const result = await execFile12("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
@@ -5441,8 +5542,8 @@ async function openExpoRoute(args, deps = {}) {
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const url = args.url ? requireString7(args.url, "url") : await buildExpoRouteUrl(cwd, args);
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
-  const execFile11 = deps.execFile ?? defaultExecFile2;
-  const result = await execFile11("xcrun", ["simctl", "openurl", device.udid, url], {
+  const execFile12 = deps.execFile ?? defaultExecFile2;
+  const result = await execFile12("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
@@ -6570,10 +6671,7 @@ var defaultInteractionDependencies = {
   commandPath: defaultCommandPath,
   execFile: defaultExecFile3,
   resolveIosDevice: defaultResolveIosDevice2,
-  planRefAction: async () => ({ available: false, reason: "Ref actions require a current snapshot." }),
-  readRefRecord: async () => ({ available: false, reason: "No snapshot exists for the current session." }),
-  refPoint: async () => ({ available: false, reason: "Ref point lookup requires a current snapshot." }),
-  scrollPlan: async () => ({ available: false, reason: "Scroll planning requires a current snapshot." }),
+  ...createRefActionAdapter(defaultRefActionDependencies, { planRefAction, refPoint, scrollPlan }),
   policyDecision: defaultPolicyDecision2,
   captureScreenshot: (args) => automationTakeScreenshot(args),
   traceInteraction: (args) => traceInteraction(args),
@@ -7193,6 +7291,14 @@ function truncate10(value, limit = MAX_OUTPUT9) {
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
+function createRefActionAdapter(refDeps, refActions) {
+  return {
+    planRefAction: (args) => refActions.planRefAction(args, refDeps),
+    readRefRecord: async (ref, args) => readRefRecordFromCache(ref, args, refDeps),
+    refPoint: async (ref, args) => refPointFromCache(ref, args, refDeps),
+    scrollPlan: (args) => refActions.scrollPlan(args, refDeps)
+  };
+}
 function policyDeniedPayload2({ domain, action, policy }) {
   return {
     available: false,
@@ -7204,6 +7310,34 @@ function policyDeniedPayload2({ domain, action, policy }) {
     denied: true,
     reason: "Policy denied action.",
     policy
+  };
+}
+async function readRefRecordFromCache(refValue, args, deps) {
+  const ref = requireString8(refValue, "ref");
+  const cache = await deps.readLatestRefCache(args);
+  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
+  const record = cache.refs.find((item) => item.ref === ref);
+  if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
+  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  return { available: true, record, cache };
+}
+async function refPointFromCache(refValue, args, deps) {
+  const ref = requireString8(refValue, "ref");
+  const found = await readRefRecordFromCache(ref, args, deps);
+  if (found.available === false) return found;
+  const record = asRecord6(found.record);
+  const box = asRecord6(record.box);
+  if (!box) return { available: false, reason: "Ref does not include bounds.", ref };
+  const x = Number(box.x) + Number(box.width) / 2;
+  const y = Number(box.y) + Number(box.height) / 2;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return { available: false, reason: "Ref bounds are not finite.", ref, box };
+  }
+  return {
+    available: true,
+    ref,
+    point: { x, y },
+    box
   };
 }
 async function policyGate(args, action, domain, deps) {
@@ -11186,9 +11320,10 @@ function asRecord13(value) {
 }
 
 // src/modules/record-artifacts/src/main/index.ts
+import { spawn as spawn3 } from "node:child_process";
 import { access as access4, mkdir as mkdir12, readdir as readdir9, readFile as readFile14, writeFile as writeFile7 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname4, join as join11, resolve as resolve6 } from "node:path";
-var RECORD_LIMITATION = "This tracer-bullet command records metadata; native video capture is implemented by a later adapter.";
+var RECORD_LIMITATION = "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
 function toolJson24(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
@@ -11202,31 +11337,52 @@ async function recordCommand(args = {}, deps = {}) {
   const recordDir = join11(stateRoot, "artifacts", "recordings");
   await mkdir12(recordDir, { recursive: true });
   const metadataPath = runRecordMetadataPath(stateRoot);
+  const defaultOutputPath = join11(recordDir, `recording-${isoStamp(deps)}.mov`);
+  const outputPath = resolve6(String(args.outputPath ?? positionals[1] ?? defaultOutputPath));
   if (action === "start") {
+    await mkdir12(dirname4(outputPath), { recursive: true });
+    const device = typeof args.device === "string" && args.device.trim() ? args.device.trim() : "booted";
+    const child = spawn3("xcrun", ["simctl", "io", device, "recordVideo", outputPath], {
+      detached: true,
+      stdio: "ignore"
+    });
+    child.unref();
     const metadata2 = {
       available: true,
       action,
       startedAt: now3(deps).toISOString(),
       sessionId: session?.sessionId ?? null,
       targetId: session?.activeTargetId ?? null,
+      outputPath,
       status: "recording",
+      pid: child.pid ?? null,
+      command: ["xcrun", "simctl", "io", device, "recordVideo", outputPath],
       limitations: [RECORD_LIMITATION]
     };
     await writeJsonFile5(metadataPath, metadata2);
     return toolJson24({ ...metadata2, metadataPath });
   }
-  const outputPath = resolve6(String(args.outputPath ?? positionals[1] ?? join11(recordDir, `recording-${isoStamp(deps)}.mov`)));
-  await mkdir12(dirname4(outputPath), { recursive: true });
-  if (!await pathExists5(outputPath)) await writeFile7(outputPath, "recording placeholder\n", "utf8");
+  const previous = asRecord14(await readJsonFile8(metadataPath).catch(() => null));
+  const previousPid = Number(previous?.pid);
+  if (Number.isInteger(previousPid) && previousPid > 0) {
+    try {
+      process.kill(previousPid, "SIGINT");
+    } catch {
+    }
+  }
+  const finalOutputPath = resolve6(String(args.outputPath ?? previous?.outputPath ?? outputPath));
+  await waitForPath(finalOutputPath, 3e3);
   const metadata = {
     available: true,
     action,
     stoppedAt: now3(deps).toISOString(),
     sessionId: session?.sessionId ?? null,
     targetId: session?.activeTargetId ?? null,
-    outputPath,
+    outputPath: finalOutputPath,
     metadataPath,
-    status: "stopped"
+    status: "stopped",
+    pid: Number.isInteger(previousPid) && previousPid > 0 ? previousPid : null,
+    fileExists: await pathExists5(finalOutputPath)
   };
   await writeJsonFile5(metadataPath, metadata);
   return toolJson24(metadata);
@@ -11268,6 +11424,14 @@ async function pathExists5(file) {
   } catch {
     return false;
   }
+}
+async function waitForPath(file, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await pathExists5(file)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return pathExists5(file);
 }
 function requireString17(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
@@ -11543,7 +11707,7 @@ async function debugInspectCommand(args = {}, deps = {}) {
 }
 async function debugInspectPayload(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
-  const found = await readRefRecord(ref, args, deps);
+  const found = await readRefRecord2(ref, args, deps);
   const stateRoot = resolveExpoStateRoot8(args);
   const session = await latestSession(stateRoot, deps);
   if (found.available === false) {
@@ -11597,7 +11761,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
 }
 async function highlightCommand(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
-  const found = await readRefRecord(ref, args, deps);
+  const found = await readRefRecord2(ref, args, deps);
   if (found.available === false) return toolJson26({ ...found, action: "highlight" });
   if (!found.record.box) {
     return toolJson26({
@@ -11648,7 +11812,7 @@ function highlightSvg({ ref, record, durationMs }) {
 </svg>
 `;
 }
-async function readRefRecord(ref, args = {}, deps = {}) {
+async function readRefRecord2(ref, args = {}, deps = {}) {
   const cache = await readLatestRefCache6(args, deps);
   if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
   const record = (cache.refs ?? []).find((item) => item.ref === ref);
@@ -12519,6 +12683,7 @@ function pickDefined4(record) {
 }
 
 // src/modules/perf-evidence/src/main/index.ts
+import { execFile as nodeExecFile11 } from "node:child_process";
 import { mkdir as fsMkdir2, readFile as readFile19, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
 import { basename as basename10, dirname as dirname7, join as join15, resolve as resolve10 } from "node:path";
 var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
@@ -12754,7 +12919,12 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
   const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
   const nativeArtifact = resolve10(args.nativeArtifact ?? join15(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
   await (deps.mkdir ?? fsMkdir2)(dirname7(nativeArtifact), { recursive: true });
-  if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
+  let sampleResult = null;
+  if (profiler === "ettrace" && subaction === "start" && args.pid !== void 0) {
+    const pid = requirePid(args.pid);
+    const seconds = String(clampNumber22(args.seconds ?? 1, 1, 30));
+    sampleResult = await execFile9("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1e3 });
+  } else if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
     await (deps.writeFile ?? fsWriteFile2)(nativeArtifact, `${profiler} placeholder
 `, "utf8");
   }
@@ -12767,6 +12937,7 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
     mode: "development",
     sources: ["native-profiler"],
     nativeArtifact,
+    sample: sampleResult,
     metrics: [],
     context: await perfContext({ args, projectRoot, metro: null }),
     confidence: subaction === "start" ? "low" : "high",
@@ -12775,6 +12946,11 @@ async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
       "Native profiler workflows are heavier than routine runtime evidence and may require platform tooling outside this CLI."
     ]
   }, deps);
+}
+function requirePid(value) {
+  const pid = Number(value);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error(`pid must be a positive integer, got ${String(value)}.`);
+  return pid;
 }
 async function perfBundlePayload(args = {}, deps = {}) {
   const cwd = await projectCwd(args.cwd, deps);
@@ -13012,6 +13188,17 @@ async function exists(path12, deps) {
 }
 async function fileStat(path12, deps) {
   return deps.stat ? deps.stat(path12) : fsStat(path12).catch(() => null);
+}
+function execFile9(file, argv, options) {
+  return new Promise((resolveExec) => {
+    nodeExecFile11(file, argv, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolveExec({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : null
+      });
+    });
+  });
 }
 function redactValue8(value) {
   if (Array.isArray(value)) return value.map(redactValue8);
@@ -13359,7 +13546,7 @@ function requireOptionalString10(value) {
 }
 
 // src/modules/plugin-self-management/src/main/index.ts
-import { execFile as nodeExecFile11 } from "node:child_process";
+import { execFile as nodeExecFile12 } from "node:child_process";
 import { existsSync } from "node:fs";
 import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile22, writeFile as writeFile11 } from "node:fs/promises";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
@@ -13475,7 +13662,7 @@ async function releaseCommand(args = {}, deps = defaultPluginSelfManagementDepen
   });
 }
 var defaultPluginSelfManagementDependencies = {
-  execFile: execFile9
+  execFile: execFile10
 };
 async function releaseCheck(name, argv, cwd, predicate, deps = defaultPluginSelfManagementDependencies) {
   try {
@@ -13541,16 +13728,16 @@ function formatError15(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
-function execFile9(file, argv, options) {
+function execFile10(file, argv, options) {
   return new Promise((resolve15) => {
-    nodeExecFile11(file, argv, { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (_error, stdout, stderr) => {
+    nodeExecFile12(file, argv, { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (_error, stdout, stderr) => {
       resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   });
 }
 
 // src/modules/live-backlog/src/main/index.ts
-import { execFile as nodeExecFile12 } from "node:child_process";
+import { execFile as nodeExecFile13 } from "node:child_process";
 import { mkdir as fsMkdir3, readdir as fsReaddir, writeFile as fsWriteFile3 } from "node:fs/promises";
 import { join as join18, resolve as resolve14 } from "node:path";
 var EXIT_SUCCESS2 = 0;
@@ -13753,7 +13940,7 @@ async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependenci
   return toolJson33({ ...report, reportPath });
 }
 var defaultLiveBacklogDependencies = {
-  execFile: execFile10
+  execFile: execFile11
 };
 function buildLiveBacklogMatrix(args = {}) {
   const dispatcherCommands = Object.keys(COMMAND_ALIASES).sort();
@@ -14195,9 +14382,9 @@ function isoStamp3(deps = {}) {
 function firstPositional3(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
 }
-function execFile10(file, argv, options) {
+function execFile11(file, argv, options) {
   return new Promise((resolve15) => {
-    nodeExecFile12(file, argv, {
+    nodeExecFile13(file, argv, {
       cwd: options.cwd,
       timeout: options.timeout,
       maxBuffer: options.maxBuffer

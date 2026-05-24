@@ -503,6 +503,8 @@ export function commandArgs(command: string, args: CliArgs, globals: CliGlobals 
         outputPath: args.outputPath,
         buildKind: args.buildKind,
         samples: args.samples,
+        seconds: args.seconds,
+        pid: args.pid,
         metroPort: args.metroPort,
         cwd,
         root: globals.root,

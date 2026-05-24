@@ -1,3 +1,4 @@
+import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir as fsMkdir, readFile, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -285,7 +286,12 @@ export async function perfNativeProfilerPayload(args: Record<string, any> = {}, 
   const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
   const nativeArtifact = resolve(args.nativeArtifact ?? join(resolveExpoStateRoot(args), "artifacts", "perf", defaultName));
   await (deps.mkdir ?? fsMkdir)(dirname(nativeArtifact), { recursive: true });
-  if (subaction !== "start" && !(await exists(nativeArtifact, deps))) {
+  let sampleResult: Record<string, any> | null = null;
+  if (profiler === "ettrace" && subaction === "start" && args.pid !== undefined) {
+    const pid = requirePid(args.pid);
+    const seconds = String(clampNumber(args.seconds ?? 1, 1, 30));
+    sampleResult = await execFile("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1000 });
+  } else if (subaction !== "start" && !(await exists(nativeArtifact, deps))) {
     await (deps.writeFile ?? fsWriteFile)(nativeArtifact, `${profiler} placeholder\n`, "utf8");
   }
   const projectRoot = await projectCwd(args.cwd, deps);
@@ -297,6 +303,7 @@ export async function perfNativeProfilerPayload(args: Record<string, any> = {}, 
     mode: "development",
     sources: ["native-profiler"],
     nativeArtifact,
+    sample: sampleResult,
     metrics: [],
     context: await perfContext({ args, projectRoot, metro: null }),
     confidence: subaction === "start" ? "low" : "high",
@@ -305,6 +312,12 @@ export async function perfNativeProfilerPayload(args: Record<string, any> = {}, 
       "Native profiler workflows are heavier than routine runtime evidence and may require platform tooling outside this CLI.",
     ],
   }, deps);
+}
+
+function requirePid(value: unknown): number {
+  const pid = Number(value);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error(`pid must be a positive integer, got ${String(value)}.`);
+  return pid;
 }
 
 export async function perfBundlePayload(args: Record<string, any> = {}, deps: PerfDependencies = {}): Promise<Record<string, any>> {
@@ -572,6 +585,22 @@ async function exists(path: string, deps: PerfDependencies): Promise<boolean> {
 
 async function fileStat(path: string, deps: PerfDependencies): Promise<{ isFile(): boolean; size: number } | null> {
   return deps.stat ? deps.stat(path) : fsStat(path).catch(() => null);
+}
+
+function execFile(
+  file: string,
+  argv: string[],
+  options: { timeout: number },
+): Promise<{ stdout: string; stderr: string; error: null | { message: string; code?: number | string | null; signal?: string | null } }> {
+  return new Promise((resolveExec) => {
+    nodeExecFile(file, argv, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolveExec({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : null,
+      });
+    });
+  });
 }
 
 function redactValue(value: any): any {
