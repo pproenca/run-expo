@@ -46,7 +46,7 @@ pnpm pack --dry-run --json
 ## Repository Shape
 
 - `src/bundled-cli.ts` contains the source entrypoint for the bundled CLI.
-- `src/modules/` contains internal runtime source modules used only to build the bundle.
+- `src/commands/` contains internal runtime source modules used only to build the bundle.
 - `cli/expo98.mjs` is the generated executable used by `npx expo98`.
 - `cli/expo-ios.mjs` is a compatibility wrapper.
 - `tests/` verifies package entrypoints, direct CLI use, and packed npm contents.

@@ -5,7 +5,7 @@
 ## Runtime Shape
 
 - `src/bundled-cli.ts` is the source entrypoint for the bundled executable.
-- `src/modules/` contains internal runtime modules; they are source-only build inputs, not npm workspaces.
+- `src/commands/` contains internal runtime modules; they are source-only build inputs, not npm workspaces.
 - `scripts/build-bundled-cli.mjs` uses `esbuild` to generate `cli/expo98.mjs`.
 - `cli/expo-ios.mjs` preserves the old command name by delegating to `expo98`.
 - `tests/` verifies the package entrypoints and packed npm contents.

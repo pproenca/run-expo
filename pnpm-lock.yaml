@@ -8,12 +8,13 @@ importers:
 
   .:
     dependencies:
-      esbuild:
-        specifier: ^0.25.12
-        version: 0.25.12
       ws:
         specifier: ^8.21.0
         version: 8.21.0
+    devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
 
 packages:
 

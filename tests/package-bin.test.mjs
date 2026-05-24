@@ -174,6 +174,41 @@ describe("expo98 package bin", () => {
     }
   });
 
+  it("denies route-opening device mutations without an action policy", async () => {
+    const project = await makeFixtureProject("expo98-route-policy-");
+    try {
+      await writeFile(resolve(project, "app.json"), JSON.stringify({ expo: { scheme: "fixture" } }), "utf8");
+
+      const openUrlPayload = await runJson(["open-url", "fixture:///customers"]);
+      const openRoutePayload = await runJson(["open-route", "/customers", "--cwd", project]);
+
+      assert.equal(openUrlPayload.ok, true);
+      assert.equal(openUrlPayload.data.available, false);
+      assert.equal(openUrlPayload.data.code, "policy-denied");
+      assert.equal(openUrlPayload.data.denied, true);
+      assert.equal(openUrlPayload.data.policy.action, "open-url");
+
+      assert.equal(openRoutePayload.ok, true);
+      assert.equal(openRoutePayload.data.available, false);
+      assert.equal(openRoutePayload.data.code, "policy-denied");
+      assert.equal(openRoutePayload.data.denied, true);
+      assert.equal(openRoutePayload.data.policy.action, "open-route");
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it("denies state save without an action policy", async () => {
+    const payload = await runJson(["state", "save", "checkpoint"]);
+
+    assert.equal(payload.ok, true);
+    assert.equal(payload.data.available, false);
+    assert.equal(payload.data.domain, "state");
+    assert.equal(payload.data.action, "save");
+    assert.equal(payload.data.code, "policy-denied");
+    assert.equal(payload.data.policy.action, "state.save");
+  });
+
   it("prepares annotate-screen as an in-app overlay without HTML board artifacts", async () => {
     const project = await makeFixtureProject("expo98-annotate-prepare-");
     try {
@@ -309,7 +344,7 @@ describe("expo98 package bin", () => {
 
   it("honors highlight output-path and refuses zero-sized bounds", async () => {
     const project = await makeFixtureProject("expo98-highlight-");
-    const sessionDir = resolve(project, ".scratch", "expo-ios", "sessions", "s1");
+    const sessionDir = resolve(project, ".scratch", "expo98", "sessions", "s1");
     const outputPath = resolve(project, "custom-highlight.svg");
     try {
       await mkdir(sessionDir, { recursive: true });
@@ -346,7 +381,7 @@ describe("expo98 package bin", () => {
   it("performs ref-backed tap actions from the current snapshot cache", async () => {
     const project = await makeFixtureProject("expo98-ref-tap-");
     const fakeBin = resolve(project, "bin");
-    const sessionDir = resolve(project, ".scratch", "expo-ios", "sessions", "s1");
+    const sessionDir = resolve(project, ".scratch", "expo98", "sessions", "s1");
     const policyPath = resolve(project, "policy.json");
     try {
       await mkdir(fakeBin, { recursive: true });
@@ -666,7 +701,7 @@ describe("expo98 package bin", () => {
 
   it("persists semantic snapshot refs from Hermes bridge evidence", async () => {
     const project = await makeFixtureProject("expo98-semantic-snapshot-");
-    const stateRoot = resolve(project, ".scratch", "expo-ios");
+    const stateRoot = resolve(project, ".scratch", "expo98");
     const sessionId = "session_test";
     const targetId = "target_test";
     const sessionDir = resolve(stateRoot, "sessions", sessionId);
@@ -723,7 +758,7 @@ describe("expo98 package bin", () => {
 
   it("flattens hierarchical semantic snapshot trees into actionable refs", async () => {
     const project = await makeFixtureProject("expo98-semantic-tree-snapshot-");
-    const stateRoot = resolve(project, ".scratch", "expo-ios");
+    const stateRoot = resolve(project, ".scratch", "expo98");
     const sessionId = "session_test";
     const targetId = "target_test";
     const sessionDir = resolve(stateRoot, "sessions", sessionId);
@@ -808,7 +843,7 @@ describe("expo98 package bin", () => {
     assert.equal(files.some((file) => file.includes("/src/main/")), false);
     assert.equal(/from\s+["']\.\.\//.test(bundledCli), false);
     assert.equal(/import\s+["']\.\.\//.test(bundledCli), false);
-    assert.deepEqual(packageJson.dependencies, { esbuild: "^0.25.12", ws: "^8.21.0" });
-    assert.equal(Object.hasOwn(packageJson, "devDependencies"), false);
+    assert.deepEqual(packageJson.dependencies, { ws: "^8.21.0" });
+    assert.deepEqual(packageJson.devDependencies, { esbuild: "^0.25.12" });
   });
 });

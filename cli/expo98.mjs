@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// src/modules/cli-argv-parser/src/main/index.ts
+// src/core/cli-argv-parser/src/main/index.ts
 var EXIT_INVALID_USAGE = 2;
 var CliUsageError = class extends Error {
   exitCode = EXIT_INVALID_USAGE;
@@ -127,679 +127,1032 @@ function coerceCliValue(value) {
   if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
   return value;
 }
+function parseJsonArgument(value, flag) {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new Error(`${flag} must be valid JSON: ${formatError(error)}`);
+  }
+}
 function toCamel(value) {
   return value.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
 }
+function formatError(error) {
+  if (!error) return "Unknown error";
+  const record = error;
+  return String(record.message ?? error);
+}
 
-// src/modules/command-arg-projection/src/main/index.ts
-function commandArgs(command, args, globals = {}) {
+// src/core/command-arg-projection/src/main/common.ts
+function createProjectionContext(command, args, globals) {
   const cwd = args.cwd ?? globals.root;
-  const common = {
+  return {
+    command,
+    args,
+    globals,
     cwd,
-    device: args.device,
-    platform: args.platform,
-    metroPort: args.metroPort,
-    bundleId: args.bundleId,
-    processName: args.processName,
-    devClientUrl: args.devClientUrl,
-    restartDevClient: args.restartDevClient,
-    crashCheckMs: args.crashCheckMs,
-    actionPolicy: args.actionPolicy ?? globals.actionPolicy
+    common: {
+      cwd,
+      device: args.device,
+      platform: args.platform,
+      metroPort: args.metroPort,
+      bundleId: args.bundleId,
+      processName: args.processName,
+      devClientUrl: args.devClientUrl,
+      restartDevClient: args.restartDevClient,
+      crashCheckMs: args.crashCheckMs,
+      actionPolicy: args.actionPolicy ?? globals.actionPolicy
+    }
   };
-  switch (command) {
-    case "doctor":
-      return pickDefined({ cwd, fix: args.fix });
-    case "project-info":
-      return pickDefined({ cwd });
-    case "routes":
-      return pickDefined({ cwd, appDir: args.appDir });
-    case "devices":
-      return pickDefined({ platform: args.platform, limit: args.limit });
-    case "session":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        name: args.name ?? args._[1],
-        olderThan: args.olderThan,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "target":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        targetId: args.targetId ?? args._[1],
-        platform: args.platform,
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "snapshot":
-      return pickDefined({
-        interactive: args.interactive,
-        compact: args.compact,
-        depth: args.depth,
-        source: args.source,
-        bounds: args.bounds,
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "refs":
-      return pickDefined({ cwd, root: globals.root, stateDir: globals.stateDir });
-    case "get":
-      return pickDefined({
-        field: args.field ?? args._[0],
-        ref: args.ref ?? args._[1],
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "find":
-      return pickDefined({
-        kind: args.kind ?? args._[0],
-        value: args.value ?? args._[1],
-        action: args.action ?? args._[2],
-        name: args.name ?? (args._[0] === "nth" ? args._[2] : void 0),
-        text: args.text ?? args._[3],
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "wait": {
-      const first = args._[0];
-      return pickDefined({
-        ref: args.ref ?? (/^@e\d+$/.test(String(first ?? "")) ? first : void 0),
-        ms: args.ms ?? (/^\d+$/.test(String(first ?? "")) ? Number(first) : void 0),
-        state: args.state,
-        text: args.text,
-        route: args.route,
-        metroReady: args.metroReady,
-        appReady: args.appReady,
-        noSpinner: args.noSpinner,
-        fn: args.fn,
-        allowRuntimeEval: globals.allowRuntimeEval,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        metroPort: args.metroPort,
-        timeoutMs: args.timeoutMs,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    }
-    case "batch":
-      return pickDefined({
-        steps: args.steps ?? args._,
-        bail: args.bail,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "boot-simulator":
-      return pickDefined({ device: args.device, openSimulator: args.openSimulator, actionPolicy: args.actionPolicy ?? globals.actionPolicy });
-    case "open-url":
-      return pickDefined({ platform: args.platform, device: args.device, url: args.url ?? args._[0] });
-    case "launch-app":
-      return pickDefined({ ...common, packageName: args.packageName, activity: args.activity });
-    case "terminate-app":
-    case "reload-app":
-    case "install-app":
-    case "uninstall-app":
-      return pickDefined({
-        ...common,
-        appPath: args.appPath ?? args._[0],
-        packageName: args.packageName,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        dryRun: args.dryRun
-      });
-    case "open-dev-menu":
-      return pickDefined({ ...common, action: "open-dev-menu" });
-    case "long-press":
-    case "dbltap":
-    case "fill":
-    case "focus":
-    case "blur":
-    case "select":
-    case "check":
-    case "uncheck":
-    case "drag":
-    case "scroll":
-    case "scroll-into-view": {
-      const first = args._[0];
-      const second = args._[1];
-      const third = args._[2];
-      const scrollRef = command === "scroll" && /^@e\d+$/.test(String(first ?? "")) ? first : void 0;
-      return pickDefined({
-        ...common,
-        command,
-        ref: args.ref ?? scrollRef ?? (command === "scroll" ? void 0 : first),
-        targetRef: args.targetRef ?? (command === "drag" ? second : void 0),
-        text: args.text ?? (command === "fill" || command === "select" ? args._[1] : void 0),
-        direction: args.direction ?? (command === "scroll" ? scrollRef ? second : first : void 0),
-        amount: args.amount ?? (command === "scroll" ? scrollRef ? third : second : void 0),
-        durationMs: args.durationMs,
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    }
-    case "type":
-    case "press":
-      return pickDefined({
-        ...common,
-        action: command,
-        text: args.text ?? args._[0],
-        key: args.key ?? args._[0],
-        dryRun: args.dryRun
-      });
-    case "clipboard":
-    case "keyboard":
-      return pickDefined({
-        ...common,
-        action: args.action ?? args._[0],
-        text: args.text ?? args._[1],
-        key: args.key ?? args._[1],
-        dryRun: args.dryRun
-      });
-    case "set":
-      return pickDefined({
-        ...common,
-        domain: args.domain ?? args._[0],
-        value: args.value ?? args._[1],
-        extra: args.extra ?? args._.slice(2),
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        dryRun: args.dryRun
-      });
-    case "logs":
-      return pickDefined({ ...common, last: args.last, lines: args.lines, predicate: args.predicate });
-    case "screenshot":
-      return pickDefined({
-        platform: args.platform,
-        device: args.device,
-        outputPath: args.outputPath,
-        annotate: args.annotate,
-        full: args.full,
-        fullSegments: args.fullSegments,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "tap":
-      return pickDefined({
-        platform: args.platform,
-        device: args.device,
-        x: args.x,
-        y: args.y,
-        ref: args.ref ?? args._[0],
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "gesture":
-      return pickDefined({
-        platform: args.platform,
-        device: args.device,
-        gesture: args.gesture ?? args._[0],
-        x: args.x,
-        y: args.y,
-        startX: args.startX,
-        startY: args.startY,
-        endX: args.endX,
-        endY: args.endY,
-        durationMs: args.durationMs,
-        holdMs: args.holdMs,
-        repeat: args.repeat,
-        intervalMs: args.intervalMs,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        dryRun: args.dryRun,
-        captureBeforeAfter: args.captureBeforeAfter,
-        outputDir: args.outputDir,
-        includeTrace: args.includeTrace,
-        cwd,
-        metroPort: args.metroPort,
-        componentFilter: args.componentFilter,
-        maxEvents: args.maxEvents
-      });
-    case "open-route":
-      return pickDefined({
-        cwd,
-        device: args.device,
-        url: args.url,
-        scheme: args.scheme,
-        route: args.route ?? args._[0],
-        query: args.query,
-        authCookie: args.authCookie
-      });
-    case "ux-context":
-      return pickDefined({
-        ...common,
-        outputPath: args.outputPath,
-        includeScreenshot: args.includeScreenshot,
-        includeImageAnalysis: args.includeImageAnalysis,
-        includeHierarchy: args.includeHierarchy,
-        includeRuntime: args.includeRuntime,
-        includeComponents: args.includeComponents,
-        componentFilter: args.componentFilter,
-        includeLogs: args.includeLogs,
-        logsLast: args.logsLast
-      });
-    case "annotate-screen":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        cwd,
-        metroPort: args.metroPort,
-        outputDir: args.outputDir,
-        overlayDir: args.overlayDir,
-        endpointPath: args.endpointPath,
-        title: args.title,
-        serve: args.serve,
-        port: args.port,
-        force: args.force,
-        confirmActions: args.confirmActions ?? globals.confirmActions
-      });
-    case "inspector":
-      return pickDefined({
-        cwd,
-        device: args.device,
-        metroPort: args.metroPort,
-        bundleId: args.bundleId,
-        devClientUrl: args.devClientUrl,
-        restartDevClient: args.restartDevClient,
-        action: args.action ?? args._[0],
-        commentTitle: args.commentTitle,
-        maxComments: args.maxComments
-      });
-    case "review-overlay":
-    case "review-overlay-server":
-      return pickDefined({
-        cwd,
-        action: command === "review-overlay-server" ? "server" : args.action ?? args._[0],
-        outputDir: args.outputDir,
-        overlayDir: args.overlayDir,
-        endpointPath: args.endpointPath,
-        metroPort: args.metroPort,
-        title: args.title,
-        port: args.port,
-        serve: args.serve,
-        force: args.force
-      });
-    case "review-next":
-      return pickDefined({
-        cwd,
-        surface: args.surface,
-        stage: args.stage,
-        issue: args.issue ?? args._[0],
-        componentFilter: args.componentFilter,
-        metroPort: args.metroPort,
-        verifierRule: args.verifierRule,
-        hasAcceptanceContract: args.hasAcceptanceContract,
-        hasScreenshot: args.hasScreenshot,
-        hasInteractionProof: args.hasInteractionProof,
-        hasStaticVerifier: args.hasStaticVerifier,
-        changedGesture: args.changedGesture,
-        changedChrome: args.changedChrome,
-        changedNavigation: args.changedNavigation,
-        addedVisibleControls: args.addedVisibleControls
-      });
-    case "trace":
-      return pickDefined({
-        cwd,
-        metroPort: args.metroPort,
-        action: args.action ?? args._[0],
-        componentFilter: args.componentFilter,
-        maxEvents: args.maxEvents,
-        includeEvents: args.includeEvents
-      });
-    case "annotation-server":
-      return pickDefined({ dir: args.dir, port: args.port });
-    case "devtools":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        subaction: args.subaction ?? (args._[0] === "events" ? args._[1] : void 0),
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "console":
-    case "errors":
-      return pickDefined({
-        action: args.clear === true ? "clear" : args.action ?? args._[0],
-        limit: args.limit,
-        metroPort: args.metroPort,
-        cwd
-      });
-    case "metro":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        stackFile: args.stackFile ?? args.file ?? args._[1],
-        metroPort: args.metroPort,
-        cwd
-      });
-    case "navigation":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        tab: args.tab ?? args._[1],
-        route: args.route ?? (args._[0] === "deep-link" ? args._[1] : void 0),
-        url: args.url,
-        scheme: args.scheme,
-        query: args.query,
-        device: args.device,
-        metroPort: args.metroPort,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "network":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        harAction: args.harAction ?? (args._[0] === "har" ? args._[1] : void 0),
-        requestId: args.requestId ?? (args._[0] === "request" ? args._[1] : void 0),
-        outputPath: args.outputPath ?? (args._[0] === "har" && args._[1] === "stop" ? args._[2] : void 0),
-        limit: args.limit,
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "storage":
-      return pickDefined({
-        store: args.store ?? args._[0],
-        action: args.action ?? args._[1] ?? "list",
-        key: args.key ?? args._[2],
-        value: args.value ?? args._[3],
-        limit: args.limit,
-        metroPort: args.metroPort,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        cwd
-      });
-    case "state":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "list",
-        name: args.name ?? args._[1],
-        metroPort: args.metroPort,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        cwd
-      });
-    case "controls":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "list",
-        name: args.name ?? args._[1],
-        metroPort: args.metroPort,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        cwd
-      });
-    case "bridge":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "status",
-        metroPort: args.metroPort,
-        domain: args.domain ?? args._[1],
-        command: args.command ?? args._[2],
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        cwd,
-        confirmActions: args.confirmActions ?? globals.confirmActions
-      });
-    case "accessibility":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "tree",
-        ref: args.ref ?? args._[1],
-        device: args.device,
-        metroPort: args.metroPort,
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "dialog":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "status",
-        text: args.text ?? args._[1],
-        metroPort: args.metroPort,
-        cwd
-      });
-    case "sheet":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "status",
-        metroPort: args.metroPort,
-        cwd
-      });
-    case "record":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "start",
-        outputPath: args.outputPath ?? args._[1],
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "diff":
-      return pickDefined({
-        kind: args.kind ?? args._[0],
-        baseline: args.baseline ?? args._[1],
-        current: args.current ?? args._[2],
-        routeA: args.routeA ?? (args._[0] === "route" ? args._[1] : void 0),
-        routeB: args.routeB ?? (args._[0] === "route" ? args._[2] : void 0),
-        screenshot: args.screenshot,
-        outputPath: args.outputPath,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "expo":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "modules",
-        cwd
-      });
-    case "rn":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "tree",
-        subaction: args.subaction ?? (args._[0] === "renders" ? args._[1] : void 0),
-        ref: args.ref ?? (["inspect", "fiber"].includes(String(args._[0])) ? args._[1] : void 0),
-        metroPort: args.metroPort,
-        raw: args.raw,
-        detail: args.detail,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "perf":
-    case "profiler":
-      return pickDefined({
-        action: command === "profiler" ? "ettrace" : args.action ?? args._[0] ?? "summary",
-        subaction: command === "profiler" ? args.subaction ?? args.action ?? args._[0] ?? "start" : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph", "interaction"].includes(String(args._[0])) ? args._[1] : void 0),
-        label: args.label ?? (args._[0] === "action" ? args._[1] : ["measure", "interaction"].includes(String(args._[0])) ? args._[2] : void 0),
-        interaction: args.interaction ?? (args._[0] === "report" ? args._[1] : void 0),
-        bundleArtifact: args.bundleArtifact ?? (args._[0] === "bundle" ? args._[1] : void 0),
-        baseline: args.baseline,
-        candidate: args.candidate,
-        file: args.file,
-        nativeArtifact: args.nativeArtifact ?? (command === "profiler" ? args._[1] : ["ettrace", "memgraph"].includes(String(args._[0])) ? args._[2] : void 0),
-        outputPath: args.outputPath,
-        buildKind: args.buildKind,
-        samples: args.samples,
-        seconds: args.seconds,
-        pid: args.pid,
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "dashboard":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "status",
-        outputPath: args.outputPath,
-        port: args.port,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "inspect":
-    case "highlight":
-      return pickDefined({
-        ...common,
-        ref: args.ref ?? args._[0],
-        durationMs: args.durationMs,
-        outputPath: args.outputPath,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "review":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        outputPath: args.outputPath,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "policy":
-      return pickDefined({
-        action: args.action ?? args._[0],
-        subject: args.subject ?? args._[1],
-        name: args.name ?? args._[2],
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        cwd
-      });
-    case "redact":
-      return pickDefined({
-        file: args.file ?? args._[0],
-        outputPath: args.outputPath
-      });
-    case "skills":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "list",
-        name: args.name ?? args._[1]
-      });
-    case "install":
-    case "upgrade":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "check",
-        prefix: args.prefix
-      });
-    case "release":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "check",
-        cwd
-      });
-    case "live-backlog":
-      return pickDefined({
-        action: args.action ?? args._[0] ?? "matrix",
-        cwd,
-        outputDir: args.outputDir,
-        scope: args.scope,
-        metroPort: args.metroPort,
-        bundleId: args.bundleId,
-        device: args.device,
-        devClientUrl: args.devClientUrl,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy
-      });
-    default:
-      return {};
-  }
 }
 function pickDefined(object) {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== void 0));
 }
 
-// src/modules/command-dispatch-envelope/src/main/index.ts
+// src/core/command-arg-projection/src/main/projectors/core.ts
+var coreCommandProjectors = {
+  doctor: projectDoctorArgs,
+  "project-info": projectProjectInfoArgs,
+  routes: projectRoutesArgs,
+  devices: projectDevicesArgs,
+  session: projectSessionArgs,
+  target: projectTargetArgs,
+  snapshot: projectSnapshotArgs,
+  refs: projectRefsArgs,
+  get: projectGetArgs,
+  find: projectFindArgs,
+  wait: projectWaitArgs,
+  batch: projectBatchArgs
+};
+function projectDoctorArgs({ args, cwd }) {
+  return pickDefined({ cwd, fix: args.fix });
+}
+function projectProjectInfoArgs({ cwd }) {
+  return pickDefined({ cwd });
+}
+function projectRoutesArgs({ args, cwd }) {
+  return pickDefined({ cwd, appDir: args.appDir });
+}
+function projectDevicesArgs({ args }) {
+  return pickDefined({ platform: args.platform, limit: args.limit });
+}
+function projectSessionArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0],
+    name: args.name ?? args._[1],
+    olderThan: args.olderThan,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectTargetArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0],
+    targetId: args.targetId ?? args._[1],
+    platform: args.platform,
+    metroPort: args.metroPort,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectSnapshotArgs({ args, globals, cwd }) {
+  return pickDefined({
+    interactive: args.interactive,
+    compact: args.compact,
+    depth: args.depth,
+    source: args.source,
+    bounds: args.bounds,
+    metroPort: args.metroPort,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectRefsArgs({ globals, cwd }) {
+  return pickDefined({ cwd, root: globals.root, stateDir: globals.stateDir });
+}
+function projectGetArgs({ args, globals, cwd }) {
+  return pickDefined({
+    field: args.field ?? args._[0],
+    ref: args.ref ?? args._[1],
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectFindArgs({ args, globals, cwd }) {
+  return pickDefined({
+    kind: args.kind ?? args._[0],
+    value: args.value ?? args._[1],
+    action: args.action ?? args._[2],
+    name: args.name ?? (args._[0] === "nth" ? args._[2] : void 0),
+    text: args.text ?? args._[3],
+    dryRun: args.dryRun,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectWaitArgs({ args, globals, cwd }) {
+  const first = args._[0];
+  return pickDefined({
+    ref: args.ref ?? (/^@e\d+$/.test(String(first ?? "")) ? first : void 0),
+    ms: args.ms ?? (/^\d+$/.test(String(first ?? "")) ? Number(first) : void 0),
+    state: args.state,
+    text: args.text,
+    route: args.route,
+    metroReady: args.metroReady,
+    appReady: args.appReady,
+    noSpinner: args.noSpinner,
+    fn: args.fn,
+    allowRuntimeEval: globals.allowRuntimeEval,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    metroPort: args.metroPort,
+    timeoutMs: args.timeoutMs,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectBatchArgs({ args, globals, cwd }) {
+  return pickDefined({ steps: args.steps ?? args._, bail: args.bail, cwd, root: globals.root, stateDir: globals.stateDir });
+}
+
+// src/core/command-arg-projection/src/main/projectors/device.ts
+var deviceCommandProjectors = {
+  "boot-simulator": projectBootSimulatorArgs,
+  "open-url": projectOpenUrlArgs,
+  "launch-app": projectLaunchAppArgs,
+  "terminate-app": projectAppPackageArgs,
+  "reload-app": projectAppPackageArgs,
+  "install-app": projectAppPackageArgs,
+  "uninstall-app": projectAppPackageArgs,
+  "open-dev-menu": projectOpenDevMenuArgs
+};
+function projectBootSimulatorArgs({ args, globals }) {
+  return pickDefined({ device: args.device, openSimulator: args.openSimulator, actionPolicy: args.actionPolicy ?? globals.actionPolicy });
+}
+function projectOpenUrlArgs({ args, globals }) {
+  return pickDefined({
+    platform: args.platform,
+    device: args.device,
+    url: args.url ?? args._[0],
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy
+  });
+}
+function projectLaunchAppArgs({ args, common }) {
+  return pickDefined({ ...common, packageName: args.packageName, activity: args.activity });
+}
+function projectAppPackageArgs({ args, globals, common }) {
+  return pickDefined({
+    ...common,
+    appPath: args.appPath ?? args._[0],
+    packageName: args.packageName,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    dryRun: args.dryRun
+  });
+}
+function projectOpenDevMenuArgs({ common }) {
+  return pickDefined({ ...common, action: "open-dev-menu" });
+}
+
+// src/core/command-arg-projection/src/main/projectors/interaction.ts
+var interactionCommandProjectors = {
+  "long-press": projectRefActionArgs,
+  dbltap: projectRefActionArgs,
+  fill: projectRefActionArgs,
+  focus: projectRefActionArgs,
+  blur: projectRefActionArgs,
+  select: projectRefActionArgs,
+  check: projectRefActionArgs,
+  uncheck: projectRefActionArgs,
+  drag: projectRefActionArgs,
+  scroll: projectRefActionArgs,
+  "scroll-into-view": projectRefActionArgs,
+  type: projectKeyboardTextAliasArgs,
+  press: projectKeyboardTextAliasArgs,
+  clipboard: projectClipboardKeyboardArgs,
+  keyboard: projectClipboardKeyboardArgs,
+  set: projectSetEnvironmentArgs,
+  logs: projectLogsArgs,
+  screenshot: projectScreenshotArgs,
+  tap: projectTapArgs,
+  gesture: projectGestureArgs,
+  "open-route": projectOpenRouteArgs,
+  "ux-context": projectUxContextArgs,
+  "annotate-screen": projectAnnotateScreenArgs,
+  inspector: projectInspectorArgs,
+  "review-overlay": projectReviewOverlayArgs,
+  "review-overlay-server": projectReviewOverlayArgs,
+  "review-next": projectReviewNextArgs,
+  trace: projectTraceArgs,
+  "annotation-server": projectAnnotationServerArgs
+};
+function projectRefActionArgs({ command, args, globals, cwd, common }) {
+  const first = args._[0];
+  const second = args._[1];
+  const third = args._[2];
+  const scrollRef = command === "scroll" && /^@e\d+$/.test(String(first ?? "")) ? first : void 0;
+  return pickDefined({
+    ...common,
+    command,
+    ref: args.ref ?? scrollRef ?? (command === "scroll" ? void 0 : first),
+    targetRef: args.targetRef ?? (command === "drag" ? second : void 0),
+    text: args.text ?? (command === "fill" || command === "select" ? args._[1] : void 0),
+    direction: args.direction ?? (command === "scroll" ? scrollRef ? second : first : void 0),
+    amount: args.amount ?? (command === "scroll" ? scrollRef ? third : second : void 0),
+    durationMs: args.durationMs,
+    dryRun: args.dryRun,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectKeyboardTextAliasArgs({ command, args, common }) {
+  return pickDefined({ ...common, action: command, text: args.text ?? args._[0], key: args.key ?? args._[0], dryRun: args.dryRun });
+}
+function projectClipboardKeyboardArgs({ args, common }) {
+  return pickDefined({ ...common, action: args.action ?? args._[0], text: args.text ?? args._[1], key: args.key ?? args._[1], dryRun: args.dryRun });
+}
+function projectSetEnvironmentArgs({ args, globals, common }) {
+  return pickDefined({
+    ...common,
+    domain: args.domain ?? args._[0],
+    value: args.value ?? args._[1],
+    extra: args.extra ?? args._.slice(2),
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    dryRun: args.dryRun
+  });
+}
+function projectLogsArgs({ args, common }) {
+  return pickDefined({ ...common, last: args.last, lines: args.lines, predicate: args.predicate });
+}
+function projectScreenshotArgs({ args, globals, cwd }) {
+  return pickDefined({
+    platform: args.platform,
+    device: args.device,
+    outputPath: args.outputPath,
+    annotate: args.annotate,
+    full: args.full,
+    fullSegments: args.fullSegments,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectTapArgs({ args, globals, cwd }) {
+  return pickDefined({
+    platform: args.platform,
+    device: args.device,
+    x: args.x,
+    y: args.y,
+    ref: args.ref ?? args._[0],
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    dryRun: args.dryRun,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectGestureArgs({ args, globals, cwd }) {
+  return pickDefined({
+    platform: args.platform,
+    device: args.device,
+    gesture: args.gesture ?? args._[0],
+    x: args.x,
+    y: args.y,
+    startX: args.startX,
+    startY: args.startY,
+    endX: args.endX,
+    endY: args.endY,
+    durationMs: args.durationMs,
+    holdMs: args.holdMs,
+    repeat: args.repeat,
+    intervalMs: args.intervalMs,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    dryRun: args.dryRun,
+    captureBeforeAfter: args.captureBeforeAfter,
+    outputDir: args.outputDir,
+    includeTrace: args.includeTrace,
+    cwd,
+    metroPort: args.metroPort,
+    componentFilter: args.componentFilter,
+    maxEvents: args.maxEvents
+  });
+}
+function projectOpenRouteArgs({ args, globals, cwd }) {
+  return pickDefined({
+    cwd,
+    device: args.device,
+    url: args.url,
+    scheme: args.scheme,
+    route: args.route ?? args._[0],
+    query: args.query,
+    authCookie: args.authCookie,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy
+  });
+}
+function projectUxContextArgs({ args, common }) {
+  return pickDefined({
+    ...common,
+    outputPath: args.outputPath,
+    includeScreenshot: args.includeScreenshot,
+    includeImageAnalysis: args.includeImageAnalysis,
+    includeHierarchy: args.includeHierarchy,
+    includeRuntime: args.includeRuntime,
+    includeComponents: args.includeComponents,
+    componentFilter: args.componentFilter,
+    includeLogs: args.includeLogs,
+    logsLast: args.logsLast
+  });
+}
+function projectAnnotateScreenArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0],
+    cwd,
+    metroPort: args.metroPort,
+    outputDir: args.outputDir,
+    overlayDir: args.overlayDir,
+    endpointPath: args.endpointPath,
+    title: args.title,
+    serve: args.serve,
+    port: args.port,
+    force: args.force,
+    confirmActions: args.confirmActions ?? globals.confirmActions
+  });
+}
+function projectInspectorArgs({ args, cwd }) {
+  return pickDefined({
+    cwd,
+    device: args.device,
+    metroPort: args.metroPort,
+    bundleId: args.bundleId,
+    devClientUrl: args.devClientUrl,
+    restartDevClient: args.restartDevClient,
+    action: args.action ?? args._[0],
+    commentTitle: args.commentTitle,
+    maxComments: args.maxComments
+  });
+}
+function projectReviewOverlayArgs({ command, args, cwd }) {
+  return pickDefined({
+    cwd,
+    action: command === "review-overlay-server" ? "server" : args.action ?? args._[0],
+    outputDir: args.outputDir,
+    overlayDir: args.overlayDir,
+    endpointPath: args.endpointPath,
+    metroPort: args.metroPort,
+    title: args.title,
+    port: args.port,
+    serve: args.serve,
+    force: args.force
+  });
+}
+function projectReviewNextArgs({ args, cwd }) {
+  return pickDefined({
+    cwd,
+    surface: args.surface,
+    stage: args.stage,
+    issue: args.issue ?? args._[0],
+    componentFilter: args.componentFilter,
+    metroPort: args.metroPort,
+    verifierRule: args.verifierRule,
+    hasAcceptanceContract: args.hasAcceptanceContract,
+    hasScreenshot: args.hasScreenshot,
+    hasInteractionProof: args.hasInteractionProof,
+    hasStaticVerifier: args.hasStaticVerifier,
+    changedGesture: args.changedGesture,
+    changedChrome: args.changedChrome,
+    changedNavigation: args.changedNavigation,
+    addedVisibleControls: args.addedVisibleControls
+  });
+}
+function projectTraceArgs({ args, cwd }) {
+  return pickDefined({
+    cwd,
+    metroPort: args.metroPort,
+    action: args.action ?? args._[0],
+    componentFilter: args.componentFilter,
+    maxEvents: args.maxEvents,
+    includeEvents: args.includeEvents
+  });
+}
+function projectAnnotationServerArgs({ args }) {
+  return pickDefined({ dir: args.dir, port: args.port });
+}
+
+// src/core/command-arg-projection/src/main/projectors/maintenance.ts
+var maintenanceCommandProjectors = {
+  dashboard: projectDashboardArgs,
+  inspect: projectInspectHighlightArgs,
+  highlight: projectInspectHighlightArgs,
+  review: projectReviewArgs,
+  policy: projectPolicyArgs,
+  redact: projectRedactArgs,
+  skills: projectSkillsArgs,
+  install: projectPluginLifecycleArgs,
+  upgrade: projectPluginLifecycleArgs,
+  release: projectReleaseArgs,
+  "live-backlog": projectLiveBacklogArgs
+};
+function projectDashboardArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "status", outputPath: args.outputPath, port: args.port, cwd, root: globals.root, stateDir: globals.stateDir });
+}
+function projectInspectHighlightArgs({ args, globals, cwd, common }) {
+  return pickDefined({ ...common, ref: args.ref ?? args._[0], durationMs: args.durationMs, outputPath: args.outputPath, cwd, root: globals.root, stateDir: globals.stateDir });
+}
+function projectReviewArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0], outputPath: args.outputPath, cwd, root: globals.root, stateDir: globals.stateDir });
+}
+function projectPolicyArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0], subject: args.subject ?? args._[1], name: args.name ?? args._[2], actionPolicy: args.actionPolicy ?? globals.actionPolicy, cwd });
+}
+function projectRedactArgs({ args }) {
+  return pickDefined({ file: args.file ?? args._[0], outputPath: args.outputPath });
+}
+function projectSkillsArgs({ args }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "list", name: args.name ?? args._[1] });
+}
+function projectPluginLifecycleArgs({ args }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "check", prefix: args.prefix });
+}
+function projectReleaseArgs({ args, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "check", cwd });
+}
+function projectLiveBacklogArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "matrix",
+    cwd,
+    outputDir: args.outputDir,
+    scope: args.scope,
+    metroPort: args.metroPort,
+    bundleId: args.bundleId,
+    device: args.device,
+    devClientUrl: args.devClientUrl,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy
+  });
+}
+
+// src/core/command-arg-projection/src/main/projectors/runtime-evidence.ts
+var runtimeEvidenceCommandProjectors = {
+  devtools: projectDevtoolsArgs,
+  console: projectDiagnosticsArgs,
+  errors: projectDiagnosticsArgs,
+  metro: projectMetroArgs,
+  navigation: projectNavigationArgs,
+  network: projectNetworkArgs,
+  storage: projectStorageArgs,
+  state: projectStateArgs,
+  controls: projectControlsArgs,
+  bridge: projectBridgeArgs,
+  accessibility: projectAccessibilityArgs,
+  dialog: projectDialogArgs,
+  sheet: projectSheetArgs,
+  record: projectRecordArgs,
+  diff: projectDiffArgs,
+  expo: projectExpoArgs,
+  rn: projectRnArgs,
+  perf: projectPerfArgs,
+  profiler: projectPerfArgs
+};
+function projectDevtoolsArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0],
+    subaction: args.subaction ?? (args._[0] === "events" ? args._[1] : void 0),
+    metroPort: args.metroPort,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectDiagnosticsArgs({ args, cwd }) {
+  return pickDefined({ action: args.clear === true ? "clear" : args.action ?? args._[0], limit: args.limit, metroPort: args.metroPort, cwd });
+}
+function projectMetroArgs({ args, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0], stackFile: args.stackFile ?? args.file ?? args._[1], metroPort: args.metroPort, cwd });
+}
+function projectNavigationArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0],
+    tab: args.tab ?? args._[1],
+    route: args.route ?? (args._[0] === "deep-link" ? args._[1] : void 0),
+    url: args.url,
+    scheme: args.scheme,
+    query: args.query,
+    device: args.device,
+    metroPort: args.metroPort,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectNetworkArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0],
+    harAction: args.harAction ?? (args._[0] === "har" ? args._[1] : void 0),
+    requestId: args.requestId ?? (args._[0] === "request" ? args._[1] : void 0),
+    outputPath: args.outputPath ?? (args._[0] === "har" && args._[1] === "stop" ? args._[2] : void 0),
+    limit: args.limit,
+    metroPort: args.metroPort,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectStorageArgs({ args, globals, cwd }) {
+  return pickDefined({
+    store: args.store ?? args._[0],
+    action: args.action ?? args._[1] ?? "list",
+    key: args.key ?? args._[2],
+    value: args.value ?? args._[3],
+    limit: args.limit,
+    metroPort: args.metroPort,
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    cwd
+  });
+}
+function projectStateArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "list", name: args.name ?? args._[1], metroPort: args.metroPort, actionPolicy: args.actionPolicy ?? globals.actionPolicy, cwd });
+}
+function projectControlsArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "list", name: args.name ?? args._[1], metroPort: args.metroPort, actionPolicy: args.actionPolicy ?? globals.actionPolicy, cwd });
+}
+function projectBridgeArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "status",
+    metroPort: args.metroPort,
+    domain: args.domain ?? args._[1],
+    command: args.command ?? args._[2],
+    actionPolicy: args.actionPolicy ?? globals.actionPolicy,
+    cwd,
+    confirmActions: args.confirmActions ?? globals.confirmActions
+  });
+}
+function projectAccessibilityArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "tree", ref: args.ref ?? args._[1], device: args.device, metroPort: args.metroPort, dryRun: args.dryRun, cwd, root: globals.root, stateDir: globals.stateDir });
+}
+function projectDialogArgs({ args, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "status", text: args.text ?? args._[1], metroPort: args.metroPort, cwd });
+}
+function projectSheetArgs({ args, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "status", metroPort: args.metroPort, cwd });
+}
+function projectRecordArgs({ args, globals, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "start", outputPath: args.outputPath ?? args._[1], cwd, root: globals.root, stateDir: globals.stateDir });
+}
+function projectDiffArgs({ args, globals, cwd }) {
+  return pickDefined({
+    kind: args.kind ?? args._[0],
+    baseline: args.baseline ?? args._[1],
+    current: args.current ?? args._[2],
+    routeA: args.routeA ?? (args._[0] === "route" ? args._[1] : void 0),
+    routeB: args.routeB ?? (args._[0] === "route" ? args._[2] : void 0),
+    screenshot: args.screenshot,
+    outputPath: args.outputPath,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectExpoArgs({ args, cwd }) {
+  return pickDefined({ action: args.action ?? args._[0] ?? "modules", cwd });
+}
+function projectRnArgs({ args, globals, cwd }) {
+  return pickDefined({
+    action: args.action ?? args._[0] ?? "tree",
+    subaction: args.subaction ?? (args._[0] === "renders" ? args._[1] : void 0),
+    ref: args.ref ?? (["inspect", "fiber"].includes(String(args._[0])) ? args._[1] : void 0),
+    metroPort: args.metroPort,
+    raw: args.raw,
+    detail: args.detail,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+function projectPerfArgs({ command, args, globals, cwd }) {
+  return pickDefined({
+    action: command === "profiler" ? "ettrace" : args.action ?? args._[0] ?? "summary",
+    subaction: command === "profiler" ? args.subaction ?? args.action ?? args._[0] ?? "start" : args.subaction ?? (["mark", "measure", "budget", "ettrace", "memgraph", "interaction"].includes(String(args._[0])) ? args._[1] : void 0),
+    label: args.label ?? (args._[0] === "action" ? args._[1] : ["measure", "interaction"].includes(String(args._[0])) ? args._[2] : void 0),
+    interaction: args.interaction ?? (args._[0] === "report" ? args._[1] : void 0),
+    bundleArtifact: args.bundleArtifact ?? (args._[0] === "bundle" ? args._[1] : void 0),
+    baseline: args.baseline,
+    candidate: args.candidate,
+    file: args.file,
+    nativeArtifact: args.nativeArtifact ?? (command === "profiler" ? args._[1] : ["ettrace", "memgraph"].includes(String(args._[0])) ? args._[2] : void 0),
+    outputPath: args.outputPath,
+    buildKind: args.buildKind,
+    samples: args.samples,
+    seconds: args.seconds,
+    pid: args.pid,
+    metroPort: args.metroPort,
+    cwd,
+    root: globals.root,
+    stateDir: globals.stateDir
+  });
+}
+
+// src/core/command-arg-projection/src/main/index.ts
+var COMMAND_PROJECTORS = {
+  ...coreCommandProjectors,
+  ...deviceCommandProjectors,
+  ...interactionCommandProjectors,
+  ...runtimeEvidenceCommandProjectors,
+  ...maintenanceCommandProjectors
+};
+function commandArgs(command, args, globals = {}) {
+  const projector = COMMAND_PROJECTORS[command];
+  return projector ? projector(createProjectionContext(command, args, globals)) : {};
+}
+
+// src/core/tool-json-envelope/src/main/index.ts
+function toolJson(value) {
+  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
+` }], isError: false };
+}
+function unwrapToolJson(result) {
+  const maybe = result;
+  const text = maybe?.content?.[0]?.text;
+  if (typeof text !== "string") {
+    return result;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+
+// src/core/cli-identity/src/main/index.ts
+var CURRENT_CLI_NAME = "expo98";
+var COMPATIBILITY_CLI_NAME = "expo-ios";
+var CLI_VERSION = "0.1.0";
+
+// src/core/command-surface/src/main/index.ts
+var COMMAND_SURFACE = [
+  { command: "doctor", toolName: "doctor", handlerSymbol: "doctor", mutatesRuntime: false },
+  { command: "project-info", toolName: "project_info", handlerSymbol: "projectInfo", mutatesRuntime: false },
+  { command: "routes", toolName: "expo_router_sitemap", handlerSymbol: "expoRouterSitemap", mutatesRuntime: false },
+  { command: "devices", toolName: "list_devices", handlerSymbol: "listDevices", mutatesRuntime: false },
+  { command: "session", toolName: "session", handlerSymbol: "sessionCommand", mutatesRuntime: false },
+  { command: "target", toolName: "target", handlerSymbol: "targetCommand", mutatesRuntime: false },
+  { command: "snapshot", toolName: "snapshot", handlerSymbol: "snapshotCommand", mutatesRuntime: false },
+  { command: "refs", toolName: "refs", handlerSymbol: "refsCommand", mutatesRuntime: false },
+  { command: "get", toolName: "get_ref", handlerSymbol: "getRefCommand", mutatesRuntime: false },
+  { command: "find", toolName: "find", handlerSymbol: "findCommand", mutatesRuntime: false },
+  { command: "wait", toolName: "wait", handlerSymbol: "waitCommand", mutatesRuntime: false },
+  { command: "batch", toolName: "batch", handlerSymbol: "batchCommand", mutatesRuntime: false },
+  { command: "boot-simulator", toolName: "boot_simulator", handlerSymbol: "bootSimulator", mutatesRuntime: true },
+  { command: "open-url", toolName: "open_url", handlerSymbol: "openUrl", mutatesRuntime: true },
+  { command: "launch-app", toolName: "launch_app", handlerSymbol: "launchApp", mutatesRuntime: true },
+  { command: "terminate-app", toolName: "terminate_app", handlerSymbol: "terminateApp", mutatesRuntime: true },
+  { command: "reload-app", toolName: "reload_app", handlerSymbol: "reloadApp", mutatesRuntime: true },
+  { command: "open-dev-menu", toolName: "runtime_inspector", handlerSymbol: "runtimeInspector", mutatesRuntime: true },
+  { command: "install-app", toolName: "install_app", handlerSymbol: "installApp", mutatesRuntime: true },
+  { command: "uninstall-app", toolName: "uninstall_app", handlerSymbol: "uninstallApp", mutatesRuntime: true },
+  { command: "long-press", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "dbltap", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "fill", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "type", toolName: "keyboard", handlerSymbol: "keyboardCommand", mutatesRuntime: true },
+  { command: "press", toolName: "keyboard", handlerSymbol: "keyboardCommand", mutatesRuntime: true },
+  { command: "focus", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "blur", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "select", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "check", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "uncheck", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "drag", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "scroll", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "scroll-into-view", toolName: "ref_action", handlerSymbol: "refActionCommand", mutatesRuntime: true },
+  { command: "clipboard", toolName: "clipboard", handlerSymbol: "clipboardCommand", mutatesRuntime: true },
+  { command: "keyboard", toolName: "keyboard", handlerSymbol: "keyboardCommand", mutatesRuntime: true },
+  { command: "set", toolName: "set_environment", handlerSymbol: "setEnvironmentCommand", mutatesRuntime: true },
+  { command: "logs", toolName: "collect_app_logs", handlerSymbol: "collectAppLogs", mutatesRuntime: false },
+  { command: "screenshot", toolName: "automation_take_screenshot", handlerSymbol: "automationTakeScreenshot", mutatesRuntime: false },
+  { command: "tap", toolName: "automation_tap", handlerSymbol: "automationTap", mutatesRuntime: true },
+  { command: "gesture", toolName: "automation_gesture", handlerSymbol: "automationGesture", mutatesRuntime: true },
+  { command: "open-route", toolName: "open_expo_route", handlerSymbol: "openExpoRoute", mutatesRuntime: true },
+  { command: "ux-context", toolName: "capture_ux_context", handlerSymbol: "captureUxContext", mutatesRuntime: false },
+  { command: "annotate-screen", toolName: "annotate_screen", handlerSymbol: "annotateScreen", mutatesRuntime: false },
+  { command: "inspector", toolName: "runtime_inspector", handlerSymbol: "runtimeInspector", mutatesRuntime: false },
+  { command: "review-overlay", toolName: "review_overlay", handlerSymbol: "reviewOverlay", mutatesRuntime: false },
+  { command: "review-overlay-server", toolName: "review_overlay", handlerSymbol: "reviewOverlay", mutatesRuntime: false },
+  { command: "review-next", toolName: "review_next_step", handlerSymbol: "reviewNextStep", mutatesRuntime: false },
+  { command: "annotation-server", toolName: "annotation_server", handlerSymbol: "removedAnnotationServerCommand", mutatesRuntime: false },
+  { command: "devtools", toolName: "devtools", handlerSymbol: "devtoolsCommand", mutatesRuntime: false },
+  { command: "console", toolName: "console", handlerSymbol: "consoleCommand", mutatesRuntime: false },
+  { command: "errors", toolName: "errors", handlerSymbol: "errorsCommand", mutatesRuntime: false },
+  { command: "metro", toolName: "metro", handlerSymbol: "metroCommand", mutatesRuntime: false },
+  { command: "profiler", toolName: "perf", handlerSymbol: "perfCommand", mutatesRuntime: false },
+  { command: "navigation", toolName: "navigation", handlerSymbol: "navigationCommand", mutatesRuntime: true },
+  { command: "network", toolName: "network", handlerSymbol: "networkCommand", mutatesRuntime: false },
+  { command: "storage", toolName: "storage", handlerSymbol: "storageCommand", mutatesRuntime: true },
+  { command: "state", toolName: "state", handlerSymbol: "stateCommand", mutatesRuntime: true },
+  { command: "controls", toolName: "controls", handlerSymbol: "controlsCommand", mutatesRuntime: true },
+  { command: "bridge", toolName: "bridge", handlerSymbol: "bridgeCommand", mutatesRuntime: false },
+  { command: "accessibility", toolName: "accessibility", handlerSymbol: "accessibilityCommand", mutatesRuntime: false },
+  { command: "dialog", toolName: "dialog", handlerSymbol: "dialogCommand", mutatesRuntime: true },
+  { command: "sheet", toolName: "sheet", handlerSymbol: "sheetCommand", mutatesRuntime: true },
+  { command: "record", toolName: "record", handlerSymbol: "recordCommand", mutatesRuntime: false },
+  { command: "diff", toolName: "diff", handlerSymbol: "diffCommand", mutatesRuntime: false },
+  { command: "inspect", toolName: "debug_inspect", handlerSymbol: "debugInspectCommand", mutatesRuntime: false },
+  { command: "highlight", toolName: "highlight", handlerSymbol: "highlightCommand", mutatesRuntime: false },
+  { command: "expo", toolName: "expo", handlerSymbol: "expoCommand", mutatesRuntime: false },
+  { command: "rn", toolName: "rn", handlerSymbol: "rnCommand", mutatesRuntime: false },
+  { command: "perf", toolName: "perf", handlerSymbol: "perfCommand", mutatesRuntime: false },
+  { command: "dashboard", toolName: "dashboard", handlerSymbol: "dashboardCommand", mutatesRuntime: false },
+  { command: "review", toolName: "review", handlerSymbol: "reviewCommand", mutatesRuntime: false },
+  { command: "policy", toolName: "policy", handlerSymbol: "policyCommand", mutatesRuntime: false },
+  { command: "redact", toolName: "redact", handlerSymbol: "redactCommand", mutatesRuntime: false },
+  { command: "skills", toolName: "skills", handlerSymbol: "skillsCommand", mutatesRuntime: false },
+  { command: "install", toolName: "install", handlerSymbol: "installCommand", mutatesRuntime: false },
+  { command: "upgrade", toolName: "upgrade", handlerSymbol: "upgradeCommand", mutatesRuntime: false },
+  { command: "release", toolName: "release", handlerSymbol: "releaseCommand", mutatesRuntime: false },
+  { command: "live-backlog", toolName: "live_backlog", handlerSymbol: "liveBacklogCommand", mutatesRuntime: false },
+  { command: "trace", toolName: "trace_interaction", handlerSymbol: "traceInteraction", mutatesRuntime: false }
+];
+var COMMAND_ALIASES = Object.freeze(Object.fromEntries(
+  COMMAND_SURFACE.map((entry) => [entry.command, entry.toolName])
+));
+var TOOL_HANDLER_BINDINGS = COMMAND_SURFACE.filter((entry, index, entries) => entries.findIndex((candidate) => candidate.toolName === entry.toolName) === index).map((entry) => [entry.toolName, entry.handlerSymbol]);
+function commandAliases() {
+  return { ...COMMAND_ALIASES };
+}
+function manipulatingCommandNames() {
+  return COMMAND_SURFACE.filter((entry) => entry.mutatesRuntime).map((entry) => entry.command);
+}
+var GLOBAL_FLAGS = [
+  "--json                 Write { ok, data } JSON to stdout",
+  "--plain                Write stable line-oriented output to stdout",
+  "--quiet                Suppress non-essential human output",
+  "--version              Print CLI version",
+  "--root <dir>           Default project root for commands that accept --cwd",
+  "--state-dir <dir>      Persist a run record JSON file in this directory",
+  "--action-policy <path> Permit gated write/device actions from a JSON policy",
+  "--max-output <chars>   Truncate stdout payloads after this many characters",
+  "--content-boundaries   Wrap stdout data in an explicit untrusted-output boundary",
+  "--allow-runtime-eval <true|false>",
+  "                       Permit gated Hermes Runtime.evaluate predicates",
+  "--confirm-actions <list>",
+  "                       Reserved for interactive confirmations; noninteractive runs deny",
+  "--record               Persist a run record under <root>/.scratch/expo98/runs",
+  "--debug                Include debug fields in machine-readable errors",
+  "--no-color             Disable color; output is uncolored by default",
+  "--no-input             Reserved for noninteractive safety; this CLI never prompts"
+];
+var DISCOVERY_COMMANDS = [
+  "doctor                 Check local tool availability and project context",
+  "project-info           Inspect Expo dependencies and app config",
+  "routes                 List Expo Router routes",
+  "devices                List iOS simulators and Android devices",
+  "session new [name]     Create an evidence session and artifact namespace",
+  "target list            List stable simulator/app/Metro target handles",
+  "target select <id>     Store the active target on the latest session",
+  "target current         Show the selected target for the latest session",
+  "snapshot               Capture semantic UI refs for the selected target",
+  "refs                   List cached refs from the latest snapshot",
+  "get <field> <ref>      Inspect one cached ref field",
+  "find <kind> <value>     Locate cached semantic refs and optionally plan an action",
+  "wait                   Wait for cached text or ref state evidence",
+  "batch                  Run multiple expo98 command steps in one process"
+];
+var SIMULATOR_AND_APP_COMMANDS = [
+  "boot-simulator         Boot an iOS simulator",
+  "open-url <url>         Open a URL/deep link",
+  "launch-app             Launch an installed app",
+  "terminate-app          Terminate an installed app",
+  "reload-app             Relaunch an app as a practical JS reload fallback",
+  "open-dev-menu          Open the React Native dev menu on the simulator",
+  "install-app            Install an .app/.ipa with an action policy",
+  "uninstall-app          Uninstall an app with an action policy",
+  "open-route [route]     Open an Expo Router route",
+  "screenshot             Capture a simulator/device screenshot",
+  "tap                    Tap device coordinates",
+  "fill/press/type        Act on focused input or cached semantic refs",
+  "long-press/dbltap      Run semantic ref gestures from cached bounds",
+  "scroll/drag            Run semantic ref or coordinate gestures",
+  "clipboard              Read, write, or paste simulator clipboard text",
+  "keyboard               Type text or press a key through local tooling",
+  "set                    Mutate explicit simulator environment settings",
+  "gesture                Run tap, long-press, drag, or swipe gesture evidence"
+];
+var EVIDENCE_AND_RUNTIME_COMMANDS = [
+  "logs                   Collect recent app/device logs",
+  "ux-context             Capture screenshot, route, runtime, hierarchy, and log context",
+  "annotate-screen        Prepare/read an in-app annotation overlay",
+  "inspector              Toggle RN inspector and install/read simulator comments",
+  "review-overlay         Scaffold/run an in-app Codex review overlay",
+  "review-next            Suggest the next constraint-focused UI review step",
+  "devtools capabilities  Report structured DevTools capability records",
+  "console                Read bounded JS console diagnostics",
+  "errors                 Read bounded JS error diagnostics",
+  "metro status           Report Metro status, targets, and symbolication",
+  "navigation             Read or drive app navigation bridge state",
+  "network                Read metadata-only app network evidence, waterfall, and redacted HAR",
+  "storage                Read or mutate app storage through policy gates",
+  "state                  List/save/load/clear app state snapshots",
+  "controls               List, inspect, or press app-defined controls",
+  "bridge                 Plan/check dev-only app bridge install, health, and domains",
+  "accessibility          Capture native accessibility tree/audit evidence",
+  "dialog                 Report or act on visible dialog blockers",
+  "sheet                  Report or dismiss visible sheet/modal blockers",
+  "record                 Create recording evidence artifacts",
+  "diff                   Write snapshot or screenshot diff artifacts",
+  "expo                   Inspect Expo modules, config, doctor, upstream policy, and prebuild risk",
+  "rn                     Inspect React Native tree, refs, renders, and fiber evidence",
+  "perf                   Measure summary, interaction, report, frame, native, and bundle evidence",
+  "dashboard              Start, stop, or report local session observability",
+  "skills                 List or print bundled companion skill guidance",
+  "install                Check local install target paths",
+  "upgrade                Check local upgrade status",
+  "release                Run local release packaging checks",
+  "live-backlog           Generate or run the source-derived live backlog",
+  "trace                  Start/read/stop/clear a Hermes interaction trace",
+  "profiler start|stop    Native profiler evidence boundary alias for perf ettrace",
+  "inspect <ref>          Inspect cached source/props/bounds plus Metro target status",
+  "highlight <ref>        Write a bounded highlight evidence overlay",
+  "review report|matrix   Assemble captured evidence into review artifacts",
+  "policy show|check      Explain or evaluate action-policy decisions",
+  "redact <file>          Redact secrets from a JSON/text file"
+];
+var EXAMPLES = [
+  "expo98 --json doctor",
+  "expo98 --json session new review",
+  "expo98 --json target list",
+  "expo98 --json snapshot --interactive --source --bounds",
+  "expo98 --json get source @e1",
+  "expo98 --json find role button --name Add tap",
+  "expo98 --json wait --text Customers",
+  "expo98 --json wait @e1 --state visible",
+  `expo98 --json batch '["wait","--text","Customers"]' '["get","source","@e1"]' --bail true`,
+  "expo98 --json screenshot --annotate",
+  "expo98 --json open-route /customers --cwd apps/mobile --scheme myapp --action-policy expo98.policy.json",
+  "expo98 --json annotate-screen prepare --cwd apps/mobile --serve true",
+  "expo98 --json inspector probe --metro-port 8081",
+  "expo98 --json inspector install-comment-menu --metro-port 8081",
+  "expo98 --json inspector open-dev-menu",
+  "expo98 --json terminate-app --bundle-id com.example.app",
+  "expo98 --json reload-app --bundle-id com.example.app",
+  'expo98 --json fill @e1 "hello"',
+  "expo98 --json clipboard read",
+  "expo98 --json set appearance dark --action-policy expo98.policy.json",
+  "expo98 --json review-overlay scaffold --cwd apps/mobile",
+  "expo98 --json review-overlay prepare --cwd apps/mobile --serve true",
+  'expo98 --json review-next --surface calendar --stage pre-patch --issue "drag creates scroll conflict"',
+  "expo98 --json devtools capabilities --metro-port 8081",
+  "expo98 --json expo upstream-policy --cwd apps/mobile",
+  "expo98 --json console --limit 50 --metro-port 8081",
+  "expo98 --json errors --limit 50 --metro-port 8081",
+  "expo98 --json metro status --metro-port 8081",
+  "expo98 --json navigation state --metro-port 8081",
+  "expo98 --json navigation deep-link /customers --scheme myapp",
+  "expo98 --json network requests --metro-port 8081",
+  "expo98 --json network waterfall --metro-port 8081",
+  "expo98 --json network har stop network.har --metro-port 8081",
+  "expo98 --json storage async list --metro-port 8081",
+  "expo98 --json controls list --metro-port 8081",
+  "expo98 --json bridge plan --cwd apps/mobile",
+  "expo98 --json bridge health --cwd apps/mobile --metro-port 8081",
+  "expo98 --json bridge domains storage set --cwd apps/mobile --metro-port 8081",
+  "expo98 --json accessibility tree",
+  "expo98 --json dialog status --metro-port 8081",
+  "expo98 --json diff snapshot --baseline before.json",
+  "expo98 --json expo modules --cwd apps/mobile",
+  "expo98 --json rn tree --metro-port 8081",
+  "expo98 --json rn renders read --metro-port 8081",
+  "expo98 --json rn inspect @e1",
+  "expo98 --json perf summary --metro-port 8081",
+  'expo98 --json perf interaction start "tab-customers" --metro-port 8081',
+  'expo98 --json perf interaction stop "tab-customers" --metro-port 8081',
+  'expo98 --json perf report "tab-customers" --metro-port 8081 --native-artifact sample.txt',
+  'expo98 --json perf action "open customer" --metro-port 8081',
+  "expo98 --json perf bundle dist/index.ios.bundle",
+  "expo98 --json perf compare --baseline before.json --candidate after.json",
+  "expo98 --json perf budget check --file expo98.perf.json --candidate after.json",
+  "expo98 --json perf memgraph capture heap.memgraph",
+  "expo98 --json profiler start",
+  "expo98 --json inspect @e1",
+  "expo98 --json policy check action uninstall-app --action-policy expo98.policy.json",
+  "expo98 --json redact run-record.json --output-path run-record.redacted.json",
+  "expo98 --json dashboard start",
+  "expo98 --json skills get expo98-cli",
+  "expo98 --json release check",
+  "expo98 --json gesture long-press --x 160 --y 720 --duration-ms 900 --dry-run true",
+  "expo98 --json live-backlog matrix --cwd apps/mobile",
+  "expo98 --json trace --action read --metro-port 8081"
+];
+
+// src/core/policy-redaction/src/main/domain.ts
+var REDACTED = "[redacted]";
+var POLICY_REASONS = Object.freeze({
+  READ_ALLOWED: "Read action does not require policy approval.",
+  MISSING_POLICY: "No action policy allowed this state-changing operation.",
+  ACTION_ALLOWED: "Action allowed by policy.",
+  ACTION_DENIED: "Action policy did not allow this operation."
+});
+var BRIDGE_CONFIRMATIONS = Object.freeze({
+  install: "bridge-install",
+  remove: "bridge-remove"
+});
+function checkedPolicyDecision({
+  action,
+  sideEffect,
+  allowed,
+  source = null,
+  reason
+}) {
+  return {
+    checked: true,
+    action,
+    sideEffect,
+    allowed,
+    source,
+    reason
+  };
+}
+
+// src/core/policy-redaction/src/main/redactor.ts
+var SECRET_KEY_PATTERN = /token|authorization|cookie|password|secret|apikey|apiKey/i;
+var URL_QUERY_SECRET_PATTERN = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
+var FREEFORM_SECRET_PATTERN = /\b(token|authorization|password|secret)=([^\s&]+)/gi;
+var BEARER_SECRET_PATTERN = /(authorization=\[redacted\]\s+)[^\s&]+/gi;
+function redactJson(value, key = "") {
+  if (typeof value === "string") {
+    if (isSecretKey(key)) {
+      return REDACTED;
+    }
+    return redactText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactJson(item, key));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([childKey, childValue]) => [
+      childKey,
+      isSecretKey(childKey) ? REDACTED : redactJson(childValue, childKey)
+    ])
+  );
+}
+function redactText(value) {
+  return String(value ?? "").replace(URL_QUERY_SECRET_PATTERN, `$1${REDACTED}`).replace(FREEFORM_SECRET_PATTERN, `$1=${REDACTED}`).replace(BEARER_SECRET_PATTERN, `$1${REDACTED}`);
+}
+function redactValue(value, key = "") {
+  if (typeof value === "string") {
+    return isSecretKey(key) ? REDACTED : redactText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactValue(item, key));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([childKey, childValue]) => [
+      childKey,
+      isSecretKey(childKey) ? REDACTED : redactValue(childValue, childKey)
+    ])
+  );
+}
+function sanitizeErrorMessage(message) {
+  return redactText(String(message ?? ""));
+}
+function formatError2(error, limit = 4e4) {
+  if (!error) return "Unknown error";
+  const record = error;
+  const parts = [record.message ?? String(error)];
+  if (record.stdout) parts.push(`stdout:
+${truncateOutput(record.stdout, limit)}`);
+  if (record.stderr) parts.push(`stderr:
+${truncateOutput(record.stderr, limit)}`);
+  return parts.join("\n\n");
+}
+function truncateOutput(value, limit = 4e4) {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}
+[truncated ${text.length - limit} characters]`;
+}
+function isSecretKey(key) {
+  return SECRET_KEY_PATTERN.test(key);
+}
+
+// src/core/command-dispatch-envelope/src/main/index.ts
 var EXIT_SUCCESS = 0;
 var EXIT_RUNTIME_FAILURE = 1;
 var EXIT_INVALID_USAGE2 = 2;
-var CLI_NAME = "expo-ios";
-var CLI_VERSION = "0.1.0";
-var REDACTED = "[redacted]";
+var CLI_NAME = CURRENT_CLI_NAME;
 var CliUsageError2 = class extends Error {
   exitCode = EXIT_INVALID_USAGE2;
   constructor(message) {
     super(message);
     this.name = "CliUsageError";
   }
-};
-var ALIASES = {
-  "doctor": "doctor",
-  "project-info": "project_info",
-  "routes": "expo_router_sitemap",
-  "devices": "list_devices",
-  "session": "session",
-  "target": "target",
-  "snapshot": "snapshot",
-  "refs": "refs",
-  "get": "get_ref",
-  "find": "find",
-  "wait": "wait",
-  "batch": "batch",
-  "boot-simulator": "boot_simulator",
-  "open-url": "open_url",
-  "launch-app": "launch_app",
-  "terminate-app": "terminate_app",
-  "reload-app": "reload_app",
-  "open-dev-menu": "runtime_inspector",
-  "install-app": "install_app",
-  "uninstall-app": "uninstall_app",
-  "long-press": "ref_action",
-  "dbltap": "ref_action",
-  "fill": "ref_action",
-  "type": "keyboard",
-  "press": "keyboard",
-  "focus": "ref_action",
-  "blur": "ref_action",
-  "select": "ref_action",
-  "check": "ref_action",
-  "uncheck": "ref_action",
-  "drag": "ref_action",
-  "scroll": "ref_action",
-  "scroll-into-view": "ref_action",
-  "clipboard": "clipboard",
-  "keyboard": "keyboard",
-  "set": "set_environment",
-  "logs": "collect_app_logs",
-  "screenshot": "automation_take_screenshot",
-  "tap": "automation_tap",
-  "gesture": "automation_gesture",
-  "open-route": "open_expo_route",
-  "ux-context": "capture_ux_context",
-  "annotate-screen": "annotate_screen",
-  "inspector": "runtime_inspector",
-  "review-overlay": "review_overlay",
-  "review-overlay-server": "review_overlay",
-  "review-next": "review_next_step",
-  "annotation-server": "annotation_server",
-  "devtools": "devtools",
-  "console": "console",
-  "errors": "errors",
-  "metro": "metro",
-  "profiler": "perf",
-  "navigation": "navigation",
-  "network": "network",
-  "storage": "storage",
-  "state": "state",
-  "controls": "controls",
-  "bridge": "bridge",
-  "accessibility": "accessibility",
-  "dialog": "dialog",
-  "sheet": "sheet",
-  "record": "record",
-  "diff": "diff",
-  "inspect": "debug_inspect",
-  "highlight": "highlight",
-  "expo": "expo",
-  "rn": "rn",
-  "perf": "perf",
-  "dashboard": "dashboard",
-  "review": "review",
-  "policy": "policy",
-  "redact": "redact",
-  "skills": "skills",
-  "install": "install",
-  "upgrade": "upgrade",
-  "release": "release",
-  "live-backlog": "live_backlog",
-  "trace": "trace_interaction"
 };
 async function dispatchCommand(parsed, dependencies) {
   const { globals, command, args } = parsed;
@@ -819,14 +1172,14 @@ async function dispatchCommand(parsed, dependencies) {
     stdout(dependencies.printHelp ? dependencies.printHelp() : "");
     return EXIT_SUCCESS;
   }
-  const toolName = ALIASES[command];
+  const toolName = COMMAND_ALIASES[command];
   if (!toolName) {
     throw new CliUsageError2(`Unknown command: ${command}`);
   }
   const effectiveArgs = dependencies.projectArgs ? dependencies.projectArgs(command, args, globals) : pickDefined2({ ...args });
   const recorder = await (dependencies.startRunRecord ? dependencies.startRunRecord({ command, args: effectiveArgs, globals }) : noopRecorder());
   try {
-    const payload = await runTool(toolName, effectiveArgs, {
+    const payload = await runToolAndEmitPayload(toolName, effectiveArgs, {
       handlers: dependencies.handlers,
       command,
       globals,
@@ -848,7 +1201,7 @@ async function dispatchCommand(parsed, dependencies) {
     throw error;
   }
 }
-async function runTool(toolName, args, options) {
+async function runToolAndEmitPayload(toolName, args, options) {
   const handler = options.handlers[toolName];
   if (!handler) {
     throw new CliUsageError2(`Unknown tool: ${toolName}`);
@@ -865,28 +1218,12 @@ async function runTool(toolName, args, options) {
   }
   return redactedPayload;
 }
-function toolJson(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
-}
-function unwrapToolJson(result) {
-  const maybe = result;
-  const text = maybe?.content?.[0]?.text;
-  if (typeof text !== "string") {
-    return result;
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
-}
 function formatCliPayload(payload, options) {
   const globals = options.globals;
   if (globals.quiet && !globals.json) {
     return null;
   }
-  const maybeBoundedPayload = globals.contentBoundaries === true ? { contentBoundary: "expo-ios-untrusted-output", payload } : payload;
+  const maybeBoundedPayload = globals.contentBoundaries === true ? { contentBoundary: "expo98-untrusted-output", payload } : payload;
   if (globals.json) {
     return boundOutput(`${JSON.stringify({ ok: true, data: maybeBoundedPayload }, null, 2)}
 `, globals);
@@ -902,11 +1239,11 @@ function boundOutput(text, globals = { maxOutput: null }) {
   if (globals.maxOutput === null || globals.maxOutput === void 0) {
     return text;
   }
-  const max = clampNumber(globals.maxOutput, 1, 1e7);
+  const max = clampNumber2(globals.maxOutput, 1, 1e7);
   if (text.length <= max) {
     return text;
   }
-  const suffix = "\n[expo-ios output truncated by --max-output]\n";
+  const suffix = "\n[expo98 output truncated by --max-output]\n";
   return `${text.slice(0, Math.max(0, max - suffix.length))}${suffix}`;
 }
 function formatCliError(error, options) {
@@ -980,52 +1317,7 @@ function errorCodeForExitCode(exitCode) {
   if (exitCode === EXIT_RUNTIME_FAILURE) return "runtime_failure";
   return "error";
 }
-function formatError2(error) {
-  if (!error) {
-    return "Unknown error";
-  }
-  const record = error;
-  const parts = [record.message ?? String(error)];
-  if (record.stdout) {
-    parts.push(`stdout:
-${truncate(record.stdout)}`);
-  }
-  if (record.stderr) {
-    parts.push(`stderr:
-${truncate(record.stderr)}`);
-  }
-  return parts.join("\n\n");
-}
-function truncate(value, limit = 4e4) {
-  const text = String(value ?? "");
-  if (text.length <= limit) {
-    return text;
-  }
-  return `${text.slice(0, limit)}
-[truncated ${text.length - limit} characters]`;
-}
-function sanitizeErrorMessage(message) {
-  return redactValue(String(message ?? ""));
-}
-function redactValue(value, key = "") {
-  if (typeof value === "string") {
-    if (isSecretKey(key)) {
-      return REDACTED;
-    }
-    return value.replace(/([?&](cookie|token|authorization|password|secret)=)[^&]+/gi, `$1${REDACTED}`).replace(/\b(token|authorization|password|secret)=([^\s&]+)/gi, `$1=${REDACTED}`).replace(/(authorization=\[redacted\]\s+)[^\s&]+/gi, `$1${REDACTED}`);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactValue(item, key));
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
-    childKey,
-    isSecretKey(childKey) ? REDACTED : redactValue(childValue, childKey)
-  ]));
-}
-function clampNumber(value, min, max) {
+function clampNumber2(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -1035,15 +1327,12 @@ function clampNumber(value, min, max) {
 function pickDefined2(object) {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== void 0));
 }
-function isSecretKey(key) {
-  return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
-}
 function noopRecorder() {
   return { path: null, async finish() {
   } };
 }
 
-// src/modules/cli-facade-entrypoint/src/main/index.ts
+// src/core/cli-facade-entrypoint/src/main/index.ts
 function defaultLastCliOptions() {
   return {
     json: false,
@@ -1078,174 +1367,14 @@ function createCliFacade(deps) {
   };
 }
 
-// src/modules/cli-help-surface/src/main/index.ts
+// src/core/cli-help-surface/src/main/index.ts
 var CLI_VERSION2 = "0.1.0";
-var GLOBAL_FLAGS = [
-  "--json                 Write { ok, data } JSON to stdout",
-  "--plain                Write stable line-oriented output to stdout",
-  "--quiet                Suppress non-essential human output",
-  "--version              Print CLI version",
-  "--root <dir>           Default project root for commands that accept --cwd",
-  "--state-dir <dir>      Persist a run record JSON file in this directory",
-  "--action-policy <path> Permit gated write/device actions from a JSON policy",
-  "--max-output <chars>   Truncate stdout payloads after this many characters",
-  "--content-boundaries   Wrap stdout data in an explicit untrusted-output boundary",
-  "--allow-runtime-eval <true|false>",
-  "                       Permit gated Hermes Runtime.evaluate predicates",
-  "--confirm-actions <list>",
-  "                       Reserved for interactive confirmations; noninteractive runs deny",
-  "--record               Persist a run record under <root>/.scratch/expo-ios/runs",
-  "--debug                Include debug fields in machine-readable errors",
-  "--no-color             Disable color; output is uncolored by default",
-  "--no-input             Reserved for noninteractive safety; this CLI never prompts"
-];
-var DISCOVERY_COMMANDS = [
-  "doctor                 Check local tool availability and project context",
-  "project-info           Inspect Expo dependencies and app config",
-  "routes                 List Expo Router routes",
-  "devices                List iOS simulators and Android devices",
-  "session new [name]     Create an evidence session and artifact namespace",
-  "target list            List stable simulator/app/Metro target handles",
-  "target select <id>     Store the active target on the latest session",
-  "target current         Show the selected target for the latest session",
-  "snapshot               Capture semantic UI refs for the selected target",
-  "refs                   List cached refs from the latest snapshot",
-  "get <field> <ref>      Inspect one cached ref field",
-  "find <kind> <value>     Locate cached semantic refs and optionally plan an action",
-  "wait                   Wait for cached text or ref state evidence",
-  "batch                  Run multiple expo-ios command steps in one process"
-];
-var SIMULATOR_AND_APP_COMMANDS = [
-  "boot-simulator         Boot an iOS simulator",
-  "open-url <url>         Open a URL/deep link",
-  "launch-app             Launch an installed app",
-  "terminate-app          Terminate an installed app",
-  "reload-app             Relaunch an app as a practical JS reload fallback",
-  "open-dev-menu          Open the React Native dev menu on the simulator",
-  "install-app            Install an .app/.ipa with an action policy",
-  "uninstall-app          Uninstall an app with an action policy",
-  "open-route [route]     Open an Expo Router route",
-  "screenshot             Capture a simulator/device screenshot",
-  "tap                    Tap device coordinates",
-  "fill/press/type        Act on focused input or cached semantic refs",
-  "long-press/dbltap      Run semantic ref gestures from cached bounds",
-  "scroll/drag            Run semantic ref or coordinate gestures",
-  "clipboard              Read, write, or paste simulator clipboard text",
-  "keyboard               Type text or press a key through local tooling",
-  "set                    Mutate explicit simulator environment settings",
-  "gesture                Run tap, long-press, drag, or swipe gesture evidence"
-];
-var EVIDENCE_AND_RUNTIME_COMMANDS = [
-  "logs                   Collect recent app/device logs",
-  "ux-context             Capture screenshot, route, runtime, hierarchy, and log context",
-  "annotate-screen        Prepare/read an in-app annotation overlay",
-  "inspector              Toggle RN inspector and install/read simulator comments",
-  "review-overlay         Scaffold/run an in-app Codex review overlay",
-  "review-next            Suggest the next constraint-focused UI review step",
-  "devtools capabilities  Report structured DevTools capability records",
-  "console                Read bounded JS console diagnostics",
-  "errors                 Read bounded JS error diagnostics",
-  "metro status           Report Metro status, targets, and symbolication",
-  "navigation             Read or drive app navigation bridge state",
-  "network                Read metadata-only app network evidence, waterfall, and redacted HAR",
-  "storage                Read or mutate app storage through policy gates",
-  "state                  List/save/load/clear app state snapshots",
-  "controls               List, inspect, or press app-defined controls",
-  "bridge                 Plan/check dev-only app bridge install, health, and domains",
-  "accessibility          Capture native accessibility tree/audit evidence",
-  "dialog                 Report or act on visible dialog blockers",
-  "sheet                  Report or dismiss visible sheet/modal blockers",
-  "record                 Create recording evidence artifacts",
-  "diff                   Write snapshot or screenshot diff artifacts",
-  "expo                   Inspect Expo modules, config, doctor, upstream policy, and prebuild risk",
-  "rn                     Inspect React Native tree, refs, renders, and fiber evidence",
-  "perf                   Measure summary, interaction, report, frame, native, and bundle evidence",
-  "dashboard              Start, stop, or report local session observability",
-  "skills                 List or print bundled companion skill guidance",
-  "install                Check local install target paths",
-  "upgrade                Check local upgrade status",
-  "release                Run local release packaging checks",
-  "live-backlog           Generate or run the source-derived live backlog",
-  "trace                  Start/read/stop/clear a Hermes interaction trace",
-  "profiler start|stop    Native profiler evidence boundary alias for perf ettrace",
-  "inspect <ref>          Inspect cached source/props/bounds plus Metro target status",
-  "highlight <ref>        Write a bounded highlight evidence overlay",
-  "review report|matrix   Assemble captured evidence into review artifacts",
-  "policy show|check      Explain or evaluate action-policy decisions",
-  "redact <file>          Redact secrets from a JSON/text file"
-];
-var EXAMPLES = [
-  "expo-ios --json doctor",
-  "expo-ios --json session new review",
-  "expo-ios --json target list",
-  "expo-ios --json snapshot --interactive --source --bounds",
-  "expo-ios --json get source @e1",
-  "expo-ios --json find role button --name Add tap",
-  "expo-ios --json wait --text Customers",
-  "expo-ios --json wait @e1 --state visible",
-  `expo-ios --json batch '["wait","--text","Customers"]' '["get","source","@e1"]' --bail true`,
-  "expo-ios --json screenshot --annotate",
-  "expo-ios --json open-route /customers --cwd apps/mobile --scheme myapp",
-  "expo-ios --json annotate-screen prepare --cwd apps/mobile --serve true",
-  "expo-ios --json inspector probe --metro-port 8081",
-  "expo-ios --json inspector install-comment-menu --metro-port 8081",
-  "expo-ios --json inspector open-dev-menu",
-  "expo-ios --json terminate-app --bundle-id com.example.app",
-  "expo-ios --json reload-app --bundle-id com.example.app",
-  'expo-ios --json fill @e1 "hello"',
-  "expo-ios --json clipboard read",
-  "expo-ios --json set appearance dark --action-policy expo-ios.policy.json",
-  "expo-ios --json review-overlay scaffold --cwd apps/mobile",
-  "expo-ios --json review-overlay prepare --cwd apps/mobile --serve true",
-  'expo-ios --json review-next --surface calendar --stage pre-patch --issue "drag creates scroll conflict"',
-  "expo-ios --json devtools capabilities --metro-port 8081",
-  "expo-ios --json expo upstream-policy --cwd apps/mobile",
-  "expo-ios --json console --limit 50 --metro-port 8081",
-  "expo-ios --json errors --limit 50 --metro-port 8081",
-  "expo-ios --json metro status --metro-port 8081",
-  "expo-ios --json navigation state --metro-port 8081",
-  "expo-ios --json navigation deep-link /customers --scheme myapp",
-  "expo-ios --json network requests --metro-port 8081",
-  "expo-ios --json network waterfall --metro-port 8081",
-  "expo-ios --json network har stop network.har --metro-port 8081",
-  "expo-ios --json storage async list --metro-port 8081",
-  "expo-ios --json controls list --metro-port 8081",
-  "expo-ios --json bridge plan --cwd apps/mobile",
-  "expo-ios --json bridge health --cwd apps/mobile --metro-port 8081",
-  "expo-ios --json bridge domains storage set --cwd apps/mobile --metro-port 8081",
-  "expo-ios --json accessibility tree",
-  "expo-ios --json dialog status --metro-port 8081",
-  "expo-ios --json diff snapshot --baseline before.json",
-  "expo-ios --json expo modules --cwd apps/mobile",
-  "expo-ios --json rn tree --metro-port 8081",
-  "expo-ios --json rn renders read --metro-port 8081",
-  "expo-ios --json rn inspect @e1",
-  "expo-ios --json perf summary --metro-port 8081",
-  'expo-ios --json perf interaction start "tab-customers" --metro-port 8081',
-  'expo-ios --json perf interaction stop "tab-customers" --metro-port 8081',
-  'expo-ios --json perf report "tab-customers" --metro-port 8081 --native-artifact sample.txt',
-  'expo-ios --json perf action "open customer" --metro-port 8081',
-  "expo-ios --json perf bundle dist/index.ios.bundle",
-  "expo-ios --json perf compare --baseline before.json --candidate after.json",
-  "expo-ios --json perf budget check --file expo-ios.perf.json --candidate after.json",
-  "expo-ios --json perf memgraph capture heap.memgraph",
-  "expo-ios --json profiler start",
-  "expo-ios --json inspect @e1",
-  "expo-ios --json policy check action uninstall-app --action-policy expo-ios.policy.json",
-  "expo-ios --json redact run-record.json --output-path run-record.redacted.json",
-  "expo-ios --json dashboard start",
-  "expo-ios --json skills get expo-ios-cli",
-  "expo-ios --json release check",
-  "expo-ios --json gesture long-press --x 160 --y 720 --duration-ms 900 --dry-run true",
-  "expo-ios --json live-backlog matrix --cwd apps/mobile",
-  "expo-ios --json trace --action read --metro-port 8081"
-];
 function cliHelpText(version = CLI_VERSION2) {
   return [
-    `expo-ios ${version}`,
+    `expo98 ${version}`,
     "",
     "Usage:",
-    "  expo-ios [global flags] <command> [options]",
+    "  expo98 [global flags] <command> [options]",
     "",
     "Global flags:",
     ...indent(GLOBAL_FLAGS),
@@ -1267,21 +1396,7 @@ function indent(lines) {
   return lines.map((line) => `  ${line}`);
 }
 
-// src/modules/cli-runtime-composition/src/main/index.ts
-var CLI_RUNTIME_COMPONENT_SOURCES = [
-  component("parseCliArgs", "@expo98/cli-argv-parser", "parseCliArgs"),
-  component("commandArgs", "@expo98/command-arg-projection", "commandArgs"),
-  component("dispatchCommand", "@expo98/command-dispatch-envelope", "dispatchCommand"),
-  component("formatCliError", "@expo98/command-dispatch-envelope", "formatCliError"),
-  component("exitCodeForError", "@expo98/command-dispatch-envelope", "exitCodeForError"),
-  component("bindHandlers", "@expo98/tool-handler-registry", "bindHandlers"),
-  component("handlerImplementationSources", "@expo98/tool-handler-registry", "handlerImplementationSources"),
-  component("createCliFacade", "@expo98/cli-facade-entrypoint", "createCliFacade"),
-  component("cliHelpText", "@expo98/cli-help-surface", "cliHelpText"),
-  component("startRunRecord", "@expo98/session-run-records", "startRunRecord"),
-  component("createCliRuntime", "@expo98/cli-runtime-composition", "createCliRuntime"),
-  component("createCliExecutable", "@expo98/cli-executable-wrapper", "createCliExecutable")
-];
+// src/core/cli-runtime-composition/src/main/index.ts
 function createCliRuntime(deps) {
   const handlers = deps.bindHandlers(deps.handlerImplementations);
   const dispatchDependencies = {
@@ -1307,11 +1422,8 @@ function createCliRuntime(deps) {
     dispatchDependencies
   };
 }
-function component(role, packageName, exportName, required = true) {
-  return { role, packageName, exportName, required };
-}
 
-// src/modules/cli-executable-wrapper/src/main/index.ts
+// src/core/cli-executable-wrapper/src/main/index.ts
 var DEFAULT_PROCESS_ARGV_OFFSET = 2;
 function createCliExecutable(deps) {
   return {
@@ -1340,139 +1452,7 @@ function readArgv(argv) {
   return typeof argv === "function" ? argv() : argv;
 }
 
-// src/modules/tool-handler-registry/src/main/index.ts
-var TOOL_HANDLER_BINDINGS = [
-  ["doctor", "doctor"],
-  ["project_info", "projectInfo"],
-  ["expo_router_sitemap", "expoRouterSitemap"],
-  ["list_devices", "listDevices"],
-  ["session", "sessionCommand"],
-  ["target", "targetCommand"],
-  ["snapshot", "snapshotCommand"],
-  ["refs", "refsCommand"],
-  ["get_ref", "getRefCommand"],
-  ["find", "findCommand"],
-  ["wait", "waitCommand"],
-  ["batch", "batchCommand"],
-  ["boot_simulator", "bootSimulator"],
-  ["open_url", "openUrl"],
-  ["launch_app", "launchApp"],
-  ["terminate_app", "terminateApp"],
-  ["reload_app", "reloadApp"],
-  ["install_app", "installApp"],
-  ["uninstall_app", "uninstallApp"],
-  ["ref_action", "refActionCommand"],
-  ["clipboard", "clipboardCommand"],
-  ["keyboard", "keyboardCommand"],
-  ["set_environment", "setEnvironmentCommand"],
-  ["collect_app_logs", "collectAppLogs"],
-  ["automation_take_screenshot", "automationTakeScreenshot"],
-  ["automation_tap", "automationTap"],
-  ["automation_gesture", "automationGesture"],
-  ["open_expo_route", "openExpoRoute"],
-  ["capture_ux_context", "captureUxContext"],
-  ["annotate_screen", "annotateScreen"],
-  ["runtime_inspector", "runtimeInspector"],
-  ["review_overlay", "reviewOverlay"],
-  ["review_next_step", "reviewNextStep"],
-  ["annotation_server", "annotationServer"],
-  ["devtools", "devtoolsCommand"],
-  ["console", "consoleCommand"],
-  ["errors", "errorsCommand"],
-  ["metro", "metroCommand"],
-  ["navigation", "navigationCommand"],
-  ["network", "networkCommand"],
-  ["storage", "storageCommand"],
-  ["state", "stateCommand"],
-  ["controls", "controlsCommand"],
-  ["bridge", "bridgeCommand"],
-  ["accessibility", "accessibilityCommand"],
-  ["dialog", "dialogCommand"],
-  ["sheet", "sheetCommand"],
-  ["record", "recordCommand"],
-  ["diff", "diffCommand"],
-  ["debug_inspect", "debugInspectCommand"],
-  ["highlight", "highlightCommand"],
-  ["expo", "expoCommand"],
-  ["rn", "rnCommand"],
-  ["perf", "perfCommand"],
-  ["dashboard", "dashboardCommand"],
-  ["review", "reviewCommand"],
-  ["policy", "policyCommand"],
-  ["redact", "redactCommand"],
-  ["skills", "skillsCommand"],
-  ["install", "installCommand"],
-  ["upgrade", "upgradeCommand"],
-  ["release", "releaseCommand"],
-  ["live_backlog", "liveBacklogCommand"],
-  ["trace_interaction", "traceInteraction"]
-];
-var HANDLER_IMPLEMENTATION_SOURCES = [
-  source("doctor", "@expo98/project-info-doctor"),
-  source("projectInfo", "@expo98/project-info-doctor"),
-  source("expoRouterSitemap", "@expo98/router-sitemap"),
-  source("listDevices", "@expo98/device-listing"),
-  source("sessionCommand", "@expo98/session-run-records"),
-  source("targetCommand", "@expo98/target-management"),
-  source("snapshotCommand", "@expo98/snapshot-evidence"),
-  source("refsCommand", "@expo98/snapshot-evidence"),
-  source("getRefCommand", "@expo98/snapshot-evidence"),
-  source("findCommand", "@expo98/ref-actions-wait"),
-  source("waitCommand", "@expo98/ref-actions-wait"),
-  source("batchCommand", "@expo98/batch-orchestration"),
-  source("bootSimulator", "@expo98/app-lifecycle-actions"),
-  source("openUrl", "@expo98/route-url-actions"),
-  source("launchApp", "@expo98/app-lifecycle-actions"),
-  source("terminateApp", "@expo98/app-lifecycle-actions"),
-  source("reloadApp", "@expo98/app-lifecycle-actions"),
-  source("installApp", "@expo98/app-lifecycle-actions"),
-  source("uninstallApp", "@expo98/app-lifecycle-actions"),
-  source("refActionCommand", "@expo98/interaction-actions"),
-  source("clipboardCommand", "@expo98/interaction-actions"),
-  source("keyboardCommand", "@expo98/interaction-actions"),
-  source("setEnvironmentCommand", "@expo98/interaction-actions"),
-  source("collectAppLogs", "@expo98/app-lifecycle-actions"),
-  source("automationTakeScreenshot", "@expo98/screenshot-capture"),
-  source("automationTap", "@expo98/interaction-actions"),
-  source("automationGesture", "@expo98/interaction-actions"),
-  source("openExpoRoute", "@expo98/route-url-actions"),
-  source("captureUxContext", "@expo98/ux-context-capture"),
-  source("annotateScreen", "@expo98/annotate-screen-artifacts"),
-  source("runtimeInspector", "@expo98/runtime-inspector-actions"),
-  source("reviewOverlay", "@expo98/review-overlay-workflow"),
-  source("reviewNextStep", "@expo98/review-next-guidance"),
-  source("annotationServer", "@expo98/annotation-server-http"),
-  source("devtoolsCommand", "@expo98/devtools-diagnostics"),
-  source("consoleCommand", "@expo98/devtools-diagnostics"),
-  source("errorsCommand", "@expo98/devtools-diagnostics"),
-  source("metroCommand", "@expo98/metro-probes"),
-  source("navigationCommand", "@expo98/navigation-deeplinks"),
-  source("networkCommand", "@expo98/network-evidence"),
-  source("storageCommand", "@expo98/bridge-domain-actions"),
-  source("stateCommand", "@expo98/bridge-domain-actions"),
-  source("controlsCommand", "@expo98/bridge-domain-actions"),
-  source("bridgeCommand", "@expo98/bridge-command-adapter"),
-  source("accessibilityCommand", "@expo98/accessibility-actions"),
-  source("dialogCommand", "@expo98/modal-blocker-actions"),
-  source("sheetCommand", "@expo98/modal-blocker-actions"),
-  source("recordCommand", "@expo98/record-artifacts"),
-  source("diffCommand", "@expo98/review-evidence-reports"),
-  source("debugInspectCommand", "@expo98/debug-inspect-highlight"),
-  source("highlightCommand", "@expo98/debug-inspect-highlight"),
-  source("expoCommand", "@expo98/expo-introspection-actions"),
-  source("rnCommand", "@expo98/rn-introspection"),
-  source("perfCommand", "@expo98/perf-evidence"),
-  source("dashboardCommand", "@expo98/dashboard-observability"),
-  source("reviewCommand", "@expo98/review-evidence-reports"),
-  source("policyCommand", "@expo98/policy-redaction"),
-  source("redactCommand", "@expo98/policy-redaction"),
-  source("skillsCommand", "@expo98/plugin-self-management"),
-  source("installCommand", "@expo98/plugin-self-management"),
-  source("upgradeCommand", "@expo98/plugin-self-management"),
-  source("releaseCommand", "@expo98/plugin-self-management"),
-  source("liveBacklogCommand", "@expo98/live-backlog"),
-  source("traceInteraction", "@expo98/interaction-trace-expression")
-];
+// src/core/tool-handler-registry/src/main/index.ts
 function handlerSymbols() {
   return TOOL_HANDLER_BINDINGS.map(([, handlerSymbol]) => handlerSymbol);
 }
@@ -1486,16 +1466,12 @@ function bindHandlers(implementations) {
     implementations[handlerSymbol]
   ]));
 }
-function source(handlerSymbol, packageName, exportName = handlerSymbol) {
-  return { handlerSymbol, packageName, exportName };
-}
 
-// src/modules/project-info-doctor/src/main/index.ts
+// src/commands/project-info-doctor/src/main/index.ts
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { execFile } from "node:child_process";
-var CLI_NAME2 = "expo-ios";
-var CLI_VERSION3 = "0.1.0";
+var CLI_NAME2 = CURRENT_CLI_NAME;
 var MAX_OUTPUT = 4e4;
 var COMMAND_NAMES = ["node", "npx", "xcrun", "open", "plutil", "idb", "axe", "adb"];
 var EXPO_REACT_NATIVE_COMPATIBILITY = [
@@ -1514,7 +1490,7 @@ async function doctor(args = {}) {
   const projectInfoResult = await safeToolSection(() => projectInfo({ cwd }));
   const repairs = args.fix === true ? await doctorRepairs(cwd) : [];
   return toolJson2({
-    cli: { name: CLI_NAME2, version: CLI_VERSION3 },
+    cli: { name: CLI_NAME2, version: CLI_VERSION },
     cwd,
     auth: { required: false, source: "not-required" },
     commands,
@@ -1644,7 +1620,7 @@ function buildUpstreamDependencyReport(projectRoot, allDeps = {}) {
       resolvedVersion: reactNativeVersion.resolvedVersion,
       status: dependencyStatus(reactNativeVersion),
       compatibility: expoRnCompatibility.forReactNative,
-      notes: ["CDP method calls must stay behind the expo-ios CDP client because Hermes/RN can expose implementation-specific methods."]
+      notes: ["CDP method calls must stay behind the expo98 CDP client because Hermes/RN can expose implementation-specific methods."]
     },
     {
       id: "react-native-devtools",
@@ -1726,7 +1702,7 @@ function buildUpstreamDependencyReport(projectRoot, allDeps = {}) {
         { id: "optional-compatibility-shim", mayImportDirectly: false, requiresShim: true }
       ],
       rules: [
-        "Command handlers depend on expo-ios adapters, not raw upstream package objects.",
+        "Command handlers depend on expo98 adapters, not raw upstream package objects.",
         "Metro and Hermes runtime availability is confirmed at runtime before a command reports live evidence.",
         "Internal Expo, Metro, React Native, or DevTools source paths are reference material unless isolated behind optional shims.",
         "Missing optional upstream packages produce structured unavailable reports instead of thrown errors."
@@ -1779,7 +1755,7 @@ function classifyExpoReactNativeCompatibility(expoVersion, reactNativeVersion) {
   if (!expected) {
     const unknown = {
       state: "unknown",
-      expected: "This Expo SDK is not in expo-ios' compatibility table; verify with the project dependency source.",
+      expected: "This Expo SDK is not in expo98's compatibility table; verify with the project dependency source.",
       expo: expoVersion.declaredVersion,
       reactNative: reactNativeVersion.declaredVersion
     };
@@ -1887,7 +1863,7 @@ function resolveExpoStateRoot(args = {}) {
     return path.basename(resolved) === "runs" ? path.dirname(resolved) : resolved;
   }
   const root = path.resolve(args.root ?? args.cwd ?? process.cwd());
-  return path.join(root, ".scratch", "expo-ios");
+  return path.join(root, ".scratch", "expo98");
 }
 async function safeToolSection(fn) {
   try {
@@ -1896,7 +1872,7 @@ async function safeToolSection(fn) {
     return { ok: false, error: formatError3(error) };
   }
 }
-function truncate2(value, limit = MAX_OUTPUT) {
+function truncate(value, limit = MAX_OUTPUT) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -1907,9 +1883,9 @@ function formatError3(error) {
   const record = asRecord(error);
   const parts = [error instanceof Error ? error.message : String(error)];
   if (record?.stdout) parts.push(`stdout:
-${truncate2(record.stdout)}`);
+${truncate(record.stdout)}`);
   if (record?.stderr) parts.push(`stderr:
-${truncate2(record.stderr)}`);
+${truncate(record.stderr)}`);
   return parts.join("\n\n");
 }
 function toolJson2(value) {
@@ -1936,7 +1912,7 @@ async function commandPath(command, deps) {
   return result.stdout.trim() || null;
 }
 function execFilePromise(file, args, options = {}) {
-  return new Promise((resolve15, reject) => {
+  return new Promise((resolve18, reject) => {
     execFile(file, args, { timeout: options.timeout }, (error, stdout, stderr) => {
       const result = {
         stdout: String(stdout ?? ""),
@@ -1944,7 +1920,7 @@ function execFilePromise(file, args, options = {}) {
         error: error ? { message: error.message, code: error.code, signal: error.signal } : null
       };
       if (error && options.rejectOnError !== false) reject(Object.assign(error, result));
-      else resolve15(result);
+      else resolve18(result);
     });
   });
 }
@@ -1998,7 +1974,7 @@ function summarizeUpstreamDependencies(dependencies) {
   };
 }
 
-// src/modules/router-sitemap/src/main/index.ts
+// src/commands/router-sitemap/src/main/index.ts
 import { promises as fs2 } from "node:fs";
 import path2 from "node:path";
 function routeFromFile(relativeFile, dependencies = {}) {
@@ -2086,8 +2062,8 @@ function formatRouteSegment(segment) {
   if (/^\[.+\]$/.test(segment)) return `:${segment.slice(1, -1)}`;
   return segment;
 }
-function parseTypedRoutes(source2) {
-  return [...new Set(source2.match(/pathname:\s*`([^`]+)`/g)?.map((match) => match.replace(/^pathname:\s*`|`$/g, "")) ?? [])].sort();
+function parseTypedRoutes(source) {
+  return [...new Set(source.match(/pathname:\s*`([^`]+)`/g)?.map((match) => match.replace(/^pathname:\s*`|`$/g, "")) ?? [])].sort();
 }
 async function normalizeCwd2(cwd, deps) {
   const resolved = deps.path.resolve(cwd ?? deps.processCwd);
@@ -2131,10 +2107,10 @@ async function defaultReadFile(filePath, encoding) {
   return fs2.readFile(filePath, encoding);
 }
 
-// src/modules/device-listing/src/main/index.ts
+// src/commands/device-listing/src/main/index.ts
 import { execFile as nodeExecFile } from "node:child_process";
 var MAX_OUTPUT2 = 4e4;
-function clampNumber2(value, min, max) {
+function clampNumber3(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
@@ -2166,7 +2142,7 @@ async function listIosPhysicalDevices(limit, dependencies) {
 }
 async function listDevices(args = {}, dependencies = defaultDeviceListingDependencies) {
   const platform = args.platform ?? "all";
-  const limit = clampNumber2(args.limit ?? 40, 1, 200);
+  const limit = clampNumber3(args.limit ?? 40, 1, 200);
   const payload = {};
   if (platform === "ios" || platform === "all") {
     payload.ios = await safeToolSection2(async () => listIosSimulators(limit, dependencies));
@@ -2178,7 +2154,7 @@ async function listDevices(args = {}, dependencies = defaultDeviceListingDepende
   return toolJson4(payload);
 }
 var defaultDeviceListingDependencies = {
-  execFile: (file, args, options = {}) => new Promise((resolve15, reject) => {
+  execFile: (file, args, options = {}) => new Promise((resolve18, reject) => {
     nodeExecFile(file, args, {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer
@@ -2188,7 +2164,7 @@ var defaultDeviceListingDependencies = {
         reject(error);
         return;
       }
-      resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      resolve18({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   })
 };
@@ -2241,9 +2217,9 @@ function formatError4(error) {
   const message = error instanceof Error ? error.message : String(error);
   const parts = [message];
   if (record.stdout) parts.push(`stdout:
-${truncate3(record.stdout)}`);
+${truncate2(record.stdout)}`);
   if (record.stderr) parts.push(`stderr:
-${truncate3(record.stderr)}`);
+${truncate2(record.stderr)}`);
   return parts.join("\n\n");
 }
 function isRecord(value) {
@@ -2259,20 +2235,17 @@ function toolJson4(value) {
     isError: false
   };
 }
-function truncate3(value, limit = MAX_OUTPUT2) {
+function truncate2(value, limit = MAX_OUTPUT2) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
 
-// src/modules/session-run-records/src/main/domain.ts
-var CLI_NAME3 = "expo-ios";
-var CLI_VERSION4 = "0.1.0";
-var REDACTED2 = "[redacted]";
-var MAX_OUTPUT3 = 4e4;
+// src/state/session-run-records/src/main/domain.ts
+var CLI_NAME3 = CURRENT_CLI_NAME;
 
-// src/modules/session-run-records/src/main/ids.ts
+// src/state/session-run-records/src/main/ids.ts
 var systemClock = () => /* @__PURE__ */ new Date();
 var randomBase36Suffix = () => Math.random().toString(36).slice(2, 8);
 function createSessionId(name, at, randomSuffix = randomBase36Suffix) {
@@ -2284,7 +2257,7 @@ function createRunId(at, randomSuffix = randomBase36Suffix) {
   return `${timestamp}-${randomSuffix()}`;
 }
 
-// src/modules/session-run-records/src/main/paths.ts
+// src/state/session-run-records/src/main/paths.ts
 import { basename as basename2, join as join2, resolve as resolve2 } from "node:path";
 function resolveExpoStateRoot2(args = {}) {
   if (args.stateDir) {
@@ -2292,7 +2265,7 @@ function resolveExpoStateRoot2(args = {}) {
     return basename2(resolved) === "runs" ? resolve2(join2(resolved, "..")) : resolved;
   }
   const root = resolve2(args.root ?? args.cwd ?? process.cwd());
-  return join2(root, ".scratch", "expo-ios");
+  return join2(root, ".scratch", "expo98");
 }
 function sessionDirectory(stateRoot, sessionId) {
   return join2(stateRoot, "sessions", sessionId);
@@ -2301,11 +2274,11 @@ function sessionJsonPath(stateRoot, sessionId) {
   return join2(sessionDirectory(stateRoot, sessionId), "session.json");
 }
 
-// src/modules/session-run-records/src/main/session-service.ts
+// src/state/session-run-records/src/main/session-service.ts
 import { mkdir as mkdir3, readdir, rm } from "node:fs/promises";
 import { join as join3 } from "node:path";
 
-// src/modules/session-run-records/src/main/json-store.ts
+// src/state/session-run-records/src/main/json-store.ts
 import { mkdir as mkdir2, readFile as readFile2, writeFile } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
 async function writeJsonFile(file, value) {
@@ -2317,7 +2290,7 @@ async function readJsonFile2(file) {
   return JSON.parse(await readFile2(file, "utf8"));
 }
 
-// src/modules/session-run-records/src/main/validation.ts
+// src/state/session-run-records/src/main/validation.ts
 function requireString(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
@@ -2328,7 +2301,7 @@ function requireOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// src/modules/session-run-records/src/main/session-service.ts
+// src/state/session-run-records/src/main/session-service.ts
 async function sessionCommand(args = {}, deps = {}) {
   const action = requireString(args.action ?? "new", "action");
   if (!["new", "list", "show", "close", "clean"].includes(action)) {
@@ -2444,66 +2417,9 @@ async function cleanSessions(input) {
   return { available: true, action: "clean", stateRoot: input.stateRoot, olderThan, removed };
 }
 
-// src/modules/session-run-records/src/main/run-recorder.ts
+// src/state/session-run-records/src/main/run-recorder.ts
 import { mkdir as mkdir4 } from "node:fs/promises";
 import { join as join4, resolve as resolve3 } from "node:path";
-
-// src/modules/session-run-records/src/main/redaction.ts
-var SECRET_KEY_PATTERN = /token|authorization|cookie|password|secret|apikey|apiKey/i;
-var URL_QUERY_SECRET_PATTERN = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
-function redactValue2(value, key = "") {
-  if (typeof value === "string") {
-    if (isSecretKey2(key)) {
-      return REDACTED2;
-    }
-    return value.replace(URL_QUERY_SECRET_PATTERN, `$1${REDACTED2}`);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactValue2(item, key));
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([childKey, childValue]) => [
-      childKey,
-      isSecretKey2(childKey) ? REDACTED2 : redactValue2(childValue, childKey)
-    ])
-  );
-}
-function sanitizeErrorMessage2(message) {
-  return redactValue2(String(message ?? ""));
-}
-function formatError5(error) {
-  if (!error) {
-    return "Unknown error";
-  }
-  const record = error;
-  const parts = [record.message ?? String(error)];
-  if (record.stdout) {
-    parts.push(`stdout:
-${truncate4(record.stdout)}`);
-  }
-  if (record.stderr) {
-    parts.push(`stderr:
-${truncate4(record.stderr)}`);
-  }
-  return parts.join("\n\n");
-}
-function isSecretKey2(key) {
-  return SECRET_KEY_PATTERN.test(key);
-}
-function truncateOutput(value, limit = MAX_OUTPUT3) {
-  const text = String(value ?? "");
-  if (text.length <= limit) {
-    return text;
-  }
-  return `${text.slice(0, limit)}
-[truncated ${text.length - limit} characters]`;
-}
-var truncate4 = truncateOutput;
-
-// src/modules/session-run-records/src/main/run-recorder.ts
 async function startRunRecord(input) {
   if (!input.globals.record && !input.globals.stateDir) {
     return { path: null, async finish() {
@@ -2513,14 +2429,14 @@ async function startRunRecord(input) {
   const startedAt = now4().toISOString();
   const runId = createRunId(new Date(startedAt), input.randomSuffix ?? randomBase36Suffix);
   const root = resolve3(String(input.globals.root ?? input.args.cwd ?? input.cwd ?? process.cwd()));
-  const stateDir = resolve3(String(input.globals.stateDir ?? join4(root, ".scratch", "expo-ios", "runs")));
+  const stateDir = resolve3(String(input.globals.stateDir ?? join4(root, ".scratch", "expo98", "runs")));
   const recordPath = join4(stateDir, `${runId}.json`);
   const baseRecord = {
     schemaVersion: 1,
     runId,
-    cli: { name: CLI_NAME3, version: CLI_VERSION4 },
+    cli: { name: CLI_NAME3, version: CLI_VERSION },
     command: input.command,
-    args: redactValue2(stripUndefined(input.args)),
+    args: redactValue(stripUndefined(input.args)),
     root,
     stateDir,
     startedAt,
@@ -2539,7 +2455,7 @@ async function startRunRecord(input) {
         status,
         exitCode,
         summary: summarizeRunPayload(payload),
-        error: error ? sanitizeErrorMessage2(formatError5(error)) : null
+        error: error ? sanitizeErrorMessage(formatError2(error)) : null
       });
     }
   };
@@ -2567,14 +2483,14 @@ function stripUndefined(value) {
   return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== void 0));
 }
 
-// src/modules/target-management/src/main/validation.ts
+// src/state/target-management/src/main/validation.ts
 function requireString2(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber3(value, min, max) {
+function clampNumber4(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -2582,7 +2498,7 @@ function clampNumber3(value, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
-// src/modules/target-management/src/main/target-record.ts
+// src/state/target-management/src/main/target-record.ts
 function normalizeDeviceState(state) {
   if (state === "Booted") {
     return "booted";
@@ -2606,7 +2522,7 @@ function processNameFromBundleId(bundleId) {
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") || null : null;
 }
 function clampMetroPort(value) {
-  return clampNumber3(value ?? 8081, 1, 65535);
+  return clampNumber4(value ?? 8081, 1, 65535);
 }
 function targetRecord(input) {
   const bundleId = input.metroTarget?.appId ?? null;
@@ -2642,7 +2558,7 @@ function targetRecord(input) {
   };
 }
 
-// src/modules/target-management/src/main/discovery.ts
+// src/state/target-management/src/main/discovery.ts
 async function discoverTargets(args, deps) {
   const platform = args.platform ?? "all";
   const metroPort = clampMetroPort(args.metroPort);
@@ -2702,7 +2618,7 @@ function optionalString(value) {
   return typeof value === "string" ? value : null;
 }
 
-// src/modules/target-management/src/main/target-service.ts
+// src/state/target-management/src/main/target-service.ts
 import { execFile as nodeExecFile2 } from "node:child_process";
 import { mkdir as mkdir5, readdir as readdir2, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join5 } from "node:path";
@@ -2714,7 +2630,7 @@ async function listTargets(args, deps = defaultTargetDependencies) {
 async function selectTarget(args, deps = defaultTargetDependencies) {
   const session = await deps.readLatestSession(args.stateRoot);
   if (!session) {
-    return { available: false, reason: "No session exists. Run `expo-ios --json session new review` first." };
+    return { available: false, reason: "No session exists. Run `expo98 --json session new review` first." };
   }
   const targetId = requireString2(args.targetId, "targetId");
   const targets = await discoverTargets({ ...args, selectedTargetId: session.activeTargetId }, deps);
@@ -2734,7 +2650,7 @@ async function selectTarget(args, deps = defaultTargetDependencies) {
 async function getCurrentTarget(args, deps = defaultTargetDependencies) {
   const session = await deps.readLatestSession(args.stateRoot);
   if (!session) {
-    return { available: false, reason: "No session exists. Run `expo-ios --json session new review` first." };
+    return { available: false, reason: "No session exists. Run `expo98 --json session new review` first." };
   }
   if (!session.activeTargetId) {
     return {
@@ -2811,14 +2727,14 @@ var defaultTargetDependencies = {
   }
 };
 async function execFile2(file, args, options) {
-  return new Promise((resolve15, reject) => {
+  return new Promise((resolve18, reject) => {
     nodeExecFile2(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         Object.assign(error, { stdout, stderr });
         reject(error);
         return;
       }
-      resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      resolve18({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   });
 }
@@ -2830,17 +2746,17 @@ async function writeJson(file, value) {
 `, "utf8");
 }
 
-// src/modules/snapshot-evidence/src/main/filters.ts
+// src/commands/snapshot-evidence/src/main/filters.ts
 function buildSnapshotFilters(args = {}) {
   return {
     interactiveOnly: args.interactive === true,
     compact: args.compact === true,
-    depth: args.depth === void 0 ? null : clampNumber4(args.depth, 1, 100),
+    depth: args.depth === void 0 ? null : clampNumber5(args.depth, 1, 100),
     includeSource: args.source === true,
     includeBounds: args.bounds === true
   };
 }
-function clampNumber4(value, min, max) {
+function clampNumber5(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -2848,13 +2764,13 @@ function clampNumber4(value, min, max) {
   return Math.max(min, Math.min(max, numberValue));
 }
 
-// src/modules/snapshot-evidence/src/main/ids.ts
+// src/commands/snapshot-evidence/src/main/ids.ts
 function createSnapshotId(now4, randomSuffix) {
   const timestamp = now4.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").replace("T", "-").toLowerCase();
   return `snapshot-${timestamp}-${randomSuffix}`;
 }
 
-// src/modules/snapshot-evidence/src/main/accessibility.ts
+// src/commands/snapshot-evidence/src/main/accessibility.ts
 function flattenAccessibilityNodes(tree, filters) {
   const roots = Array.isArray(tree) ? tree : [tree];
   const nodes = [];
@@ -2907,14 +2823,14 @@ function actionsForAccessibilityRole(role) {
   if (role === "switch") return ["tap", "inspect"];
   return [];
 }
-function normalizeSource(source2) {
-  if (!isRecord3(source2)) {
+function normalizeSource(source) {
+  if (!isRecord3(source)) {
     return null;
   }
-  const line = Number(source2.line ?? source2.lineNumber);
-  const column = Number(source2.column ?? source2.columnNumber);
+  const line = Number(source.line ?? source.lineNumber);
+  const column = Number(source.column ?? source.columnNumber);
   return {
-    file: stringOrNull2(source2.file ?? source2.fileName),
+    file: stringOrNull2(source.file ?? source.fileName),
     line: Number.isFinite(line) ? line : null,
     column: Number.isFinite(column) ? column : null
   };
@@ -2976,7 +2892,7 @@ function stringOrNull2(value) {
   return value === void 0 || value === null ? null : String(value);
 }
 
-// src/modules/snapshot-evidence/src/main/persistence.ts
+// src/commands/snapshot-evidence/src/main/persistence.ts
 var NATIVE_LIMITATIONS = [
   "Native accessibility snapshots expose semantic UI where available; React component props and private fiber details are not included."
 ];
@@ -3081,7 +2997,7 @@ async function persistSnapshotArtifacts(stateRoot, session, snapshot, semanticBr
   });
 }
 
-// src/modules/snapshot-evidence/src/main/ref-commands.ts
+// src/commands/snapshot-evidence/src/main/ref-commands.ts
 import { readdir as readdir3, readFile as readFile4 } from "node:fs/promises";
 import { join as join6 } from "node:path";
 async function refsCommand(args = {}, deps = defaultRefCommandDependencies) {
@@ -3175,12 +3091,12 @@ function requireString3(value, name) {
   return value.trim();
 }
 
-// src/modules/snapshot-evidence/src/main/snapshot-command.ts
+// src/commands/snapshot-evidence/src/main/snapshot-command.ts
 import { execFile as nodeExecFile3 } from "node:child_process";
 import { mkdir as mkdir6, readdir as readdir4, readFile as readFile5, writeFile as writeFile3 } from "node:fs/promises";
 import { join as join7 } from "node:path";
 
-// src/modules/hermes-cdp-client/src/main/index.ts
+// src/platform/hermes-cdp-client/src/main/index.ts
 import WebSocket2 from "ws";
 async function evaluateHermesExpression(webSocketDebuggerUrl, expression, options) {
   return cdpCall(webSocketDebuggerUrl, [
@@ -3201,9 +3117,9 @@ async function cdpCall(webSocketDebuggerUrl, calls, timeoutMs) {
       for (const call of calls) {
         id += 1;
         ws.send(JSON.stringify({ id, method: call.method, params: call.params }));
-        last = await waitForMessage(ws, id, timeoutMs);
+        last = await waitForMessage(ws, id, call.method, timeoutMs);
       }
-      const cdpError = last && typeof last.error === "string" ? last.error : null;
+      const cdpError = last ? cdpErrorMessage(last.error) : null;
       return {
         ...last ?? {},
         ...cdpError ? { error: cdpError } : {},
@@ -3216,7 +3132,7 @@ async function cdpCall(webSocketDebuggerUrl, calls, timeoutMs) {
         }
       };
     } catch (error) {
-      errors.push(`${candidate}: ${formatError6(error)}`);
+      errors.push(`${candidate}: ${formatError5(error)}`);
       try {
         ws.close();
       } catch {
@@ -3268,11 +3184,11 @@ function metroOriginForWebSocket(url) {
   }
 }
 function waitForOpen(ws, timeoutMs) {
-  return new Promise((resolve15, reject) => {
+  return new Promise((resolve18, reject) => {
     const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
     ws.once("open", () => {
       clearTimeout(timer);
-      resolve15();
+      resolve18();
     });
     ws.once("error", (error) => {
       clearTimeout(timer);
@@ -3280,22 +3196,25 @@ function waitForOpen(ws, timeoutMs) {
     });
   });
 }
-function waitForMessage(ws, id, timeoutMs) {
-  return new Promise((resolve15, reject) => {
+function waitForMessage(ws, id, method, timeoutMs) {
+  return new Promise((resolve18, reject) => {
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error("Timed out waiting for CDP response."));
+      reject(new Error(`Timed out waiting for CDP response to ${method}#${id}.`));
     }, timeoutMs);
     const onMessage = (data) => {
       let parsed;
+      const raw = data.toString();
       try {
-        parsed = JSON.parse(data.toString());
-      } catch {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        cleanup();
+        reject(new Error(`Malformed CDP JSON response for ${method}#${id}: ${truncate3(raw, 1e3)}`, { cause: error }));
         return;
       }
       if (!isRecord4(parsed) || parsed.id !== id) return;
       cleanup();
-      resolve15(parsed.error ? { error: parsed.error } : parsed);
+      resolve18(parsed.error ? { ...parsed, error: cdpErrorMessage(parsed.error) } : parsed);
     };
     const onError = (error) => {
       cleanup();
@@ -3313,12 +3232,24 @@ function waitForMessage(ws, id, timeoutMs) {
 function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function formatError6(error) {
+function formatError5(error) {
   const record = isRecord4(error) ? error : null;
   return typeof record?.message === "string" ? record.message : String(error);
 }
+function cdpErrorMessage(error) {
+  if (error === void 0 || error === null) return null;
+  if (typeof error === "string") return error;
+  const record = isRecord4(error) ? error : null;
+  if (typeof record?.message === "string") return record.message;
+  return JSON.stringify(error);
+}
+function truncate3(value, limit) {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit)}
+[truncated ${value.length - limit} characters]`;
+}
 
-// src/modules/metro-probes/src/main/index.ts
+// src/commands/metro-probes/src/main/index.ts
 import { promises as fs3 } from "node:fs";
 import path3 from "node:path";
 var LIMITATIONS = [
@@ -3329,22 +3260,22 @@ var MAX_OUTPUT4 = 16384;
 function toolJson6(value) {
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
 }
-function clampNumber5(value, min, max) {
+function clampNumber6(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function formatError7(error) {
+function formatError6(error) {
   if (!error) return "Unknown error";
   const record = asRecord2(error);
   const message = record ? record.message : void 0;
   const parts = [message == null ? String(error) : String(message)];
   if (record?.stdout) parts.push(`stdout:
-${truncate5(record.stdout)}`);
+${truncate4(record.stdout)}`);
   if (record?.stderr) parts.push(`stderr:
-${truncate5(record.stderr)}`);
+${truncate4(record.stderr)}`);
   return parts.join("\n\n");
 }
 function targetSummary(target) {
@@ -3375,7 +3306,7 @@ async function metroCommand(args = {}, deps = {}) {
   return toolJson6(await (deps.metroStatusPayload ?? ((nextArgs) => metroStatusPayload(nextArgs, deps)))(args));
 }
 async function metroStatusPayload(args = {}, deps = {}) {
-  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
   return new MetroInspectorClient(metroPort, deps).statusPayload();
 }
 async function metroTargets(metroPort, deps = {}) {
@@ -3399,7 +3330,7 @@ var MetroInspectorClient = class {
       const text = await this.fetchLocalText(`${this.baseUrl}/status`, { timeoutMs: 1500 });
       return { available: true, endpoint: "/status", text, error: null };
     } catch (error) {
-      return { available: false, endpoint: "/status", text: null, error: formatError7(error) };
+      return { available: false, endpoint: "/status", text: null, error: formatError6(error) };
     }
   }
   async version() {
@@ -3407,7 +3338,7 @@ var MetroInspectorClient = class {
       const value = await this.fetchLocalJson(`${this.baseUrl}/json/version`, { timeoutMs: 1500 });
       return { available: true, endpoint: "/json/version", value, error: null };
     } catch (error) {
-      return { available: false, endpoint: "/json/version", value: null, error: formatError7(error) };
+      return { available: false, endpoint: "/json/version", value: null, error: formatError6(error) };
     }
   }
   async targets() {
@@ -3420,7 +3351,7 @@ var MetroInspectorClient = class {
         endpoint: "/json/list",
         targets: [],
         malformedTargets: [],
-        reason: formatError7(error)
+        reason: formatError6(error)
       };
     }
     if (!Array.isArray(raw)) {
@@ -3500,7 +3431,7 @@ var MetroInspectorClient = class {
         available: false,
         endpoint: "/symbolicate",
         status: null,
-        reason: formatError7(error),
+        reason: formatError6(error),
         value: null
       };
     }
@@ -3566,7 +3497,7 @@ function responseShape(value) {
   if (record.result && typeof record.result === "object") shape.result = responseShape(record.result);
   return shape;
 }
-function truncate5(value, limit = MAX_OUTPUT4) {
+function truncate4(value, limit = MAX_OUTPUT4) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -3576,7 +3507,7 @@ function asRecord2(value) {
   return value && typeof value === "object" ? value : null;
 }
 async function metroReloadPayload(args, deps = {}) {
-  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
   const targets = await metroTargets(metroPort, deps);
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
@@ -3603,7 +3534,7 @@ async function metroSymbolicatePayload(args, deps = {}) {
   const readTextFile = deps.readTextFile ?? fs3.readFile;
   const resolvedStackFile = resolvePath2(stackFile);
   const stack = parseComponentStackFrames(await readTextFile(resolvedStackFile, "utf8"));
-  const metroPort = clampNumber5(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
   const result = await postMetroSymbolicate(metroPort, stack, deps);
   return { available: true, action: "symbolicate", metroPort, stackFile: resolvedStackFile, frameCount: stack.length, result };
 }
@@ -3680,14 +3611,14 @@ async function fetchWithTimeout(url, timeoutMs, init) {
   }
 }
 
-// src/modules/snapshot-evidence/src/main/snapshot-command.ts
+// src/commands/snapshot-evidence/src/main/snapshot-command.ts
 async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
   const stateRoot = args.stateRoot ?? resolveExpoStateRoot2(args);
   const session = await deps.readLatestSession(stateRoot);
   if (!session) {
     return {
       available: false,
-      reason: "No session exists. Run `expo-ios --json session new review` first."
+      reason: "No session exists. Run `expo98 --json session new review` first."
     };
   }
   if (!session.activeTargetId) {
@@ -3710,7 +3641,7 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
     available: false,
     source: "plugin-bridge-semantic",
     code: "transport-failure",
-    reason: formatError8(error)
+    reason: formatError7(error)
   }));
   if (semanticBridge.available === true) {
     return persistSemanticSnapshot({ stateRoot, session, filters, semanticBridge }, deps);
@@ -3730,7 +3661,7 @@ async function snapshotCommand(args = {}, deps = defaultSnapshotDependencies) {
       available: false,
       reason: "Native accessibility snapshot failed.",
       targetId: session.activeTargetId,
-      stderr: truncate6(result.stderr),
+      stderr: truncate5(result.stderr),
       error: result.error,
       semanticBridge
     };
@@ -3773,7 +3704,7 @@ var defaultSnapshotDependencies = {
   describeNativeUi: (axePath, deviceId) => execFile3(axePath, ["describe-ui", "--udid", deviceId], { timeout: 12e3 })
 };
 async function captureSemanticBridge(args, context) {
-  const metroPort = clampNumber6(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber7(args.metroPort ?? 8081, 1, 65535);
   const targets = await metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -3869,11 +3800,11 @@ function semanticBridgeExpression(filters) {
   })()`;
 }
 function normalizeSemanticBridgeSnapshot(value, filters) {
-  const source2 = typeof value.source === "string" ? value.source : "app-instrumentation";
+  const source = typeof value.source === "string" ? value.source : "app-instrumentation";
   const rawRefs = flattenSemanticNodes(firstArray(value.refs, value.tree, value.nodes, value.elements, value.items), filters);
   const refs = rawRefs.map((node) => normalizeSemanticRef(node, filters)).filter((node) => Boolean(node));
   return {
-    source: source2,
+    source,
     bridgeVersion: typeof value.bridgeVersion === "string" ? value.bridgeVersion : typeof value.version === "string" ? value.version : null,
     routeHint: typeof value.routeHint === "string" ? value.routeHint : typeof value.route === "string" ? value.route : null,
     refs,
@@ -3902,8 +3833,8 @@ function normalizeSemanticRef(node, filters) {
   const element = asRecord3(record.element);
   const role = stringOrNull3(record.role ?? element?.role ?? record.accessibilityRole ?? element?.accessibilityRole ?? record.type);
   const explicitActions = actionsFrom(record.actions ?? element?.actions ?? record.accessibilityActions ?? element?.accessibilityActions ?? record.handlers);
-  const component2 = stringOrNull3(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type);
-  const actions = explicitActions.length ? explicitActions : actionsForRoleOrComponent(role, component2);
+  const component = stringOrNull3(record.component ?? record.componentName ?? record.displayName ?? record.name ?? record.type);
+  const actions = explicitActions.length ? explicitActions : actionsForRoleOrComponent(role, component);
   if (filters.interactiveOnly && actions.length === 0 && !role) return null;
   return {
     role,
@@ -3912,7 +3843,7 @@ function normalizeSemanticRef(node, filters) {
     placeholder: stringOrNull3(record.placeholder ?? element?.placeholder ?? record.placeholderText ?? element?.placeholderText),
     testID: stringOrNull3(record.testID ?? element?.testID ?? record.testId ?? element?.testId ?? record.testid),
     nativeID: stringOrNull3(record.nativeID ?? element?.nativeID ?? record.nativeId ?? element?.nativeId),
-    component: component2,
+    component,
     source: record.source ?? element?.source ?? record.sourceLocation ?? element?.sourceLocation ?? record._source ?? element?._source ?? null,
     box: normalizeBox(record.box ?? element?.box ?? record.bounds ?? element?.bounds ?? record.frame ?? element?.frame ?? record.layout ?? element?.layout),
     actions,
@@ -3920,11 +3851,11 @@ function normalizeSemanticRef(node, filters) {
     raw: node
   };
 }
-function actionsForRoleOrComponent(role, component2) {
+function actionsForRoleOrComponent(role, component) {
   if (role === "button" || role === "link") return ["tap", "inspect"];
   if (role === "textbox") return ["tap", "fill", "focus", "inspect"];
   if (role === "switch") return ["tap", "inspect"];
-  if (component2 && /TextInput/i.test(component2)) return ["tap", "fill", "focus", "inspect"];
+  if (component && /TextInput/i.test(component)) return ["tap", "fill", "focus", "inspect"];
   return [];
 }
 function firstArray(...values) {
@@ -3946,7 +3877,7 @@ function normalizeBox(value) {
   const height = numberOrNull(record.height ?? record.h);
   return x == null || y == null || width == null || height == null ? null : { x, y, width, height };
 }
-function clampNumber6(value, min, max) {
+function clampNumber7(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -3962,16 +3893,16 @@ function asRecord3(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function commandPath2(command) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile3("which", [command], { timeout: 5e3 }, (error, stdout) => {
-      resolve15(error ? null : String(stdout ?? "").trim() || null);
+      resolve18(error ? null : String(stdout ?? "").trim() || null);
     });
   });
 }
 function execFile3(file, args, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile3(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error: error ? { message: error.message, code: error.code, signal: error.signal } : void 0
@@ -3986,47 +3917,32 @@ async function writeJson2(file, value) {
   await writeFile3(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
-function formatError8(error) {
+function formatError7(error) {
   if (!error) {
     return "Unknown error";
   }
   const record = error;
   const parts = [record.message ?? String(error)];
   if (record.stdout) parts.push(`stdout:
-${truncate6(record.stdout)}`);
+${truncate5(record.stdout)}`);
   if (record.stderr) parts.push(`stderr:
-${truncate6(record.stderr)}`);
+${truncate5(record.stderr)}`);
   return parts.join("\n\n");
 }
-function truncate6(value, limit = 4e3) {
+function truncate5(value, limit = 4e3) {
   const text = String(value ?? "");
   return text.length <= limit ? text : `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
 
-// src/modules/ref-actions-wait/src/main/common.ts
-function toolJson7(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
-function unwrapToolJson3(result) {
-  const text = result?.content?.[0]?.text;
-  if (typeof text !== "string") {
-    return result;
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
-}
+// src/commands/ref-actions-wait/src/main/common.ts
 function requireString5(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string.`);
   }
   return value.trim();
 }
-function clampNumber7(value, min, max) {
+function clampNumber8(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -4037,12 +3953,12 @@ function normalizeFinderText(value) {
   return String(value ?? "").toLowerCase().trim();
 }
 
-// src/modules/ref-actions-wait/src/main/defaults.ts
+// src/commands/ref-actions-wait/src/main/defaults.ts
 import { readdir as readdir5, readFile as readFile6 } from "node:fs/promises";
 import { join as join8 } from "node:path";
 
-// src/modules/ref-actions-wait/src/main/ref-actions.ts
-async function planRefAction(args, deps = defaultRefActionDependencies) {
+// src/commands/ref-actions-wait/src/main/planning.ts
+async function planRefActionWithDeps(args, deps) {
   const action = requireString5(args.action, "action");
   const ref = requireString5(args.ref, "ref");
   const cache = await deps.readLatestRefCache(args);
@@ -4077,7 +3993,7 @@ async function planRefAction(args, deps = defaultRefActionDependencies) {
     }
   };
 }
-async function refPoint(refValue, deps = defaultRefActionDependencies) {
+async function refPointWithDeps(refValue, deps) {
   const ref = requireString5(refValue, "ref");
   const found = await readRefRecord(ref, deps);
   if (found.available === false) {
@@ -4094,13 +4010,13 @@ async function refPoint(refValue, deps = defaultRefActionDependencies) {
     box
   };
 }
-async function scrollPlan(args, deps = defaultRefActionDependencies) {
+async function scrollPlanWithDeps(args, deps) {
   const maybeRef = /^@e\d+$/.test(String(args.ref ?? "")) ? args.ref : null;
   const direction = requireString5(
     maybeRef ? args.targetRef ?? args.direction : args.direction ?? args.ref,
     "direction"
   ).toLowerCase();
-  const amount = clampNumber7(args.amount ?? args.text ?? 600, 1, 5e3);
+  const amount = clampNumber8(args.amount ?? args.text ?? 600, 1, 5e3);
   const origin = maybeRef ? await readRefPoint(maybeRef, args, deps) : { available: true, point: { x: 200, y: 700 } };
   if (origin.available === false) {
     return origin;
@@ -4161,10 +4077,10 @@ function centerPoint(box) {
   };
 }
 
-// src/modules/ref-actions-wait/src/main/defaults.ts
+// src/commands/ref-actions-wait/src/main/defaults.ts
 var defaultRefActionDependencies = {
   readLatestRefCache: readLatestRefCache2,
-  planFinderAction: (args) => planRefAction(args, defaultRefActionDependencies)
+  planFinderAction: (args) => planRefActionWithDeps(args, defaultRefActionDependencies)
 };
 async function readLatestRefCache2(args = {}) {
   const stateRoot = resolveExpoStateRoot2(args);
@@ -4194,13 +4110,13 @@ async function readJson4(path12) {
   return JSON.parse(await readFile6(path12, "utf8"));
 }
 
-// src/modules/ref-actions-wait/src/main/find.ts
+// src/commands/ref-actions-wait/src/main/find.ts
 async function findCommand(args, deps = defaultRefActionDependencies) {
   const kind = requireString5(args.kind, "kind").toLowerCase();
   const value = requireString5(args.value, "value");
   const cache = await deps.readLatestRefCache(args);
   if (!cache) {
-    return toolJson7({ available: false, reason: "No snapshot exists for the current session." });
+    return toolJson({ available: false, reason: "No snapshot exists for the current session." });
   }
   const matches = findMatches(cache.refs, kind, value, args.name);
   const payload = {
@@ -4213,7 +4129,7 @@ async function findCommand(args, deps = defaultRefActionDependencies) {
   if (args.action) {
     payload.actionResult = matches[0] ? await finderActionResult({ ...args, ref: matches[0].ref }, deps) : { available: false, reason: "No matching ref for action.", action: args.action };
   }
-  return toolJson7(payload);
+  return toolJson(payload);
 }
 async function finderActionResult(args, deps) {
   const action = requireString5(args.action, "action");
@@ -4225,7 +4141,7 @@ async function finderActionResult(args, deps) {
     return deps.planFinderAction({ ...args, action, dryRun });
   }
   if (action === "tap" || ["long-press", "fill", "scroll-into-view", "focus"].includes(action)) {
-    return unwrapToolJson3(toolJson7(await planUnavailable(action)));
+    return unwrapToolJson(toolJson(await planUnavailable(action)));
   }
   if (action === "inspect") {
     return { available: false, reason: "Inspect action is not wired in this module.", ref: args.ref };
@@ -4240,7 +4156,7 @@ function findMatches(refs, kind, value, name) {
     return match ? [match] : [];
   }
   if (kind === "nth") {
-    const index = clampNumber7(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
+    const index = clampNumber8(Number(value), 1, Number.MAX_SAFE_INTEGER) - 1;
     const needle = requireString5(name, "name");
     const matches = refs.filter(
       (record) => refMatches(record, "source", needle) || refMatches(record, "text", needle) || refMatches(record, "label", needle)
@@ -4270,22 +4186,33 @@ async function planUnavailable(action) {
   return { available: false, reason: `No action planner configured for ${action}.`, action };
 }
 
-// src/modules/ref-actions-wait/src/main/wait.ts
+// src/commands/ref-actions-wait/src/main/ref-actions.ts
+function planRefAction(args, deps = defaultRefActionDependencies) {
+  return planRefActionWithDeps(args, deps);
+}
+function refPoint(refValue, deps = defaultRefActionDependencies) {
+  return refPointWithDeps(refValue, deps);
+}
+function scrollPlan(args, deps = defaultRefActionDependencies) {
+  return scrollPlanWithDeps(args, deps);
+}
+
+// src/commands/ref-actions-wait/src/main/wait.ts
 async function waitCommand(args, deps = defaultRefActionDependencies) {
   const now4 = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
   const started = now4();
-  const timeoutMs = clampNumber7(args.timeoutMs ?? 5e3, 0, 6e4);
+  const timeoutMs = clampNumber8(args.timeoutMs ?? 5e3, 0, 6e4);
   const intervalMs = Math.min(Math.max(Math.floor(timeoutMs / 10), 25), 250);
   const predicate = waitPredicate(args);
   if (!predicate) {
-    const ms = clampNumber7(args.ms ?? 0, 0, 6e4);
+    const ms = clampNumber8(args.ms ?? 0, 0, 6e4);
     if (ms > 0) await sleep(ms);
-    return toolJson7({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now4() - started });
+    return toolJson({ matched: true, predicate: { kind: "sleep", ms }, elapsedMs: now4() - started });
   }
   if (predicate.kind === "metro-ready" || predicate.kind === "app-ready" || predicate.kind === "fn") {
     if (!deps.waitRuntimePredicate) {
-      return toolJson7({
+      return toolJson({
         matched: false,
         available: false,
         reason: "Runtime wait predicates require a runtime adapter.",
@@ -4295,13 +4222,13 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
       });
     }
     const runtimeResult = await deps.waitRuntimePredicate(predicate, args, { started, timeoutMs, intervalMs });
-    return toolJson7(runtimeResult);
+    return toolJson(runtimeResult);
   }
   let lastCache = null;
   do {
     lastCache = await deps.readLatestRefCache(args);
     if (!lastCache) {
-      return toolJson7({
+      return toolJson({
         matched: false,
         reason: "No snapshot exists for the current session.",
         predicate,
@@ -4311,12 +4238,12 @@ async function waitCommand(args, deps = defaultRefActionDependencies) {
     const result = evaluateWaitPredicate(lastCache, predicate);
     if (result.final || result.matched) {
       const payload = result.payload?.matched ? { ...result.payload, elapsedMs: now4() - started } : result.payload;
-      return toolJson7(payload);
+      return toolJson(payload);
     }
     if (now4() - started >= timeoutMs) break;
     await sleep(Math.min(intervalMs, timeoutMs - (now4() - started)));
   } while (now4() - started <= timeoutMs);
-  return toolJson7(timeoutWaitPayload(predicate, lastCache, timeoutMs, now4() - started));
+  return toolJson(timeoutWaitPayload(predicate, lastCache, timeoutMs, now4() - started));
 }
 function waitPredicate(args = {}) {
   if (args.metroReady === true) return { kind: "metro-ready" };
@@ -4447,10 +4374,10 @@ function waitSampleRef(record) {
   };
 }
 function defaultSleep(ms) {
-  return new Promise((resolve15) => setTimeout(resolve15, ms));
+  return new Promise((resolve18) => setTimeout(resolve18, ms));
 }
 
-// src/modules/batch-orchestration/src/main/domain.ts
+// src/commands/batch-orchestration/src/main/domain.ts
 var EXIT_RUNTIME_FAILURE3 = 1;
 var EXIT_INVALID_USAGE4 = 2;
 var CliUsageError4 = class extends Error {
@@ -4461,36 +4388,16 @@ var CliUsageError4 = class extends Error {
   }
 };
 
-// src/modules/batch-orchestration/src/main/tool-json.ts
-function toolJson8(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
-}
-function unwrapToolJson4(result) {
-  const maybe = result;
-  const text = maybe?.content?.[0]?.text;
-  if (typeof text !== "string") {
-    return result;
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
-}
+// src/commands/batch-orchestration/src/main/batch.ts
+import { execFile as nodeExecFile4 } from "node:child_process";
 
-// src/modules/batch-orchestration/src/main/errors.ts
-var REDACTED3 = "[redacted]";
-var SECRET_KEY_PATTERN2 = /token|authorization|cookie|password|secret|apikey|apiKey/i;
-var URL_QUERY_SECRET_PATTERN2 = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
-var FREEFORM_SECRET_PATTERN = /\b(token|authorization|password|secret)=([^\s&]+)/gi;
-var BEARER_SECRET_PATTERN = /(authorization=\[redacted\]\s+)[^\s&]+/gi;
+// src/commands/batch-orchestration/src/main/errors.ts
 var MAX_OUTPUT5 = 4e4;
 function batchStepError(error) {
   const exitCode = exitCodeForError3(error);
   return {
     code: errorCodeForExitCode3(exitCode),
-    message: sanitizeErrorMessage3(formatError9(error)),
+    message: sanitizeErrorMessage(formatError2(error)),
     exitCode
   };
 }
@@ -4510,313 +4417,11 @@ function errorCodeForExitCode3(exitCode) {
   if (exitCode === EXIT_RUNTIME_FAILURE3) return "runtime_failure";
   return "error";
 }
-function formatError9(error) {
-  if (!error) return "Unknown error";
-  const record = error;
-  const parts = [record.message ?? String(error)];
-  if (record.stdout) parts.push(`stdout:
-${truncate7(record.stdout)}`);
-  if (record.stderr) parts.push(`stderr:
-${truncate7(record.stderr)}`);
-  return parts.join("\n\n");
-}
-function truncate7(value, limit = MAX_OUTPUT5) {
-  const text = String(value ?? "");
-  if (text.length <= limit) return text;
-  return `${text.slice(0, limit)}
-[truncated ${text.length - limit} characters]`;
-}
-function sanitizeErrorMessage3(message) {
-  return redactValue4(String(message ?? ""));
-}
-function redactValue4(value, key = "") {
-  if (typeof value === "string") {
-    if (isSecretKey3(key)) return REDACTED3;
-    return value.replace(URL_QUERY_SECRET_PATTERN2, `$1${REDACTED3}`).replace(FREEFORM_SECRET_PATTERN, `$1=${REDACTED3}`).replace(BEARER_SECRET_PATTERN, `$1${REDACTED3}`);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactValue4(item, key));
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
-    childKey,
-    isSecretKey3(childKey) ? REDACTED3 : redactValue4(childValue, childKey)
-  ]));
-}
-function isSecretKey3(key) {
-  return SECRET_KEY_PATTERN2.test(key);
+function truncate6(value, limit = MAX_OUTPUT5) {
+  return truncateOutput(value, limit);
 }
 
-// src/modules/batch-orchestration/src/main/cli.ts
-function parseCliArgs2(argv) {
-  const args = { _: [] };
-  const globals = defaultGlobals2();
-  let command = null;
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (token === void 0) continue;
-    if (token === "--") {
-      args._.push(...argv.slice(index + 1));
-      break;
-    }
-    if (token === "--help" || token === "-h") {
-      globals.help = true;
-      continue;
-    }
-    if (token === "--version") {
-      globals.version = true;
-      continue;
-    }
-    if (token.startsWith("--")) {
-      const eq = token.indexOf("=");
-      const rawKey = eq === -1 ? token.slice(2) : token.slice(2, eq);
-      const globalKey = normalizeGlobalFlag2(rawKey);
-      if (globalKey) {
-        if (globalFlagTakesValue2(rawKey)) {
-          const value = eq === -1 ? argv[index + 1] : token.slice(eq + 1);
-          if (value === void 0 || value.startsWith("--")) {
-            throw new CliUsageError4(`--${rawKey} requires a value.`);
-          }
-          if (eq === -1) index += 1;
-          globals[globalKey] = String(value);
-        } else {
-          globals[globalKey] = true;
-        }
-        continue;
-      }
-      if (!command) {
-        throw new CliUsageError4(`Global flag or command expected before --${rawKey}.`);
-      }
-      const key = toCamel2(rawKey);
-      const schemaValue = eq === -1 ? argv[index + 1] : token.slice(eq + 1);
-      if (eq === -1 && (schemaValue === void 0 || schemaValue.startsWith("--"))) {
-        args[key] = true;
-      } else {
-        if (eq === -1) index += 1;
-        args[key] = coerceCliValue2(String(schemaValue));
-      }
-      continue;
-    }
-    if (!command) {
-      command = token;
-      continue;
-    }
-    args._.push(token);
-  }
-  return { globals, command, args };
-}
-function coerceCliValue2(value) {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
-  return value;
-}
-function parseJsonArgument(value, flag) {
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    throw new Error(`${flag} must be valid JSON: ${formatError9(error)}`);
-  }
-}
-function pickDefined3(object) {
-  return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== void 0));
-}
-function defaultGlobals2() {
-  return {
-    json: false,
-    plain: false,
-    quiet: false,
-    verbose: false,
-    debug: false,
-    noColor: false,
-    noInput: false,
-    record: false,
-    version: false,
-    help: false,
-    root: null,
-    stateDir: null,
-    actionPolicy: null,
-    maxOutput: null,
-    contentBoundaries: false,
-    allowRuntimeEval: null,
-    confirmActions: null
-  };
-}
-function normalizeGlobalFlag2(rawKey) {
-  switch (rawKey) {
-    case "json":
-    case "plain":
-    case "quiet":
-    case "verbose":
-    case "debug":
-    case "record":
-      return rawKey;
-    case "content-boundaries":
-      return "contentBoundaries";
-    case "root":
-      return "root";
-    case "state-dir":
-      return "stateDir";
-    case "action-policy":
-      return "actionPolicy";
-    case "max-output":
-      return "maxOutput";
-    case "allow-runtime-eval":
-      return "allowRuntimeEval";
-    case "confirm-actions":
-      return "confirmActions";
-    case "no-color":
-      return "noColor";
-    case "no-input":
-      return "noInput";
-    default:
-      return null;
-  }
-}
-function globalFlagTakesValue2(rawKey) {
-  return rawKey === "root" || rawKey === "state-dir" || rawKey === "action-policy" || rawKey === "max-output" || rawKey === "allow-runtime-eval" || rawKey === "confirm-actions";
-}
-function toCamel2(value) {
-  return value.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
-}
-
-// src/modules/batch-orchestration/src/main/command-map.ts
-var ALIASES2 = {
-  "session": "session",
-  "target": "target",
-  "snapshot": "snapshot",
-  "refs": "refs",
-  "get": "get_ref",
-  "find": "find",
-  "wait": "wait",
-  "batch": "batch",
-  "tap": "automation_tap",
-  "fill": "ref_action",
-  "scroll-into-view": "ref_action"
-};
-function commandAliases() {
-  return { ...ALIASES2 };
-}
-function commandArgs2(command, args, globals = {}) {
-  const cwd = args.cwd ?? globals.root;
-  switch (command) {
-    case "session":
-      return pickDefined3({
-        action: args.action ?? args._[0],
-        name: args.name ?? args._[1],
-        olderThan: args.olderThan,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "target":
-      return pickDefined3({
-        action: args.action ?? args._[0],
-        targetId: args.targetId ?? args._[1],
-        platform: args.platform,
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "snapshot":
-      return pickDefined3({
-        interactive: args.interactive,
-        compact: args.compact,
-        depth: args.depth,
-        source: args.source,
-        bounds: args.bounds,
-        metroPort: args.metroPort,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "refs":
-      return pickDefined3({ cwd, root: globals.root, stateDir: globals.stateDir });
-    case "get":
-      return pickDefined3({
-        field: args.field ?? args._[0],
-        ref: args.ref ?? args._[1],
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "find":
-      return pickDefined3({
-        kind: args.kind ?? args._[0],
-        value: args.value ?? args._[1],
-        action: args.action ?? args._[2],
-        name: args.name ?? (args._[0] === "nth" ? args._[2] : void 0),
-        text: args.text ?? args._[3],
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "wait": {
-      const first = args._[0];
-      return pickDefined3({
-        ref: args.ref ?? (/^@e\d+$/.test(String(first ?? "")) ? first : void 0),
-        ms: args.ms ?? (/^\d+$/.test(String(first ?? "")) ? Number(first) : void 0),
-        state: args.state,
-        text: args.text,
-        route: args.route,
-        metroReady: args.metroReady,
-        appReady: args.appReady,
-        noSpinner: args.noSpinner,
-        fn: args.fn,
-        allowRuntimeEval: globals.allowRuntimeEval,
-        actionPolicy: args.actionPolicy ?? globals.actionPolicy,
-        metroPort: args.metroPort,
-        timeoutMs: args.timeoutMs,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    }
-    case "batch":
-      return pickDefined3({
-        steps: args.steps ?? args._,
-        bail: args.bail,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "tap":
-      return pickDefined3({
-        platform: args.platform,
-        device: args.device,
-        x: args.x,
-        y: args.y,
-        ref: args.ref ?? args._[0],
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    case "fill":
-    case "scroll-into-view": {
-      const first = args._[0];
-      return pickDefined3({
-        command,
-        ref: args.ref ?? first,
-        text: args.text ?? (command === "fill" ? args._[1] : void 0),
-        durationMs: args.durationMs,
-        dryRun: args.dryRun,
-        cwd,
-        root: globals.root,
-        stateDir: globals.stateDir
-      });
-    }
-    default:
-      return {};
-  }
-}
-
-// src/modules/batch-orchestration/src/main/batch.ts
-import { execFile as nodeExecFile4 } from "node:child_process";
+// src/commands/batch-orchestration/src/main/batch.ts
 async function batchCommand(args, deps = defaultBatchDependencies) {
   const steps = normalizeBatchSteps(args.steps ?? []);
   const bail = args.bail === true;
@@ -4839,7 +4444,7 @@ async function batchCommand(args, deps = defaultBatchDependencies) {
       if (bail) break;
     }
   }
-  return toolJson8({
+  return toolJson({
     ok: failureIndex === null,
     bail,
     failureIndex,
@@ -4847,7 +4452,7 @@ async function batchCommand(args, deps = defaultBatchDependencies) {
   });
 }
 var defaultBatchDependencies = {
-  runTool: runToolViaCli
+  runToolAndEmitPayload: runToolViaCli
 };
 function normalizeBatchSteps(steps) {
   if (!Array.isArray(steps)) {
@@ -4862,7 +4467,7 @@ function normalizeBatchSteps(steps) {
   });
 }
 async function runBatchStep(step, batchArgs, deps) {
-  const parsed = parseCliArgs2(step);
+  const parsed = parseCliArgs(step);
   const { command, args, globals } = parsed;
   if (!command) throw new CliUsageError4("Batch step is missing a command.");
   const aliases = commandAliases();
@@ -4876,9 +4481,9 @@ async function runBatchStep(step, batchArgs, deps) {
     root: globals.root ?? batchArgs.root ?? null,
     stateDir: globals.stateDir ?? batchArgs.stateDir ?? null
   };
-  const effectiveArgs = commandArgs2(command, args, mergedGlobals);
-  const result = await deps.runTool(toolName, effectiveArgs, { command, globals: mergedGlobals, silent: true });
-  return { command, data: redactValue4(unwrapToolJson4(result)) };
+  const effectiveArgs = commandArgs(command, args, mergedGlobals);
+  const result = await deps.runToolAndEmitPayload(toolName, effectiveArgs, { command, globals: mergedGlobals, silent: true });
+  return { command, data: redactValue(unwrapToolJson(result)) };
 }
 async function runToolViaCli(_toolName, args, options) {
   const cliPath = process.argv[1];
@@ -4918,14 +4523,15 @@ function parseCliJson(stdout) {
   if (!text) return null;
   try {
     return JSON.parse(text);
-  } catch {
-    return { text };
+  } catch (error) {
+    const snippet = truncate6(text, 4e3);
+    throw new Error(`Batch child process returned invalid JSON on stdout: ${snippet}`, { cause: error });
   }
 }
 function execFile4(file, args, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile4(file, args, { timeout: options.timeout }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error
@@ -4937,16 +4543,105 @@ function kebabCase(value) {
   return value.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
-// src/modules/app-lifecycle-actions/src/main/index.ts
+// src/commands/app-lifecycle-actions/src/main/index.ts
 import { execFile as nodeExecFile5 } from "node:child_process";
 import * as fs4 from "node:fs/promises";
 import { homedir } from "node:os";
 import { join as joinPath, resolve as resolvePath } from "node:path";
+
+// src/core/policy-redaction/src/main/policy-service.ts
+function decideActionPolicy({
+  action,
+  sideEffect,
+  policy = null,
+  source = null,
+  allowRuntimeEval = false
+}) {
+  if (action === "wait.fn" && allowRuntimeEval === true) {
+    return checkedPolicyDecision({
+      action,
+      sideEffect: "runtime-eval",
+      allowed: true,
+      source: "--allow-runtime-eval",
+      reason: "Runtime eval allowed by global flag."
+    });
+  }
+  if (sideEffect === "read") {
+    return checkedPolicyDecision({
+      action,
+      sideEffect,
+      allowed: true,
+      source: null,
+      reason: POLICY_REASONS.READ_ALLOWED
+    });
+  }
+  if (!policy) {
+    return checkedPolicyDecision({
+      action,
+      sideEffect,
+      allowed: false,
+      source: null,
+      reason: POLICY_REASONS.MISSING_POLICY
+    });
+  }
+  const allowed = policyAllowsAction(policy, action);
+  return checkedPolicyDecision({
+    action,
+    sideEffect,
+    allowed,
+    source,
+    reason: allowed ? POLICY_REASONS.ACTION_ALLOWED : POLICY_REASONS.ACTION_DENIED
+  });
+}
+function policyAllowsAction(policy, action) {
+  if (Array.isArray(policy?.allow) && policy.allow.includes(action)) {
+    return true;
+  }
+  if (policy?.actions?.[action] === "allow" || policy?.actions?.[action] === true) {
+    return true;
+  }
+  return false;
+}
+function defaultPolicySummary() {
+  return {
+    allow: [],
+    defaults: {
+      read: "allow",
+      write: "deny",
+      device: "deny",
+      runtimeEval: "deny unless --allow-runtime-eval true or an action policy allows the command"
+    }
+  };
+}
+function actionSideEffect(action) {
+  if (/^(doctor|project-info|routes|devices|target\.list|target\.current|snapshot|refs|get|find|wait|console|errors|logs|metro\.status|policy|redact|review)/.test(action)) {
+    return "read";
+  }
+  if (/^(storage\.set|storage\.clear|state\.save|state\.load|state\.clear|install-app|uninstall-app|set\.|wait\.fn)/.test(action)) {
+    return "device";
+  }
+  return "device";
+}
+function policyDeniedPayload({ domain, action, policy }) {
+  return {
+    available: false,
+    domain,
+    action,
+    source: "policy",
+    evidenceSource: "policy",
+    code: "policy-denied",
+    denied: true,
+    reason: "Policy denied action.",
+    policy
+  };
+}
+
+// src/commands/app-lifecycle-actions/src/main/index.ts
 var MAX_OUTPUT6 = 4e4;
 var defaultAppLifecycleDependencies = {
   execFile: defaultExecFile,
   resolveIosDevice: defaultResolveIosDevice,
-  wait: (ms) => new Promise((resolve15) => setTimeout(resolve15, ms)),
+  wait: (ms) => new Promise((resolve18) => setTimeout(resolve18, ms)),
   now: () => Date.now(),
   policyDecision: defaultPolicyDecision,
   runtimeSummary: defaultRuntimeSummary,
@@ -4954,7 +4649,7 @@ var defaultAppLifecycleDependencies = {
 };
 async function bootSimulator(args, deps = defaultAppLifecycleDependencies) {
   const policy = await deps.policyDecision(args, "boot-simulator", "device");
-  if (!policy.allowed) return policyDeniedPayload("boot-simulator", policy);
+  if (!policy.allowed) return policyDeniedPayload2("boot-simulator", policy);
   const requestedDevice = optionalString3(args.device) ?? void 0;
   const device = await deps.resolveIosDevice(requestedDevice, { preferBooted: true });
   const bootResult = await deps.execFile("xcrun", ["simctl", "boot", device.udid], {
@@ -4976,12 +4671,12 @@ async function bootSimulator(args, deps = defaultAppLifecycleDependencies) {
 async function launchApp(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   const policy = await deps.policyDecision(args, "launch-app", "device");
-  if (!policy.allowed) return policyDeniedPayload("launch-app", policy);
+  if (!policy.allowed) return policyDeniedPayload2("launch-app", policy);
   if (platform === "android") {
     const packageName = requireString6(args.packageName ?? args.bundleId, "packageName");
     const activity = optionalString3(args.activity);
-    const commandArgs3 = activity ? ["shell", "am", "start", "-n", `${packageName}/${activity}`] : ["shell", "monkey", "-p", packageName, "1"];
-    const result2 = await deps.execFile("adb", androidDeviceArgs(args.device, commandArgs3), {
+    const commandArgs2 = activity ? ["shell", "am", "start", "-n", `${packageName}/${activity}`] : ["shell", "monkey", "-p", packageName, "1"];
+    const result2 = await deps.execFile("adb", androidDeviceArgs(args.device, commandArgs2), {
       timeout: 3e4,
       rejectOnError: false
     });
@@ -5023,7 +4718,7 @@ async function launchApp(args, deps = defaultAppLifecycleDependencies) {
 async function terminateApp(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   const policy = await deps.policyDecision(args, "terminate-app", "device");
-  if (!policy.allowed) return policyDeniedPayload("terminate-app", policy);
+  if (!policy.allowed) return policyDeniedPayload2("terminate-app", policy);
   const bundleId = await resolveBundleId(args, deps);
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: "terminate-app", platform, bundleId };
@@ -5061,7 +4756,7 @@ async function terminateApp(args, deps = defaultAppLifecycleDependencies) {
 }
 async function reloadApp(args, deps = defaultAppLifecycleDependencies) {
   const policy = await deps.policyDecision(args, "reload-app", "device");
-  if (!policy.allowed) return policyDeniedPayload("reload-app", policy);
+  if (!policy.allowed) return policyDeniedPayload2("reload-app", policy);
   const bundleId = await resolveBundleId(args, deps);
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: "reload-app", bundleId };
@@ -5091,7 +4786,7 @@ async function attachIosCrashEvidence(payload, options, deps) {
 }
 async function iosCrashEvidence(args, deps = defaultAppLifecycleDependencies) {
   const sinceMs = finiteNumber(args.sinceMs ?? deps.now());
-  const delay = clampNumber8(args.waitMs ?? 0, 0, 3e4);
+  const delay = clampNumber9(args.waitMs ?? 0, 0, 3e4);
   if (delay > 0) await deps.wait(delay);
   const bundleId = optionalString3(args.bundleId);
   const processName = optionalString3(args.processName);
@@ -5141,7 +4836,7 @@ async function installApp(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   const appPath = resolvePath(requireString6(args.appPath, "appPath"));
   const policy = await deps.policyDecision(args, "install-app", "device");
-  if (!policy.allowed) return policyDeniedPayload("install-app", policy);
+  if (!policy.allowed) return policyDeniedPayload2("install-app", policy);
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: "install-app", platform, appPath, policy };
   }
@@ -5181,7 +4876,7 @@ async function installApp(args, deps = defaultAppLifecycleDependencies) {
 async function uninstallApp(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   const policy = await deps.policyDecision(args, "uninstall-app", "device");
-  if (!policy.allowed) return policyDeniedPayload("uninstall-app", policy);
+  if (!policy.allowed) return policyDeniedPayload2("uninstall-app", policy);
   const bundleId = await resolveBundleId(args, deps);
   if (args.dryRun === true) {
     return { available: true, dryRun: true, action: "uninstall-app", platform, bundleId, policy };
@@ -5232,7 +4927,7 @@ async function collectAppLogs(args, deps = defaultAppLifecycleDependencies) {
   const platform = platformArg(args.platform);
   if (platform === "android") {
     const device2 = optionalString3(args.device);
-    const lines = String(clampNumber8(args.lines ?? 500, 1, 5e3));
+    const lines = String(clampNumber9(args.lines ?? 500, 1, 5e3));
     const result2 = await deps.execFile("adb", androidDeviceArgs(device2, ["logcat", "-d", "-t", lines]), {
       timeout: 3e4,
       maxBuffer: 4 * 1024 * 1024,
@@ -5249,9 +4944,9 @@ async function collectAppLogs(args, deps = defaultAppLifecycleDependencies) {
   const last = optionalString3(args.last) ?? "2m";
   if (!/^\d+[smhd]$/.test(last)) throw new Error("last must look like 30s, 2m, 1h, or 1d.");
   const predicate = optionalString3(args.predicate) ?? iosLogPredicate(args);
-  const commandArgs3 = ["simctl", "spawn", device.udid, "log", "show", "--style", "compact", "--last", last];
-  if (predicate) commandArgs3.push("--predicate", predicate);
-  const result = await deps.execFile("xcrun", commandArgs3, {
+  const commandArgs2 = ["simctl", "spawn", device.udid, "log", "show", "--style", "compact", "--last", last];
+  if (predicate) commandArgs2.push("--predicate", predicate);
+  const result = await deps.execFile("xcrun", commandArgs2, {
     timeout: 45e3,
     maxBuffer: 5 * 1024 * 1024,
     rejectOnError: false
@@ -5273,7 +4968,7 @@ function iosLogPredicate(args) {
   return inferredProcess ? `process CONTAINS "${escapePredicateValue(inferredProcess)}"` : null;
 }
 function defaultExecFile(file, args, options = {}) {
-  return new Promise((resolve15, reject) => {
+  return new Promise((resolve18, reject) => {
     nodeExecFile5(file, args, {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer ?? MAX_OUTPUT6
@@ -5283,7 +4978,7 @@ function defaultExecFile(file, args, options = {}) {
         reject(error);
         return;
       }
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error: error ? { message: error.message, code: error.code, signal: error.signal } : null
@@ -5391,7 +5086,7 @@ function androidDeviceArgs(device, args) {
   const requested = optionalString3(device);
   return requested ? ["-s", requested, ...args] : args;
 }
-function clampNumber8(value, min, max) {
+function clampNumber9(value, min, max) {
   const number = finiteNumber(value);
   return Math.min(max, Math.max(min, number));
 }
@@ -5412,18 +5107,8 @@ function optionalString3(value) {
 function platformArg(value) {
   return value === "android" ? "android" : "ios";
 }
-function policyDeniedPayload(action, policy) {
-  return {
-    available: false,
-    domain: "app",
-    action,
-    source: "policy",
-    evidenceSource: "policy",
-    code: "policy-denied",
-    denied: true,
-    reason: "Policy denied action.",
-    policy
-  };
+function policyDeniedPayload2(action, policy) {
+  return policyDeniedPayload({ domain: "app", action, policy });
 }
 function parseCrashReportMetadata(content) {
   const firstLine = content.split(/\r?\n/, 1)[0]?.trim();
@@ -5444,7 +5129,7 @@ function stringFrom(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-// src/modules/route-url-actions/src/main/index.ts
+// src/commands/route-url-actions/src/main/index.ts
 import { execFile as nodeExecFile6 } from "node:child_process";
 import * as fs5 from "node:fs/promises";
 import path4 from "node:path";
@@ -5530,37 +5215,47 @@ async function openUrl(args, deps = {}) {
   const platform = args.platform ?? "ios";
   const url = requireString7(args.url, "url");
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
+  const policy = await routeActionPolicyDecision(args, "open-url", deps);
+  if (!policy.allowed) return toolJson7(policyDeniedPayload({ domain: "route", action: "open-url", policy }));
   const execFile12 = deps.execFile ?? defaultExecFile2;
   if (platform === "android") {
     const adbArgs = androidDeviceArgs2(args.device, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
     const result2 = await execFile12("adb", adbArgs, { timeout: 3e4, rejectOnError: false });
-    return toolJson9(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate8(result2.stdout), stderr: truncate8(result2.stderr) }));
+    return toolJson7(redactToolPayload({ platform, device: args.device ?? null, stdout: truncate7(result2.stdout), stderr: truncate7(result2.stderr) }));
   }
   const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const result = await execFile12("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
-  return toolJson9(redactToolPayload({ platform, device, stdout: truncate8(result.stdout), stderr: truncate8(result.stderr) }));
+  return toolJson7(redactToolPayload({ platform, device, stdout: truncate7(result.stdout), stderr: truncate7(result.stderr) }));
 }
 async function openExpoRoute(args, deps = {}) {
   const cwd = await normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
-  const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const url = args.url ? requireString7(args.url, "url") : await buildExpoRouteUrl(cwd, args);
   if (/\s/.test(url)) throw new Error("url must not contain whitespace.");
+  const policy = await routeActionPolicyDecision(args, "open-route", deps);
+  if (!policy.allowed) return toolJson7(policyDeniedPayload({ domain: "route", action: "open-route", policy }));
+  const device = await resolveIosDevice(args.device, { preferBooted: true }, deps);
   const execFile12 = deps.execFile ?? defaultExecFile2;
   const result = await execFile12("xcrun", ["simctl", "openurl", device.udid, url], {
     timeout: 3e4,
     rejectOnError: false
   });
-  return toolJson9(redactToolPayload({
+  return toolJson7(redactToolPayload({
     platform: "ios",
     device,
     url: redactUrlAuthCookie(url),
-    stdout: truncate8(result.stdout),
-    stderr: truncate8(result.stderr),
+    stdout: truncate7(result.stdout),
+    stderr: truncate7(result.stderr),
     error: normalizeExecError(result.error)
   }));
+}
+async function routeActionPolicyDecision(args, action, deps = {}) {
+  const policyPath = requireOptionalString2(args.actionPolicy);
+  const source = policyPath ? (deps.resolvePath ?? path4.resolve)(policyPath) : null;
+  const policy = source ? await readPolicyDocument(source, deps) : null;
+  return decideActionPolicy({ action, sideEffect: "device", policy, source });
 }
 async function normalizeProjectCwd(cwd, options = {}) {
   const resolved = await normalizeCwd3(cwd);
@@ -5598,11 +5293,15 @@ async function pathExists2(file) {
 async function readJsonFile3(file) {
   return JSON.parse(await fs5.readFile(file, "utf8"));
 }
-function toolJson9(value) {
+async function readPolicyDocument(file, deps) {
+  const read = deps.readJsonFile ?? readJsonFile3;
+  return await read(file);
+}
+function toolJson7(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-function truncate8(value, limit = MAX_OUTPUT7) {
+function truncate7(value, limit = MAX_OUTPUT7) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -5639,7 +5338,7 @@ function isSensitiveQueryKey(key) {
 function isRecord6(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve15, reject) => {
+var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve18, reject) => {
   const { timeout = 6e4, maxBuffer = MAX_OUTPUT7, rejectOnError = true } = options;
   nodeExecFile6(file, [...args], { timeout: Number(timeout), maxBuffer: Number(maxBuffer) }, (error, stdout, stderr) => {
     if (error && rejectOnError) {
@@ -5647,7 +5346,7 @@ var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve15, rej
       reject(error);
       return;
     }
-    resolve15({
+    resolve18({
       stdout: String(stdout ?? ""),
       stderr: String(stderr ?? ""),
       error: error ? { message: error.message, code: error.code, signal: error.signal } : void 0
@@ -5655,13 +5354,16 @@ var defaultExecFile2 = (file, args, options = {}) => new Promise((resolve15, rej
   });
 });
 
-// src/modules/interaction-actions/src/main/index.ts
+// src/commands/interaction-actions/src/main/types.ts
+var MAX_OUTPUT8 = 4e4;
+
+// src/commands/interaction-actions/src/main/dependencies.ts
 import { execFile as nodeExecFile7, spawn as nodeSpawn } from "node:child_process";
 import * as fs7 from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
-import { basename as basename4, join as joinPath2 } from "node:path";
+import { join as joinPath2 } from "node:path";
 
-// src/modules/real-validation/src/main/index.ts
+// src/core/real-validation/src/main/index.ts
 function realValidation(input) {
   return {
     state: input.state,
@@ -5679,18 +5381,18 @@ function realValidation(input) {
   };
 }
 
-// src/modules/interaction-trace-expression/src/main/index.ts
+// src/commands/interaction-trace-expression/src/main/index.ts
 async function traceInteraction(args = {}, deps = defaultTraceInteractionDependencies) {
-  const metroPort = clampNumber9(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber10(args.metroPort ?? 8081, 1, 65535);
   const action = args.action;
-  const maxEvents = clampNumber9(args.maxEvents ?? 300, 1, 2e3);
+  const maxEvents = clampNumber10(args.maxEvents ?? 300, 1, 2e3);
   const includeEvents = args.includeEvents === true;
   const componentFilter = requireOptionalString3(args.componentFilter);
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
   const webSocketDebuggerUrl = asString(asRecord4(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
-    return toolJson10({
+    return toolJson({
       available: false,
       action,
       reason: "No Metro inspector target.",
@@ -5713,7 +5415,7 @@ async function traceInteraction(args = {}, deps = defaultTraceInteractionDepende
   const expression = interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8e3 });
   const trace = getPath(result, ["result", "result", "value"]) ?? null;
-  return toolJson10({
+  return toolJson({
     action,
     metroPort,
     target: targetSummary2(targetList[0]),
@@ -5727,10 +5429,6 @@ var defaultTraceInteractionDependencies = {
   fetchMetroTargets: (metroPort) => metroTargets(metroPort),
   evaluateHermesExpression
 };
-function toolJson10(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }], isError: false };
-}
 function interactionTraceExpression({ action, maxEvents, componentFilter, includeEvents }) {
   return `(() => {
     const action = ${JSON.stringify(action)};
@@ -6239,7 +5937,7 @@ function traceRealValidation(trace, action) {
 function requireOptionalString3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber9(value, min, max) {
+function clampNumber10(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -6260,20 +5958,20 @@ function asRecord4(value) {
   return value && typeof value === "object" ? value : null;
 }
 
-// src/modules/screenshot-capture/src/main/index.ts
+// src/commands/screenshot-capture/src/main/index.ts
 import * as fs6 from "node:fs/promises";
 import * as os from "node:os";
 import * as path5 from "node:path";
 import { execFile as execFile5, spawn } from "node:child_process";
-var MAX_OUTPUT8 = 4e4;
+var MAX_OUTPUT9 = 4e4;
 async function automationTakeScreenshot(args, deps = {}) {
   if (args.full === true) {
-    return toolJson11(await (deps.captureFullScreenshot ?? captureFullScreenshot)(args, deps));
+    return toolJson8(await (deps.captureFullScreenshot ?? captureFullScreenshot)(args, deps));
   }
   if (args.annotate === true) {
-    return toolJson11(await (deps.annotatedScreenshot ?? annotatedScreenshot)(args, deps));
+    return toolJson8(await (deps.annotatedScreenshot ?? annotatedScreenshot)(args, deps));
   }
-  return toolJson11(await (deps.captureScreenshot ?? captureScreenshot)(args, deps));
+  return toolJson8(await (deps.captureScreenshot ?? captureScreenshot)(args, deps));
 }
 async function captureFullScreenshot(args, deps = {}) {
   const platform = args.platform ?? "ios";
@@ -6305,9 +6003,9 @@ async function captureFullScreenshot(args, deps = {}) {
   }
   const device = await resolveIosDevice2(args.device, deps);
   const outputPath = path5.resolve(
-    args.outputPath ?? path5.join(os.tmpdir(), "expo-ios-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`)
+    args.outputPath ?? path5.join(os.tmpdir(), "expo98-screenshots", `full-screenshot-${safeTimestamp(deps)}.png`)
   );
-  const segmentCount = clampNumber10(args.fullSegments ?? args.segments ?? 3, 1, 12);
+  const segmentCount = clampNumber11(args.fullSegments ?? args.segments ?? 3, 1, 12);
   const segmentDir = path5.join(path5.dirname(outputPath), `${path5.basename(outputPath, path5.extname(outputPath))}-segments`);
   await mkdir8(segmentDir, deps);
   const segments = [];
@@ -6343,8 +6041,8 @@ async function captureFullScreenshot(args, deps = {}) {
     ], { timeout: 1e4, rejectOnError: false }, deps);
     gestureResults.push({
       index,
-      stdout: truncate9(gesture.stdout),
-      stderr: truncate9(gesture.stderr),
+      stdout: truncate8(gesture.stdout),
+      stderr: truncate8(gesture.stderr),
       error: gesture.error ?? null
     });
     if (gesture.error) break;
@@ -6390,8 +6088,8 @@ async function captureFullScreenshot(args, deps = {}) {
       segmentDir,
       segments,
       stitch: {
-        stdout: truncate9(stitch.stdout),
-        stderr: truncate9(stitch.stderr),
+        stdout: truncate8(stitch.stdout),
+        stderr: truncate8(stitch.stderr),
         error: stitch.error
       }
     };
@@ -6410,8 +6108,8 @@ async function captureFullScreenshot(args, deps = {}) {
     limitation: "iOS Simulator does not expose a stable native full-page screenshot API for arbitrary React Native views; this artifact stitches real viewport screenshots captured after simulator scroll gestures.",
     gestures: gestureResults,
     stitch: {
-      stdout: truncate9(stitch.stdout),
-      stderr: truncate9(stitch.stderr)
+      stdout: truncate8(stitch.stdout),
+      stderr: truncate8(stitch.stderr)
     }
   };
 }
@@ -6428,7 +6126,7 @@ async function imageDimensions(magick, imagePath, deps = {}) {
 async function captureScreenshot(args, deps = {}) {
   const platform = args.platform ?? "ios";
   const outputPath = path5.resolve(
-    args.outputPath ?? path5.join(os.tmpdir(), "expo-ios-screenshots", `screenshot-${safeTimestamp(deps)}.png`)
+    args.outputPath ?? path5.join(os.tmpdir(), "expo98-screenshots", `screenshot-${safeTimestamp(deps)}.png`)
   );
   await mkdir8(path5.dirname(outputPath), deps);
   if (platform === "android") {
@@ -6447,8 +6145,8 @@ async function captureScreenshot(args, deps = {}) {
       platform,
       device,
       outputPath,
-      stdout: truncate9(result.stdout),
-      stderr: truncate9(result.stderr),
+      stdout: truncate8(result.stdout),
+      stderr: truncate8(result.stderr),
       error: result.error
     };
   }
@@ -6456,8 +6154,8 @@ async function captureScreenshot(args, deps = {}) {
     platform,
     device,
     outputPath,
-    stdout: truncate9(result.stdout),
-    stderr: truncate9(result.stderr)
+    stdout: truncate8(result.stdout),
+    stderr: truncate8(result.stderr)
   };
 }
 async function annotatedScreenshot(args, deps = {}) {
@@ -6580,14 +6278,14 @@ function screenshotOverlaySize(labels) {
 function escapeHtml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber10(value, min, max) {
+function clampNumber11(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function truncate9(value, limit = MAX_OUTPUT8) {
+function truncate8(value, limit = MAX_OUTPUT9) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -6596,7 +6294,7 @@ function truncate9(value, limit = MAX_OUTPUT8) {
 async function pathExists3(file, deps) {
   return deps.access(file).then(() => true, () => false);
 }
-function toolJson11(value) {
+function toolJson8(value) {
   return {
     content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }],
@@ -6605,14 +6303,14 @@ function toolJson11(value) {
 }
 async function execFilePromise2(file, args, options, deps = {}) {
   if (deps.execFile) return deps.execFile(file, args, options);
-  return new Promise((resolve15, reject) => {
-    execFile5(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT8 }, (error, stdout, stderr) => {
+  return new Promise((resolve18, reject) => {
+    execFile5(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT9 }, (error, stdout, stderr) => {
       if (error && options.rejectOnError !== false) {
         reject(error);
         return;
       }
       const execError = error;
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error: execError ? { message: execError.message, code: execError.code, signal: execError.signal } : null
@@ -6658,7 +6356,7 @@ async function resolveIosDevice2(requested, deps) {
 async function adbScreenshot(device, outputPath, deps) {
   if (deps.adbScreenshot) return deps.adbScreenshot(device, outputPath);
   const args = device ? ["-s", device, "exec-out", "screencap", "-p"] : ["exec-out", "screencap", "-p"];
-  await new Promise((resolve15, reject) => {
+  await new Promise((resolve18, reject) => {
     const child = spawnProcess("adb", args, deps);
     let stderr = "";
     const chunks = [];
@@ -6682,7 +6380,7 @@ async function adbScreenshot(device, outputPath, deps) {
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        fs6.writeFile(outputPath, Buffer.concat(chunks, byteLength)).then(resolve15, reject);
+        fs6.writeFile(outputPath, Buffer.concat(chunks, byteLength)).then(resolve18, reject);
       } else {
         reject(new Error(`adb screenshot failed with code ${code}: ${stderr}`));
       }
@@ -6719,7 +6417,7 @@ async function writeFile5(file, contents, encoding, deps) {
 }
 async function wait(ms, deps) {
   if (deps.wait) return deps.wait(ms);
-  await new Promise((resolve15) => setTimeout(resolve15, ms));
+  await new Promise((resolve18) => setTimeout(resolve18, ms));
 }
 function safeTimestamp(deps) {
   return (deps.nowIso?.() ?? (/* @__PURE__ */ new Date()).toISOString()).replace(/[:.]/g, "-");
@@ -6736,7 +6434,7 @@ function resolveExpoStateRoot3(args = {}) {
     return path5.basename(resolved) === "runs" ? path5.dirname(resolved) : resolved;
   }
   const root = path5.resolve(args.root ?? args.cwd ?? process.env.PWD ?? ".");
-  return path5.join(root, ".scratch", "expo-ios");
+  return path5.join(root, ".scratch", "expo98");
 }
 async function readLatestSession3(stateRoot, deps) {
   const sessionsRoot = path5.join(stateRoot, "sessions");
@@ -6759,8 +6457,117 @@ async function readJsonFile4(file, deps) {
   return JSON.parse(await fs6.readFile(file, "utf8"));
 }
 
-// src/modules/interaction-actions/src/main/index.ts
-var MAX_OUTPUT9 = 4e4;
+// src/commands/interaction-actions/src/main/shared.ts
+function requireString8(value, field) {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
+  return value.trim();
+}
+function clampNumber12(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${value}.`);
+  return Math.min(Math.max(number, min), max);
+}
+function truncate9(value, limit = MAX_OUTPUT8) {
+  const text = String(value ?? "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}
+[truncated ${text.length - limit} characters]`;
+}
+function createRefActionAdapter(refDeps, refActions) {
+  return {
+    planRefAction: (args) => refActions.planRefAction(args, refDeps),
+    readRefRecord: async (ref, args) => readRefRecordFromCache(ref, args, refDeps),
+    refPoint: async (ref, args) => refPointFromCache(ref, args, refDeps),
+    scrollPlan: (args) => refActions.scrollPlan(args, refDeps)
+  };
+}
+function policyDeniedPayload3({ domain, action, policy }) {
+  return policyDeniedPayload({ domain, action, policy });
+}
+async function readRefRecordFromCache(refValue, args, deps) {
+  const ref = requireString8(refValue, "ref");
+  const cache = await deps.readLatestRefCache(args);
+  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
+  const record = cache.refs.find((item) => item.ref === ref);
+  if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
+  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
+  return { available: true, record, cache };
+}
+async function refPointFromCache(refValue, args, deps) {
+  const ref = requireString8(refValue, "ref");
+  const found = await readRefRecordFromCache(ref, args, deps);
+  if (found.available === false) return found;
+  const record = asRecord6(found.record);
+  const box = asRecord6(record.box);
+  if (!box) return { available: false, reason: "Ref does not include bounds.", ref };
+  const x = Number(box.x) + Number(box.width) / 2;
+  const y = Number(box.y) + Number(box.height) / 2;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return { available: false, reason: "Ref bounds are not finite.", ref, box };
+  }
+  return {
+    available: true,
+    ref,
+    point: { x, y },
+    box
+  };
+}
+async function policyGate(args, action, domain, deps) {
+  const policy = await deps.policyDecision(args, action, "device");
+  return policy.allowed ? null : policyDeniedPayload3({ domain, action, policy });
+}
+async function resolveIosInteractionTool(deps) {
+  const idb = await deps.commandPath("idb");
+  if (idb) return { tool: "idb", path: idb };
+  const axe = await deps.commandPath("axe");
+  if (axe) return { tool: "axe", path: axe };
+  return null;
+}
+function androidDeviceArgs3(device, args) {
+  return device ? ["-s", device, ...args] : args;
+}
+function platformArg2(value) {
+  return value === "android" ? "android" : "ios";
+}
+function optionalString4(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+function asRecord6(value) {
+  return value && typeof value === "object" ? value : {};
+}
+function isFinitePoint(value) {
+  return Number.isFinite(value.x) && Number.isFinite(value.y);
+}
+function asGesturePlan(value) {
+  const record = asRecord6(value);
+  return {
+    tool: String(record.tool ?? ""),
+    command: Array.isArray(record.command) ? record.command.map(String) : [],
+    repeat: Number(record.repeat ?? 1),
+    intervalMs: Number(record.intervalMs ?? 0),
+    notes: Array.isArray(record.notes) ? record.notes.map(String) : []
+  };
+}
+function unwrapToolPayload(value) {
+  if (value && typeof value === "object" && Array.isArray(value.content)) {
+    const text = value.content[0]?.text ?? "{}";
+    return JSON.parse(text);
+  }
+  return asRecord6(value);
+}
+function formatSeconds(ms) {
+  return (ms / 1e3).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+function reviewQuestions() {
+  return [
+    "Does a long press stay on the intended target instead of becoming scroll?",
+    "Does a drag/swipe create, resize, or scroll according to the intended mode?",
+    "Do screenshots before and after show unintended movement, selection, or chrome overlap?",
+    "Do React commits/layout changes during the gesture match the expected interaction owner?"
+  ];
+}
+
+// src/commands/interaction-actions/src/main/dependencies.ts
 var defaultInteractionDependencies = {
   commandPath: defaultCommandPath,
   execFile: defaultExecFile3,
@@ -6769,258 +6576,145 @@ var defaultInteractionDependencies = {
   policyDecision: defaultPolicyDecision2,
   captureScreenshot: (args) => automationTakeScreenshot(args),
   traceInteraction: (args) => traceInteraction(args),
-  wait: (ms) => new Promise((resolve15) => setTimeout(resolve15, ms)),
+  wait: (ms) => new Promise((resolve18) => setTimeout(resolve18, ms)),
   now: () => /* @__PURE__ */ new Date(),
   tmpdir: osTmpdir,
   mkdir: (path12, options) => fs7.mkdir(path12, options),
   joinPath: joinPath2
 };
-async function automationTap(args, deps = defaultInteractionDependencies) {
-  return automationTapInternal(args, deps, false);
+async function defaultCommandPath(command) {
+  const result = await defaultExecFile3("which", [command], { timeout: 5e3, rejectOnError: false });
+  return result.error ? null : optionalString4(result.stdout);
 }
-async function automationTapInternal(args, deps, policyChecked) {
-  const policyDenied = policyChecked ? null : await policyGate(args, "tap", "interaction", deps);
-  if (policyDenied) return policyDenied;
-  if (args.ref) {
-    const planned = await deps.planRefAction({ ...args, action: "tap" });
-    if (args.dryRun === true || planned.available === false) return planned;
-    const point = asRecord6(asRecord6(planned.plan).point);
-    if (!isFinitePoint(point)) {
-      return { available: false, reason: "Ref does not include tappable bounds.", ref: args.ref };
-    }
-    return automationTapInternal({ ...args, ref: void 0, x: point.x, y: point.y }, deps, true);
+function defaultExecFile3(file, args, options = {}) {
+  if (options.input !== void 0) {
+    return defaultSpawnFile(file, args, options);
   }
-  const platform = platformArg2(args.platform);
-  const x = String(clampNumber11(args.x, 0, Number.MAX_SAFE_INTEGER));
-  const y = String(clampNumber11(args.y, 0, Number.MAX_SAFE_INTEGER));
-  if (args.dryRun === true) {
-    const iosTool = platform === "ios" ? await resolveIosInteractionTool(deps) : null;
-    const iosCommand = iosTool?.tool === "axe" ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString4(args.device) ?? "<booted-device>"] : ["idb", "ui", "tap", x, y, "--udid", optionalString4(args.device) ?? "<booted-device>"];
-    return {
-      available: true,
-      dryRun: true,
-      platform,
-      device: optionalString4(args.device),
-      tool: platform === "android" ? "adb" : iosTool?.tool ?? "idb",
-      point: { x: Number(x), y: Number(y) },
-      command: platform === "android" ? ["adb", ...androidDeviceArgs3(optionalString4(args.device), ["shell", "input", "tap", x, y])] : iosCommand
-    };
-  }
-  if (platform === "android") {
-    const result2 = await deps.execFile("adb", androidDeviceArgs3(optionalString4(args.device), ["shell", "input", "tap", x, y]), {
-      timeout: 2e4,
-      rejectOnError: false
+  return new Promise((resolve18, reject) => {
+    nodeExecFile7(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT8 }, (error, stdout, stderr) => {
+      if (error && options.rejectOnError !== false) {
+        Object.assign(error, { stdout, stderr });
+        reject(error);
+        return;
+      }
+      resolve18({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : null
+      });
     });
-    return { platform, device: optionalString4(args.device), x: Number(x), y: Number(y), stdout: truncate10(result2.stdout), stderr: truncate10(result2.stderr) };
-  }
-  const tool = await resolveIosInteractionTool(deps);
-  if (!tool) {
-    throw new Error(
-      "iOS coordinate taps require the idb or axe CLI, but neither is installed or on PATH. Install idb or axe for iOS coordinate automation."
-    );
-  }
-  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
-  const command = tool.tool === "axe" ? ["tap", "-x", x, "-y", y, "--udid", device.udid] : ["ui", "tap", x, y, "--udid", device.udid];
-  const result = await deps.execFile(tool.path, command, { timeout: 2e4, rejectOnError: false });
-  return { platform, device, tool: tool.tool, x: Number(x), y: Number(y), stdout: truncate10(result.stdout), stderr: truncate10(result.stderr) };
-}
-async function refActionCommand(args, deps = defaultInteractionDependencies) {
-  const command = requireString8(args.command, "command");
-  if (command === "scroll-into-view") {
-    const record = await deps.readRefRecord(args.ref, args);
-    return record.available === false ? record : { available: true, action: command, ref: args.ref, reason: "Ref is present in the current snapshot.", record: record.record };
-  }
-  if (command === "blur") {
-    const policyDenied = await policyGate(args, "ref.blur", "ref", deps);
-    if (policyDenied) return policyDenied;
-    return keyboardCommand({ ...args, action: "press", key: "Enter" }, deps);
-  }
-  if (["focus", "check", "uncheck", "select"].includes(command)) {
-    const policyDenied = await policyGate(args, `ref.${command}`, "ref", deps);
-    if (policyDenied) return policyDenied;
-    const tapped = await automationTapInternal({ ...args, ref: args.ref, dryRun: args.dryRun }, deps, true);
-    return { ...tapped, action: command, ref: args.ref, value: args.text ?? null };
-  }
-  if (command === "fill") {
-    const policyDenied = await policyGate(args, "ref.fill", "ref", deps);
-    if (policyDenied) return policyDenied;
-    const ref = requireString8(args.ref, "ref");
-    const text = requireString8(args.text, "text");
-    if (args.dryRun === true) {
-      return { available: true, dryRun: true, action: command, ref, textLength: text.length, steps: ["tap ref", "type text"] };
-    }
-    const tapped = await automationTapInternal({ ...args, ref }, deps, true);
-    if (tapped.available === false) return { ...tapped, action: command, ref };
-    const typed = await keyboardCommand({ ...args, action: "type", text }, deps);
-    return { available: typed.available !== false, action: command, ref, tap: tapped, type: typed };
-  }
-  if (command === "long-press" || command === "dbltap") {
-    const policyDenied = await policyGate(args, `ref.${command}`, "ref", deps);
-    if (policyDenied) return policyDenied;
-    const point = await deps.refPoint(args.ref, args);
-    if (point.available === false) return point;
-    const coordinates = asRecord6(point.point);
-    return automationGestureInternal({
-      ...args,
-      gesture: command === "long-press" ? "long-press" : "tap",
-      x: coordinates.x,
-      y: coordinates.y,
-      repeat: command === "dbltap" ? 2 : 1,
-      intervalMs: command === "dbltap" ? 80 : args.intervalMs
-    }, deps, true);
-  }
-  if (command === "drag") {
-    const policyDenied = await policyGate(args, "ref.drag", "ref", deps);
-    if (policyDenied) return policyDenied;
-    const start = await deps.refPoint(args.ref, args);
-    const end = await deps.refPoint(args.targetRef, args);
-    if (start.available === false) return start;
-    if (end.available === false) return { ...end, role: "targetRef" };
-    return automationGestureInternal({
-      ...args,
-      gesture: "drag",
-      startX: asRecord6(start.point).x,
-      startY: asRecord6(start.point).y,
-      endX: asRecord6(end.point).x,
-      endY: asRecord6(end.point).y,
-      durationMs: args.durationMs ?? 600
-    }, deps, true);
-  }
-  if (command === "scroll") {
-    const policyDenied = await policyGate(args, "ref.scroll", "ref", deps);
-    if (policyDenied) return policyDenied;
-    const plan = await deps.scrollPlan(args);
-    if (plan.available === false || args.dryRun === true) return plan;
-    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord6(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
-  }
-  throw new Error(`Unknown ref action command: ${command}`);
-}
-async function clipboardCommand(args, deps = defaultInteractionDependencies) {
-  const action = requireString8(args.action ?? "read", "action");
-  if (!["read", "write", "paste"].includes(action)) throw new Error(`Unknown clipboard action: ${action}`);
-  if (action !== "read") {
-    const policyDenied = await policyGate(args, `clipboard.${action}`, "clipboard", deps);
-    if (policyDenied) return policyDenied;
-  }
-  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
-  if (args.dryRun === true) {
-    return { available: true, dryRun: true, action: `clipboard.${action}`, device };
-  }
-  if (action === "read") {
-    const result2 = await deps.execFile("xcrun", ["simctl", "pbpaste", device.udid], { timeout: 1e4, rejectOnError: false });
-    return { available: !result2.error, action, device, text: result2.stdout, stderr: truncate10(result2.stderr), error: result2.error ?? null };
-  }
-  if (action === "write") {
-    const text = requireString8(args.text, "text");
-    const result2 = await deps.execFile("xcrun", ["simctl", "pbcopy", device.udid], { input: text, timeout: 1e4, rejectOnError: false });
-    return { available: !result2.error, action, device, textLength: text.length, stdout: truncate10(result2.stdout), stderr: truncate10(result2.stderr), error: result2.error ?? null };
-  }
-  const axe = await deps.commandPath("axe");
-  if (!axe) return { available: false, action, reason: "clipboard paste requires axe key-combo support.", device };
-  const result = await deps.execFile(axe, ["key-combo", "--modifiers", "227", "--key", "25", "--udid", device.udid], {
-    timeout: 1e4,
-    rejectOnError: false
   });
-  return { available: !result.error, action, device, tool: "axe", stdout: truncate10(result.stdout), stderr: truncate10(result.stderr), error: result.error ?? null };
 }
-async function keyboardCommand(args, deps = defaultInteractionDependencies) {
-  const action = requireString8(args.action ?? "type", "action");
-  if (!["type", "press"].includes(action)) throw new Error(`Unknown keyboard action: ${action}`);
-  const policyDenied = await policyGate(args, `keyboard.${action}`, "keyboard", deps);
-  if (policyDenied) return policyDenied;
-  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
-  const axe = await deps.commandPath("axe");
-  if (!axe) return { available: false, action, reason: "keyboard commands require the axe CLI.", device };
-  if (args.dryRun === true) {
-    return { available: true, dryRun: true, action: `keyboard.${action}`, device, tool: "axe" };
-  }
-  if (action === "type") {
-    const text = requireString8(args.text, "text");
-    const result2 = await deps.execFile(axe, ["type", text, "--udid", device.udid], { timeout: 2e4, rejectOnError: false });
-    return { available: !result2.error, action, device, tool: "axe", textLength: text.length, stdout: truncate10(result2.stdout), stderr: truncate10(result2.stderr), error: result2.error ?? null };
-  }
-  const key = requireString8(args.key, "key");
-  const keycode = keyCodeFor(key);
-  const result = await deps.execFile(axe, ["key", String(keycode), "--udid", device.udid], { timeout: 1e4, rejectOnError: false });
-  return { available: !result.error, action, device, tool: "axe", key, keycode, stdout: truncate10(result.stdout), stderr: truncate10(result.stderr), error: result.error ?? null };
+function defaultSpawnFile(file, args, options = {}) {
+  return new Promise((resolve18, reject) => {
+    const child = nodeSpawn(file, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timeout = options.timeout ? setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      const error = { message: `${file} timed out after ${options.timeout}ms`, code: "ETIMEDOUT", signal: null };
+      if (options.rejectOnError !== false) {
+        reject(Object.assign(new Error(error.message), { stdout, stderr, code: error.code }));
+      } else {
+        resolve18({ stdout, stderr, error });
+      }
+    }, options.timeout) : null;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      if (options.rejectOnError !== false) {
+        reject(Object.assign(error, { stdout, stderr }));
+      } else {
+        resolve18({ stdout, stderr, error: { message: error.message, code: null, signal: null } });
+      }
+    });
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      const error = code === 0 ? null : { message: `${file} exited with code ${code}`, code, signal };
+      if (error && options.rejectOnError !== false) {
+        reject(Object.assign(new Error(error.message), { stdout, stderr, code, signal }));
+      } else {
+        resolve18({ stdout, stderr, error });
+      }
+    });
+    child.stdin.end(options.input);
+  });
 }
-function keyCodeFor(key) {
-  const normalized = String(key).toLowerCase();
-  const known = {
-    enter: 40,
-    return: 40,
-    tab: 43,
-    space: 44,
-    backspace: 42,
-    delete: 42,
-    escape: 41,
-    esc: 41
-  };
-  if (known[normalized]) return known[normalized];
-  if (/^\d+$/.test(normalized)) return clampNumber11(Number(normalized), 0, 255);
-  if (/^[a-z]$/.test(normalized)) return normalized.charCodeAt(0) - 93;
-  throw new Error(`Unknown key: ${key}`);
+async function defaultResolveIosDevice2(requested) {
+  if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
+    return { udid: requested, name: requested, state: "unknown" };
+  }
+  const { stdout } = await defaultExecFile3("xcrun", ["simctl", "list", "devices", "available", "--json"], {
+    timeout: 2e4,
+    maxBuffer: 4 * 1024 * 1024
+  });
+  const parsed = JSON.parse(String(stdout ?? "{}"));
+  const devices = Object.entries(parsed.devices ?? {}).flatMap(
+    ([runtime2, runtimeDevices]) => (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
+      const record = asRecord6(device);
+      return {
+        udid: String(record.udid ?? ""),
+        name: String(record.name ?? ""),
+        state: optionalString4(record.state) ?? void 0,
+        runtime: runtime2,
+        isAvailable: record.isAvailable === void 0 ? void 0 : Boolean(record.isAvailable)
+      };
+    })
+  ).filter((device) => device.udid && device.name);
+  if (requested) {
+    const exact = devices.find((device) => device.udid === requested || device.name === requested);
+    if (exact) return exact;
+    const partial = devices.find((device) => device.name.toLowerCase().includes(requested.toLowerCase()));
+    if (partial) return partial;
+    throw new Error(`No available iOS simulator matched: ${requested}`);
+  }
+  const booted = devices.find((device) => device.state === "Booted");
+  if (booted) return booted;
+  const iphone = [...devices].reverse().find((device) => /iPhone/.test(device.name));
+  if (iphone) return iphone;
+  if (devices[0]) return devices[0];
+  throw new Error("No available iOS simulators found.");
 }
-function setEnvironmentPlan(domain, args, device) {
-  const value = optionalString4(args.value);
-  const extra = Array.isArray(args.extra) ? args.extra : [];
-  if (domain === "appearance") {
-    if (!["dark", "light"].includes(value ?? "")) throw new Error("appearance must be dark or light.");
-    return { available: true, action: domain, device, command: ["xcrun", "simctl", "ui", device.udid, "appearance", value] };
-  }
-  if (domain === "content-size") {
-    const mapped = value === "accessibility" ? "accessibility-large" : requireString8(value, "value");
-    return { available: true, action: domain, device, command: ["xcrun", "simctl", "ui", device.udid, "content_size", mapped] };
-  }
-  if (domain === "location") {
-    const lat = requireString8(value, "latitude");
-    const lon = requireString8(extra[0], "longitude");
-    return { available: true, action: domain, device, command: ["xcrun", "simctl", "location", device.udid, "set", `${lat},${lon}`] };
-  }
-  if (domain === "permissions") {
-    const spec = requireString8(value, "permission");
-    const [service, state = "granted"] = spec.split("=");
-    const bundleId = optionalString4(args.bundleId) ?? optionalString4(extra[0]);
-    if (!bundleId) throw new Error("set permissions requires --bundle-id or a bundle id argument.");
-    const action = state === "granted" ? "grant" : state === "denied" ? "revoke" : "reset";
-    return { available: true, action: domain, device, command: ["xcrun", "simctl", "privacy", device.udid, action, service, bundleId] };
-  }
-  if (domain === "locale" || domain === "timezone" || domain === "network" || domain === "orientation" || domain === "keyboard") {
+async function defaultPolicyDecision2(args, action, sideEffect) {
+  const policyPath = optionalString4(args.actionPolicy);
+  if (!policyPath) {
     return {
-      available: false,
-      action: domain,
-      reason: `${domain} mutation is not exposed by stable simctl/axe commands in this CLI yet.`,
-      requestedValue: value,
-      device
+      checked: true,
+      action,
+      sideEffect,
+      allowed: false,
+      source: null,
+      reason: "No action policy allowed this state-changing operation."
     };
   }
-  throw new Error(`Unknown set domain: ${domain}`);
-}
-async function setEnvironmentCommand(args, deps = defaultInteractionDependencies) {
-  const domain = requireString8(args.domain, "domain");
-  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
-  const policy = await deps.policyDecision(args, `set.${domain}`, "device");
-  if (!policy.allowed) return policyDeniedPayload2({ domain: "set", action: domain, policy });
-  const planned = setEnvironmentPlan(domain, args, device);
-  if (args.dryRun === true || planned.available === false) {
-    return { ...planned, dryRun: args.dryRun === true, policy };
-  }
-  const command = planned.command;
-  const result = await deps.execFile(command[0] ?? "", command.slice(1), {
-    timeout: Number(planned.timeoutMs ?? 2e4),
-    rejectOnError: false
-  });
+  const policy = JSON.parse(await fs7.readFile(policyPath, "utf8"));
+  const allowed = Array.isArray(policy.allow) && policy.allow.includes(action) || policy.actions?.[action] === true || policy.actions?.[action] === "allow";
   return {
-    available: !result.error,
-    action: domain,
-    device,
-    command,
-    stdout: truncate10(result.stdout),
-    stderr: truncate10(result.stderr),
-    error: result.error ?? null,
-    policy
+    checked: true,
+    action,
+    sideEffect,
+    allowed,
+    source: policyPath,
+    reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation."
   };
 }
+
+// src/commands/interaction-actions/src/main/gestures.ts
+import { basename as basename4 } from "node:path";
 async function automationGesture(args, deps = defaultInteractionDependencies) {
   return automationGestureInternal(args, deps, false);
 }
@@ -7029,12 +6723,12 @@ async function automationGestureInternal(args, deps, policyChecked) {
   const gesture = normalizeGesture(args.gesture);
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber11(args.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber11(args.intervalMs ?? 250, 0, 1e4);
-  const durationMs = clampNumber11(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
-  const holdMs = args.holdMs === void 0 ? null : clampNumber11(args.holdMs, 0, 3e4);
-  const metroPort = clampNumber11(args.metroPort ?? 8081, 1, 65535);
-  const maxEvents = clampNumber11(args.maxEvents ?? 200, 1, 2e3);
+  const repeat = clampNumber12(args.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber12(args.intervalMs ?? 250, 0, 1e4);
+  const durationMs = clampNumber12(args.durationMs ?? defaultGestureDurationMs(gesture), 1, 3e4);
+  const holdMs = args.holdMs === void 0 ? null : clampNumber12(args.holdMs, 0, 3e4);
+  const metroPort = clampNumber12(args.metroPort ?? 8081, 1, 65535);
+  const maxEvents = clampNumber12(args.maxEvents ?? 200, 1, 2e3);
   const componentFilter = optionalString4(args.componentFilter);
   const cwd = optionalString4(args.cwd) ?? ".";
   const coordinates = normalizeGestureCoordinates(gesture, args);
@@ -7110,15 +6804,15 @@ function defaultGestureDurationMs(gesture) {
 function normalizeGestureCoordinates(gesture, args) {
   if (gesture === "tap" || gesture === "long-press") {
     return {
-      x: clampNumber11(args.x, 0, Number.MAX_SAFE_INTEGER),
-      y: clampNumber11(args.y, 0, Number.MAX_SAFE_INTEGER)
+      x: clampNumber12(args.x, 0, Number.MAX_SAFE_INTEGER),
+      y: clampNumber12(args.y, 0, Number.MAX_SAFE_INTEGER)
     };
   }
   return {
-    startX: clampNumber11(args.startX, 0, Number.MAX_SAFE_INTEGER),
-    startY: clampNumber11(args.startY, 0, Number.MAX_SAFE_INTEGER),
-    endX: clampNumber11(args.endX, 0, Number.MAX_SAFE_INTEGER),
-    endY: clampNumber11(args.endY, 0, Number.MAX_SAFE_INTEGER)
+    startX: clampNumber12(args.startX, 0, Number.MAX_SAFE_INTEGER),
+    startY: clampNumber12(args.startY, 0, Number.MAX_SAFE_INTEGER),
+    endX: clampNumber12(args.endX, 0, Number.MAX_SAFE_INTEGER),
+    endY: clampNumber12(args.endY, 0, Number.MAX_SAFE_INTEGER)
   };
 }
 function gestureCommandPlan(args) {
@@ -7158,8 +6852,8 @@ async function executeGesturePlanInternal(args, deps, policyChecked) {
   const gesture = optionalString4(args.gesture) ?? "unknown";
   const policyDenied = policyChecked ? null : await policyGate(args, `gesture.${gesture}`, "gesture", deps);
   if (policyDenied) return policyDenied;
-  const repeat = clampNumber11(args.repeat ?? plan.repeat, 1, 20);
-  const intervalMs = clampNumber11(args.intervalMs ?? plan.intervalMs, 0, 1e4);
+  const repeat = clampNumber12(args.repeat ?? plan.repeat, 1, 20);
+  const intervalMs = clampNumber12(args.intervalMs ?? plan.intervalMs, 0, 1e4);
   if (platform === "android") {
     const adb = await deps.commandPath("adb");
     if (!adb) return { available: false, reason: "Android gestures require adb, which is not installed or not on PATH.", plan };
@@ -7212,8 +6906,8 @@ function axeGestureCommandFromPlan(args) {
   return axeCommand;
 }
 async function executeRepeatedCommandInternal(command, args, options, deps) {
-  const repeat = clampNumber11(options.repeat ?? 1, 1, 20);
-  const intervalMs = clampNumber11(options.intervalMs ?? 0, 0, 1e4);
+  const repeat = clampNumber12(options.repeat ?? 1, 1, 20);
+  const intervalMs = clampNumber12(options.intervalMs ?? 0, 0, 1e4);
   const runs = [];
   for (let index = 0; index < repeat; index += 1) {
     const result = await deps.execFile(command, args, { timeout: 35e3, rejectOnError: false });
@@ -7221,8 +6915,8 @@ async function executeRepeatedCommandInternal(command, args, options, deps) {
       index: index + 1,
       command: [command, ...args],
       exitCode: result.error?.code ?? 0,
-      stdout: truncate10(result.stdout),
-      stderr: truncate10(result.stderr)
+      stdout: truncate9(result.stdout),
+      stderr: truncate9(result.stderr)
     });
     if (index < repeat - 1 && intervalMs > 0) await deps.wait(intervalMs);
   }
@@ -7235,261 +6929,265 @@ async function executeRepeatedCommandInternal(command, args, options, deps) {
   };
 }
 async function captureGestureScreenshot(args, deps = defaultInteractionDependencies) {
-  const root = optionalString4(args.outputDir) ?? deps.joinPath(deps.tmpdir(), "expo-ios-gestures");
+  const root = optionalString4(args.outputDir) ?? deps.joinPath(deps.tmpdir(), "expo98-gestures");
   await deps.mkdir(root, { recursive: true });
   const outputPath = deps.joinPath(root, `${requireString8(args.label, "label")}-${deps.now().toISOString().replace(/[:.]/g, "-")}.png`);
   return unwrapToolPayload(await deps.captureScreenshot({ platform: args.platform, device: args.device, outputPath }));
 }
-async function defaultCommandPath(command) {
-  const result = await defaultExecFile3("which", [command], { timeout: 5e3, rejectOnError: false });
-  return result.error ? null : optionalString4(result.stdout);
-}
-function defaultExecFile3(file, args, options = {}) {
-  if (options.input !== void 0) {
-    return defaultSpawnFile(file, args, options);
+
+// src/commands/interaction-actions/src/main/keyboard-clipboard.ts
+async function clipboardCommand(args, deps = defaultInteractionDependencies) {
+  const action = requireString8(args.action ?? "read", "action");
+  if (!["read", "write", "paste"].includes(action)) throw new Error(`Unknown clipboard action: ${action}`);
+  if (action !== "read") {
+    const policyDenied = await policyGate(args, `clipboard.${action}`, "clipboard", deps);
+    if (policyDenied) return policyDenied;
   }
-  return new Promise((resolve15, reject) => {
-    nodeExecFile7(file, args, { timeout: options.timeout, maxBuffer: options.maxBuffer ?? MAX_OUTPUT9 }, (error, stdout, stderr) => {
-      if (error && options.rejectOnError !== false) {
-        Object.assign(error, { stdout, stderr });
-        reject(error);
-        return;
-      }
-      resolve15({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message, code: error.code, signal: error.signal } : null
-      });
-    });
-  });
-}
-function defaultSpawnFile(file, args, options = {}) {
-  return new Promise((resolve15, reject) => {
-    const child = nodeSpawn(file, args, { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const timeout = options.timeout ? setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill();
-      const error = { message: `${file} timed out after ${options.timeout}ms`, code: "ETIMEDOUT", signal: null };
-      if (options.rejectOnError !== false) {
-        reject(Object.assign(new Error(error.message), { stdout, stderr, code: error.code }));
-      } else {
-        resolve15({ stdout, stderr, error });
-      }
-    }, options.timeout) : null;
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      if (timeout) clearTimeout(timeout);
-      if (options.rejectOnError !== false) {
-        reject(Object.assign(error, { stdout, stderr }));
-      } else {
-        resolve15({ stdout, stderr, error: { message: error.message, code: null, signal: null } });
-      }
-    });
-    child.on("close", (code, signal) => {
-      if (settled) return;
-      settled = true;
-      if (timeout) clearTimeout(timeout);
-      const error = code === 0 ? null : { message: `${file} exited with code ${code}`, code, signal };
-      if (error && options.rejectOnError !== false) {
-        reject(Object.assign(new Error(error.message), { stdout, stderr, code, signal }));
-      } else {
-        resolve15({ stdout, stderr, error });
-      }
-    });
-    child.stdin.end(options.input);
-  });
-}
-async function defaultResolveIosDevice2(requested) {
-  if (requested && /^[0-9A-Fa-f-]{20,}$/.test(requested)) {
-    return { udid: requested, name: requested, state: "unknown" };
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
+  if (args.dryRun === true) {
+    return { available: true, dryRun: true, action: `clipboard.${action}`, device };
   }
-  const { stdout } = await defaultExecFile3("xcrun", ["simctl", "list", "devices", "available", "--json"], {
-    timeout: 2e4,
-    maxBuffer: 4 * 1024 * 1024
-  });
-  const parsed = JSON.parse(String(stdout ?? "{}"));
-  const devices = Object.entries(parsed.devices ?? {}).flatMap(
-    ([runtime2, runtimeDevices]) => (Array.isArray(runtimeDevices) ? runtimeDevices : []).map((device) => {
-      const record = asRecord6(device);
-      return {
-        udid: String(record.udid ?? ""),
-        name: String(record.name ?? ""),
-        state: optionalString4(record.state) ?? void 0,
-        runtime: runtime2,
-        isAvailable: record.isAvailable === void 0 ? void 0 : Boolean(record.isAvailable)
-      };
-    })
-  ).filter((device) => device.udid && device.name);
-  if (requested) {
-    const exact = devices.find((device) => device.udid === requested || device.name === requested);
-    if (exact) return exact;
-    const partial = devices.find((device) => device.name.toLowerCase().includes(requested.toLowerCase()));
-    if (partial) return partial;
-    throw new Error(`No available iOS simulator matched: ${requested}`);
+  if (action === "read") {
+    const result2 = await deps.execFile("xcrun", ["simctl", "pbpaste", device.udid], { timeout: 1e4, rejectOnError: false });
+    return { available: !result2.error, action, device, text: result2.stdout, stderr: truncate9(result2.stderr), error: result2.error ?? null };
   }
-  const booted = devices.find((device) => device.state === "Booted");
-  if (booted) return booted;
-  const iphone = [...devices].reverse().find((device) => /iPhone/.test(device.name));
-  if (iphone) return iphone;
-  if (devices[0]) return devices[0];
-  throw new Error("No available iOS simulators found.");
+  if (action === "write") {
+    const text = requireString8(args.text, "text");
+    const result2 = await deps.execFile("xcrun", ["simctl", "pbcopy", device.udid], { input: text, timeout: 1e4, rejectOnError: false });
+    return { available: !result2.error, action, device, textLength: text.length, stdout: truncate9(result2.stdout), stderr: truncate9(result2.stderr), error: result2.error ?? null };
+  }
+  const axe = await deps.commandPath("axe");
+  if (!axe) return { available: false, action, reason: "clipboard paste requires axe key-combo support.", device };
+  const result = await deps.execFile(axe, ["key-combo", "--modifiers", "227", "--key", "25", "--udid", device.udid], {
+    timeout: 1e4,
+    rejectOnError: false
+  });
+  return { available: !result.error, action, device, tool: "axe", stdout: truncate9(result.stdout), stderr: truncate9(result.stderr), error: result.error ?? null };
 }
-async function defaultPolicyDecision2(args, action, sideEffect) {
-  const policyPath = optionalString4(args.actionPolicy);
-  if (!policyPath) {
+async function keyboardCommand(args, deps = defaultInteractionDependencies) {
+  const action = requireString8(args.action ?? "type", "action");
+  if (!["type", "press"].includes(action)) throw new Error(`Unknown keyboard action: ${action}`);
+  const policyDenied = await policyGate(args, `keyboard.${action}`, "keyboard", deps);
+  if (policyDenied) return policyDenied;
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
+  const axe = await deps.commandPath("axe");
+  if (!axe) return { available: false, action, reason: "keyboard commands require the axe CLI.", device };
+  if (args.dryRun === true) {
+    return { available: true, dryRun: true, action: `keyboard.${action}`, device, tool: "axe" };
+  }
+  if (action === "type") {
+    const text = requireString8(args.text, "text");
+    const result2 = await deps.execFile(axe, ["type", text, "--udid", device.udid], { timeout: 2e4, rejectOnError: false });
+    return { available: !result2.error, action, device, tool: "axe", textLength: text.length, stdout: truncate9(result2.stdout), stderr: truncate9(result2.stderr), error: result2.error ?? null };
+  }
+  const key = requireString8(args.key, "key");
+  const keycode = keyCodeFor(key);
+  const result = await deps.execFile(axe, ["key", String(keycode), "--udid", device.udid], { timeout: 1e4, rejectOnError: false });
+  return { available: !result.error, action, device, tool: "axe", key, keycode, stdout: truncate9(result.stdout), stderr: truncate9(result.stderr), error: result.error ?? null };
+}
+function keyCodeFor(key) {
+  const normalized = String(key).toLowerCase();
+  const known = {
+    enter: 40,
+    return: 40,
+    tab: 43,
+    space: 44,
+    backspace: 42,
+    delete: 42,
+    escape: 41,
+    esc: 41
+  };
+  if (known[normalized]) return known[normalized];
+  if (/^\d+$/.test(normalized)) return clampNumber(Number(normalized), 0, 255);
+  if (/^[a-z]$/.test(normalized)) return normalized.charCodeAt(0) - 93;
+  throw new Error(`Unknown key: ${key}`);
+}
+
+// src/commands/interaction-actions/src/main/tap-ref-actions.ts
+async function automationTap(args, deps = defaultInteractionDependencies) {
+  return automationTapInternal(args, deps, false);
+}
+async function automationTapInternal(args, deps, policyChecked) {
+  const policyDenied = policyChecked ? null : await policyGate(args, "tap", "interaction", deps);
+  if (policyDenied) return policyDenied;
+  if (args.ref) {
+    const planned = await deps.planRefAction({ ...args, action: "tap" });
+    if (args.dryRun === true || planned.available === false) return planned;
+    const point = asRecord6(asRecord6(planned.plan).point);
+    if (!isFinitePoint(point)) {
+      return { available: false, reason: "Ref does not include tappable bounds.", ref: args.ref };
+    }
+    return automationTapInternal({ ...args, ref: void 0, x: point.x, y: point.y }, deps, true);
+  }
+  const platform = platformArg2(args.platform);
+  const x = String(clampNumber12(args.x, 0, Number.MAX_SAFE_INTEGER));
+  const y = String(clampNumber12(args.y, 0, Number.MAX_SAFE_INTEGER));
+  if (args.dryRun === true) {
+    const iosTool = platform === "ios" ? await resolveIosInteractionTool(deps) : null;
+    const iosCommand = iosTool?.tool === "axe" ? ["axe", "tap", "-x", x, "-y", y, "--udid", optionalString4(args.device) ?? "<booted-device>"] : ["idb", "ui", "tap", x, y, "--udid", optionalString4(args.device) ?? "<booted-device>"];
     return {
-      checked: true,
-      action,
-      sideEffect,
-      allowed: false,
-      source: null,
-      reason: "No action policy allowed this state-changing operation."
+      available: true,
+      dryRun: true,
+      platform,
+      device: optionalString4(args.device),
+      tool: platform === "android" ? "adb" : iosTool?.tool ?? "idb",
+      point: { x: Number(x), y: Number(y) },
+      command: platform === "android" ? ["adb", ...androidDeviceArgs3(optionalString4(args.device), ["shell", "input", "tap", x, y])] : iosCommand
     };
   }
-  const policy = JSON.parse(await fs7.readFile(policyPath, "utf8"));
-  const allowed = Array.isArray(policy.allow) && policy.allow.includes(action) || policy.actions?.[action] === true || policy.actions?.[action] === "allow";
+  if (platform === "android") {
+    const result2 = await deps.execFile("adb", androidDeviceArgs3(optionalString4(args.device), ["shell", "input", "tap", x, y]), {
+      timeout: 2e4,
+      rejectOnError: false
+    });
+    return { platform, device: optionalString4(args.device), x: Number(x), y: Number(y), stdout: truncate9(result2.stdout), stderr: truncate9(result2.stderr) };
+  }
+  const tool = await resolveIosInteractionTool(deps);
+  if (!tool) {
+    throw new Error(
+      "iOS coordinate taps require the idb or axe CLI, but neither is installed or on PATH. Install idb or axe for iOS coordinate automation."
+    );
+  }
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
+  const command = tool.tool === "axe" ? ["tap", "-x", x, "-y", y, "--udid", device.udid] : ["ui", "tap", x, y, "--udid", device.udid];
+  const result = await deps.execFile(tool.path, command, { timeout: 2e4, rejectOnError: false });
+  return { platform, device, tool: tool.tool, x: Number(x), y: Number(y), stdout: truncate9(result.stdout), stderr: truncate9(result.stderr) };
+}
+async function refActionCommand(args, deps = defaultInteractionDependencies) {
+  const command = requireString8(args.command, "command");
+  if (command === "scroll-into-view") {
+    const record = await deps.readRefRecord(args.ref, args);
+    return record.available === false ? record : { available: true, action: command, ref: args.ref, reason: "Ref is present in the current snapshot.", record: record.record };
+  }
+  if (command === "blur") {
+    const policyDenied = await policyGate(args, "ref.blur", "ref", deps);
+    if (policyDenied) return policyDenied;
+    return keyboardCommand({ ...args, action: "press", key: "Enter" }, deps);
+  }
+  if (["focus", "check", "uncheck", "select"].includes(command)) {
+    const policyDenied = await policyGate(args, `ref.${command}`, "ref", deps);
+    if (policyDenied) return policyDenied;
+    const tapped = await automationTapInternal({ ...args, ref: args.ref, dryRun: args.dryRun }, deps, true);
+    return { ...tapped, action: command, ref: args.ref, value: args.text ?? null };
+  }
+  if (command === "fill") {
+    const policyDenied = await policyGate(args, "ref.fill", "ref", deps);
+    if (policyDenied) return policyDenied;
+    const ref = requireString8(args.ref, "ref");
+    const text = requireString8(args.text, "text");
+    if (args.dryRun === true) {
+      return { available: true, dryRun: true, action: command, ref, textLength: text.length, steps: ["tap ref", "type text"] };
+    }
+    const tapped = await automationTapInternal({ ...args, ref }, deps, true);
+    if (tapped.available === false) return { ...tapped, action: command, ref };
+    const typed = await keyboardCommand({ ...args, action: "type", text }, deps);
+    return { available: typed.available !== false, action: command, ref, tap: tapped, type: typed };
+  }
+  if (command === "long-press" || command === "dbltap") {
+    const policyDenied = await policyGate(args, `ref.${command}`, "ref", deps);
+    if (policyDenied) return policyDenied;
+    const point = await deps.refPoint(args.ref, args);
+    if (point.available === false) return point;
+    const coordinates = asRecord6(point.point);
+    return automationGestureInternal({
+      ...args,
+      gesture: command === "long-press" ? "long-press" : "tap",
+      x: coordinates.x,
+      y: coordinates.y,
+      repeat: command === "dbltap" ? 2 : 1,
+      intervalMs: command === "dbltap" ? 80 : args.intervalMs
+    }, deps, true);
+  }
+  if (command === "drag") {
+    const policyDenied = await policyGate(args, "ref.drag", "ref", deps);
+    if (policyDenied) return policyDenied;
+    const start = await deps.refPoint(args.ref, args);
+    const end = await deps.refPoint(args.targetRef, args);
+    if (start.available === false) return start;
+    if (end.available === false) return { ...end, role: "targetRef" };
+    return automationGestureInternal({
+      ...args,
+      gesture: "drag",
+      startX: asRecord6(start.point).x,
+      startY: asRecord6(start.point).y,
+      endX: asRecord6(end.point).x,
+      endY: asRecord6(end.point).y,
+      durationMs: args.durationMs ?? 600
+    }, deps, true);
+  }
+  if (command === "scroll") {
+    const policyDenied = await policyGate(args, "ref.scroll", "ref", deps);
+    if (policyDenied) return policyDenied;
+    const plan = await deps.scrollPlan(args);
+    if (plan.available === false || args.dryRun === true) return plan;
+    return automationGestureInternal({ ...args, gesture: "swipe", ...asRecord6(plan.coordinates), durationMs: args.durationMs ?? 250 }, deps, true);
+  }
+  throw new Error(`Unknown ref action command: ${command}`);
+}
+
+// src/commands/interaction-actions/src/main/environment.ts
+function setEnvironmentPlan(domain, args, device) {
+  const value = optionalString4(args.value);
+  const extra = Array.isArray(args.extra) ? args.extra : [];
+  if (domain === "appearance") {
+    if (!["dark", "light"].includes(value ?? "")) throw new Error("appearance must be dark or light.");
+    return { available: true, action: domain, device, command: ["xcrun", "simctl", "ui", device.udid, "appearance", value] };
+  }
+  if (domain === "content-size") {
+    const mapped = value === "accessibility" ? "accessibility-large" : requireString8(value, "value");
+    return { available: true, action: domain, device, command: ["xcrun", "simctl", "ui", device.udid, "content_size", mapped] };
+  }
+  if (domain === "location") {
+    const lat = requireString8(value, "latitude");
+    const lon = requireString8(extra[0], "longitude");
+    return { available: true, action: domain, device, command: ["xcrun", "simctl", "location", device.udid, "set", `${lat},${lon}`] };
+  }
+  if (domain === "permissions") {
+    const spec = requireString8(value, "permission");
+    const [service, state = "granted"] = spec.split("=");
+    const bundleId = optionalString4(args.bundleId) ?? optionalString4(extra[0]);
+    if (!bundleId) throw new Error("set permissions requires --bundle-id or a bundle id argument.");
+    const action = state === "granted" ? "grant" : state === "denied" ? "revoke" : "reset";
+    return { available: true, action: domain, device, command: ["xcrun", "simctl", "privacy", device.udid, action, service, bundleId] };
+  }
+  if (domain === "locale" || domain === "timezone" || domain === "network" || domain === "orientation" || domain === "keyboard") {
+    return {
+      available: false,
+      action: domain,
+      reason: `${domain} mutation is not exposed by stable simctl/axe commands in this CLI yet.`,
+      requestedValue: value,
+      device
+    };
+  }
+  throw new Error(`Unknown set domain: ${domain}`);
+}
+async function setEnvironmentCommand(args, deps = defaultInteractionDependencies) {
+  const domain = requireString8(args.domain, "domain");
+  const device = await deps.resolveIosDevice(optionalString4(args.device) ?? void 0, { preferBooted: true });
+  const policy = await deps.policyDecision(args, `set.${domain}`, "device");
+  if (!policy.allowed) return policyDeniedPayload3({ domain: "set", action: domain, policy });
+  const planned = setEnvironmentPlan(domain, args, device);
+  if (args.dryRun === true || planned.available === false) {
+    return { ...planned, dryRun: args.dryRun === true, policy };
+  }
+  const command = planned.command;
+  const result = await deps.execFile(command[0] ?? "", command.slice(1), {
+    timeout: Number(planned.timeoutMs ?? 2e4),
+    rejectOnError: false
+  });
   return {
-    checked: true,
-    action,
-    sideEffect,
-    allowed,
-    source: policyPath,
-    reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation."
-  };
-}
-function requireString8(value, field) {
-  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
-  return value.trim();
-}
-function clampNumber11(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${value}.`);
-  return Math.min(Math.max(number, min), max);
-}
-function truncate10(value, limit = MAX_OUTPUT9) {
-  const text = String(value ?? "");
-  if (text.length <= limit) return text;
-  return `${text.slice(0, limit)}
-[truncated ${text.length - limit} characters]`;
-}
-function createRefActionAdapter(refDeps, refActions) {
-  return {
-    planRefAction: (args) => refActions.planRefAction(args, refDeps),
-    readRefRecord: async (ref, args) => readRefRecordFromCache(ref, args, refDeps),
-    refPoint: async (ref, args) => refPointFromCache(ref, args, refDeps),
-    scrollPlan: (args) => refActions.scrollPlan(args, refDeps)
-  };
-}
-function policyDeniedPayload2({ domain, action, policy }) {
-  return {
-    available: false,
-    domain,
-    action,
-    source: "policy",
-    evidenceSource: "policy",
-    code: "policy-denied",
-    denied: true,
-    reason: "Policy denied action.",
+    available: !result.error,
+    action: domain,
+    device,
+    command,
+    stdout: truncate9(result.stdout),
+    stderr: truncate9(result.stderr),
+    error: result.error ?? null,
     policy
   };
 }
-async function readRefRecordFromCache(refValue, args, deps) {
-  const ref = requireString8(refValue, "ref");
-  const cache = await deps.readLatestRefCache(args);
-  if (!cache) return { available: false, reason: "No snapshot exists for the current session.", ref };
-  const record = cache.refs.find((item) => item.ref === ref);
-  if (!record) return { available: false, reason: "Ref not found in the latest snapshot.", ref };
-  if (record.stale) return { available: false, reason: "Ref is stale. Capture a new snapshot before acting.", ref };
-  return { available: true, record, cache };
-}
-async function refPointFromCache(refValue, args, deps) {
-  const ref = requireString8(refValue, "ref");
-  const found = await readRefRecordFromCache(ref, args, deps);
-  if (found.available === false) return found;
-  const record = asRecord6(found.record);
-  const box = asRecord6(record.box);
-  if (!box) return { available: false, reason: "Ref does not include bounds.", ref };
-  const x = Number(box.x) + Number(box.width) / 2;
-  const y = Number(box.y) + Number(box.height) / 2;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return { available: false, reason: "Ref bounds are not finite.", ref, box };
-  }
-  return {
-    available: true,
-    ref,
-    point: { x, y },
-    box
-  };
-}
-async function policyGate(args, action, domain, deps) {
-  const policy = await deps.policyDecision(args, action, "device");
-  return policy.allowed ? null : policyDeniedPayload2({ domain, action, policy });
-}
-async function resolveIosInteractionTool(deps) {
-  const idb = await deps.commandPath("idb");
-  if (idb) return { tool: "idb", path: idb };
-  const axe = await deps.commandPath("axe");
-  if (axe) return { tool: "axe", path: axe };
-  return null;
-}
-function androidDeviceArgs3(device, args) {
-  return device ? ["-s", device, ...args] : args;
-}
-function platformArg2(value) {
-  return value === "android" ? "android" : "ios";
-}
-function optionalString4(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-function asRecord6(value) {
-  return value && typeof value === "object" ? value : {};
-}
-function isFinitePoint(value) {
-  return Number.isFinite(value.x) && Number.isFinite(value.y);
-}
-function asGesturePlan(value) {
-  const record = asRecord6(value);
-  return {
-    tool: String(record.tool ?? ""),
-    command: Array.isArray(record.command) ? record.command.map(String) : [],
-    repeat: Number(record.repeat ?? 1),
-    intervalMs: Number(record.intervalMs ?? 0),
-    notes: Array.isArray(record.notes) ? record.notes.map(String) : []
-  };
-}
-function unwrapToolPayload(value) {
-  if (value && typeof value === "object" && Array.isArray(value.content)) {
-    const text = value.content[0]?.text ?? "{}";
-    return JSON.parse(text);
-  }
-  return asRecord6(value);
-}
-function formatSeconds(ms) {
-  return (ms / 1e3).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
-}
-function reviewQuestions() {
-  return [
-    "Does a long press stay on the intended target instead of becoming scroll?",
-    "Does a drag/swipe create, resize, or scroll according to the intended mode?",
-    "Do screenshots before and after show unintended movement, selection, or chrome overlap?",
-    "Do React commits/layout changes during the gesture match the expected interaction owner?"
-  ];
-}
 
-// src/modules/ux-context-capture/src/main/index.ts
+// src/commands/ux-context-capture/src/main/index.ts
 import { execFile as nodeExecFile8 } from "node:child_process";
 import { stat as stat4 } from "node:fs/promises";
 import path6 from "node:path";
@@ -7503,7 +7201,7 @@ var REVIEW_CONTEXT_QUESTIONS = [
   "Does the app expose a usable simulator hierarchy, or is screenshot/coordinate review the only reliable UI surface?",
   "Are recent native logs showing failed requests, reloads, exceptions, or slow local calls during the reviewed state?"
 ];
-function toolJson12(value) {
+function toolJson11(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -7511,7 +7209,7 @@ async function captureUxContext(args = {}, deps = defaultUxContextDependencies) 
   const startedAt = nowMs(deps);
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true });
   const device = await deps.resolveIosDevice(args.device, { preferBooted: true });
-  const metroPort = clampNumber12(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber13(args.metroPort ?? 8081, 1, 65535);
   const context = {
     capturedAt: now(deps).toISOString(),
     cwd,
@@ -7590,12 +7288,12 @@ async function captureUxContext(args = {}, deps = defaultUxContextDependencies) 
     };
   }
   context.elapsedMs = nowMs(deps) - startedAt;
-  return toolJson12(context);
+  return toolJson11(context);
 }
 var defaultUxContextDependencies = {
   normalizeProjectCwd: defaultNormalizeProjectCwd,
   resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString4(device), options),
-  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson5(await projectInfo({ cwd })),
+  expoProjectRuntimeSummary: async (cwd) => unwrapToolJson3(await projectInfo({ cwd })),
   inspectMetro: async (metroPort) => {
     const metro = await metroStatusPayload({ metroPort });
     return { metro, runtime: { available: metro.available, targetCount: metro.targetCount, targets: metro.targets } };
@@ -7609,11 +7307,11 @@ var defaultUxContextDependencies = {
       available: !result.error,
       bundleId,
       containerPath: result.error ? null : String(result.stdout ?? "").trim(),
-      stderr: truncate11(result.stderr),
+      stderr: truncate10(result.stderr),
       error: result.error ?? null
     };
   },
-  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson5(await automationTakeScreenshot({
+  captureIosScreenshot: async (udid, outputPath) => unwrapToolJson3(await automationTakeScreenshot({
     platform: "ios",
     device: udid,
     outputPath
@@ -7631,8 +7329,8 @@ var defaultUxContextDependencies = {
     return {
       available: !result.error,
       tool: "axe",
-      stdout: truncate11(result.stdout),
-      stderr: truncate11(result.stderr),
+      stdout: truncate10(result.stdout),
+      stderr: truncate10(result.stderr),
       error: result.error ?? null
     };
   },
@@ -7650,7 +7348,7 @@ async function safeToolSection3(fn) {
   try {
     return { ok: true, value: await fn() };
   } catch (error) {
-    return { ok: false, error: formatError10(error) };
+    return { ok: false, error: formatError8(error) };
   }
 }
 function requireOptionalString4(value) {
@@ -7661,7 +7359,7 @@ function processNameFromBundleId2(bundleId) {
   const last = String(bundleId).split(".").filter(Boolean).at(-1);
   return last ? last.replace(/[^a-zA-Z0-9_-]/g, "") : null;
 }
-function clampNumber12(value, min, max) {
+function clampNumber13(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7687,7 +7385,7 @@ function now(deps) {
 function nowMs(deps) {
   return deps.nowMs?.() ?? Date.now();
 }
-function unwrapToolJson5(result) {
+function unwrapToolJson3(result) {
   const text = result?.content?.[0]?.text;
   if (typeof text !== "string") return result;
   try {
@@ -7703,9 +7401,9 @@ async function defaultNormalizeProjectCwd(cwd) {
   return resolved;
 }
 function execFile6(file, args, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile8(file, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error
@@ -7713,17 +7411,17 @@ function execFile6(file, args, options) {
     });
   });
 }
-function truncate11(value, limit = 4e4) {
+function truncate10(value, limit = 4e4) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
 [truncated ${text.length - limit} characters]`;
 }
-function formatError10(error) {
+function formatError8(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// src/modules/review-overlay-workflow/src/main/index.ts
+// src/commands/review-overlay-workflow/src/main/index.ts
 import { openSync } from "node:fs";
 import { mkdir as mkdir10, readFile as readFile11, stat as stat5, writeFile as writeFile6 } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
@@ -7731,7 +7429,7 @@ import { createServer as createNetServer } from "node:net";
 import path7 from "node:path";
 import { spawn as spawn2 } from "node:child_process";
 var REVIEW_OVERLAY_ACTIONS = /* @__PURE__ */ new Set(["prepare", "scaffold", "server", "read", "clear"]);
-function toolJson13(value) {
+function toolJson12(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -7740,17 +7438,17 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
   if (!REVIEW_OVERLAY_ACTIONS.has(action)) {
     throw new Error(`Unknown review-overlay action: ${action}`);
   }
-  if (action === "scaffold") return toolJson13(await scaffoldReviewOverlay(args, deps));
+  if (action === "scaffold") return toolJson12(await scaffoldReviewOverlay(args, deps));
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(String(args.cwd ?? deps.fallbackCwd())));
   const outputDir = deps.resolvePath(requireOptionalString5(args.outputDir) ?? deps.joinPath(cwd, ".scratch", "codex-review-overlay"));
   const eventsPath = deps.joinPath(outputDir, "events.json");
   if (action === "read") {
     const data2 = await deps.readEvents(eventsPath, { metroPort: args.metroPort });
-    return toolJson13({ outputDir, eventsPath, ...data2 });
+    return toolJson12({ outputDir, eventsPath, ...data2 });
   }
   if (action === "clear") {
     const data2 = await deps.createEventsFile({ outputDir, title: args.title, reset: true });
-    return toolJson13({ outputDir, eventsPath, cleared: true, ...data2 });
+    return toolJson12({ outputDir, eventsPath, cleared: true, ...data2 });
   }
   if (action === "server") {
     return deps.reviewOverlayServer({ dir: outputDir, port: args.port, endpointPath: args.endpointPath });
@@ -7759,7 +7457,7 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
   const data = await deps.createEventsFile({ outputDir, title, reset: false });
   let server = null;
   if (args.serve === true) {
-    const port = args.port ? clampNumber13(args.port, 1, 65535) : await deps.findAvailablePort(17655);
+    const port = args.port ? clampNumber14(args.port, 1, 65535) : await deps.findAvailablePort(17655);
     const endpointPath = normalizeEndpointPath(args.endpointPath);
     const logPath = deps.joinPath(outputDir, "review-overlay-server.log");
     const logFd = await deps.openLogFile(logPath, "a");
@@ -7786,7 +7484,7 @@ async function reviewOverlay(args = {}, deps = defaultReviewOverlayDependencies)
       stop: `kill ${child.pid}`
     };
   }
-  return toolJson13({
+  return toolJson12({
     outputDir,
     eventsPath,
     server,
@@ -7863,7 +7561,7 @@ function normalizeEndpointPath(value) {
 function requireOptionalString5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
-function clampNumber13(value, min, max) {
+function clampNumber14(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -7983,7 +7681,7 @@ async function readEvents(eventsPath, options = {}) {
 }
 async function reviewOverlayServer(args) {
   const dir = path7.resolve(args.dir);
-  const port = args.port ? clampNumber13(args.port, 1, 65535) : await findAvailablePort(17655);
+  const port = args.port ? clampNumber14(args.port, 1, 65535) : await findAvailablePort(17655);
   const endpointPath = normalizeEndpointPath(args.endpointPath);
   await mkdir10(dir, { recursive: true });
   await createEventsFile({ outputDir: dir, reset: false });
@@ -8018,7 +7716,7 @@ async function reviewOverlayServer(args) {
       response.end('{"ok":false,"error":"not found"}\n');
     });
   });
-  await new Promise((resolve15) => server.listen(port, "127.0.0.1", () => resolve15()));
+  await new Promise((resolve18) => server.listen(port, "127.0.0.1", () => resolve18()));
   const payload = { ok: true, url: `http://127.0.0.1:${port}/`, endpoint: `http://127.0.0.1:${port}${endpointPath}`, eventsUrl: `http://127.0.0.1:${port}/events.json`, dir };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}
 `);
@@ -8029,12 +7727,12 @@ async function readJson5(file) {
   return JSON.parse(await readFile11(file, "utf8"));
 }
 function findAvailablePort(start) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     const tryPort = (port) => {
       const server = createNetServer();
       server.once("error", () => tryPort(port + 1));
       server.once("listening", () => {
-        server.close(() => resolve15(port));
+        server.close(() => resolve18(port));
       });
       server.listen(port, "127.0.0.1");
     };
@@ -8042,10 +7740,10 @@ function findAvailablePort(start) {
   });
 }
 
-// src/modules/annotate-screen-artifacts/src/main/index.ts
+// src/commands/annotate-screen-artifacts/src/main/index.ts
 var ANNOTATE_ACTIONS = /* @__PURE__ */ new Set(["prepare", "read", "clear", "scaffold", "server"]);
 var SCAFFOLD_CONFIRMATION = "annotate-overlay-scaffold";
-function toolJson14(value) {
+function toolJson13(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -8056,7 +7754,7 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
     throw new Error(`Unknown annotate-screen action: ${action}`);
   }
   if (action === "scaffold" && !hasExplicitConfirmation(args.confirmActions, SCAFFOLD_CONFIRMATION)) {
-    return toolJson14({
+    return toolJson13({
       available: false,
       action,
       source: "policy",
@@ -8075,8 +7773,8 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
     action,
     title: args.title ?? "Codex in-app annotations"
   });
-  const payload = unwrapToolJson6(result);
-  return toolJson14({
+  const payload = unwrapToolJson4(result);
+  return toolJson13({
     ...isRecord7(payload) ? payload : { value: payload },
     command: "annotate-screen",
     annotationSurface: "in-app-overlay",
@@ -8089,7 +7787,7 @@ async function annotateScreen(args = {}, deps = defaultAnnotateScreenDependencie
 var defaultAnnotateScreenDependencies = {
   reviewOverlay
 };
-function unwrapToolJson6(result) {
+function unwrapToolJson4(result) {
   const text = result?.content?.[0]?.text;
   if (typeof text !== "string") return result;
   try {
@@ -8109,44 +7807,26 @@ function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/modules/runtime-inspector-actions/src/main/index.ts
+// src/commands/runtime-inspector-actions/src/main/index.ts
 import { execFile as nodeExecFile9 } from "node:child_process";
 var INSPECTOR_ACTIONS = ["probe", "toggle", "install-comment-menu", "read-comments", "clear-comments", "open-dev-menu"];
-function toolJson15(value) {
-  return {
-    content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }],
-    isError: false
-  };
-}
-function unwrapToolJson7(value) {
-  const content = asRecord8(value)?.content;
-  if (!Array.isArray(content)) return value;
-  const first = asRecord8(content[0]);
-  if (first?.type !== "text" || typeof first.text !== "string") return value;
-  try {
-    return JSON.parse(first.text);
-  } catch {
-    return { text: first.text };
-  }
-}
 async function runtimeInspector(args, deps = defaultRuntimeInspectorDependencies) {
-  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   const action = normalizeRuntimeInspectorAction(args.action ?? "probe");
   const commentTitle = requireOptionalString7(args.commentTitle) ?? "Codex: Add UI comment";
-  const maxComments = clampNumber14(args.maxComments ?? 50, 1, 500);
+  const maxComments = clampNumber15(args.maxComments ?? 50, 1, 500);
   if (action === "open-dev-menu") {
-    return toolJson15(await deps.openIosDevMenu({ ...args, metroPort }));
+    return toolJson(await deps.openIosDevMenu({ ...args, metroPort }));
   }
   const targets = await deps.fetchMetroTargets(metroPort).catch(() => []);
   const targetList = Array.isArray(targets) ? targets : [];
   const webSocketDebuggerUrl = asString2(asRecord8(targetList[0])?.webSocketDebuggerUrl);
   if (!webSocketDebuggerUrl) {
-    return toolJson15({ available: false, action, reason: "No Metro inspector target.", metroPort });
+    return toolJson({ available: false, action, reason: "No Metro inspector target.", metroPort });
   }
   const expression = runtimeInspectorExpression({ action, commentTitle, maxComments });
   const result = await deps.evaluateHermesExpression(webSocketDebuggerUrl, expression, { timeoutMs: 8e3 });
-  return toolJson15({
+  return toolJson({
     action,
     metroPort,
     target: targetSummary3(targetList[0]),
@@ -8163,13 +7843,13 @@ var defaultRuntimeInspectorDependencies = {
 var defaultOpenDevMenuDependencies = {
   broadcastMetroMessage,
   resolveIosDevice: (device, options) => resolveIosDevice(requireOptionalString7(device), options),
-  openDevClientForMessageSocket: async (args) => unwrapToolJson7(await openExpoRoute({
+  openDevClientForMessageSocket: async (args) => unwrapToolJson(await openExpoRoute({
     device: args.device.udid,
     bundleId: args.bundleId,
     url: args.devClientUrl
   })),
   execFile: execFile7,
-  truncate: truncate12
+  truncate: truncate11
 };
 function normalizeRuntimeInspectorAction(value) {
   const action = requireString9(value, "action");
@@ -8179,7 +7859,7 @@ function normalizeRuntimeInspectorAction(value) {
   return action;
 }
 async function openIosDevMenu(args, deps) {
-  const metroPort = clampNumber14(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
   let messageSocket = await deps.broadcastMetroMessage(metroPort, "devMenu");
   if (messageSocket.available) {
     return {
@@ -8238,7 +7918,7 @@ async function openIosDevMenu(args, deps) {
     timeout: 15e3,
     rejectOnError: false
   });
-  const truncateFn = deps.truncate ?? truncate12;
+  const truncateFn = deps.truncate ?? truncate11;
   return {
     available: !result.error,
     action: "open-dev-menu",
@@ -8254,11 +7934,26 @@ async function openIosDevMenu(args, deps) {
   };
 }
 function runtimeInspectorExpression(args) {
+  return runtimeInspectorProgram([
+    runtimeInspectorInputs(args),
+    runtimeInspectorStateSection(),
+    runtimeInspectorProbeSection(),
+    runtimeInspectorCommentMenuSection(),
+    runtimeInspectorDispatchSection()
+  ]);
+}
+function runtimeInspectorProgram(sections) {
   return `(() => {
-    const action = ${JSON.stringify(args.action)};
+${sections.join("\n")}
+  })()`;
+}
+function runtimeInspectorInputs(args) {
+  return `    const action = ${JSON.stringify(args.action)};
     const commentTitle = ${JSON.stringify(args.commentTitle)};
-    const maxComments = ${JSON.stringify(args.maxComments)};
-    const stateKey = '__CODEX_SIMULATOR_REVIEW__';
+    const maxComments = ${JSON.stringify(args.maxComments)};`;
+}
+function runtimeInspectorStateSection() {
+  return `    const stateKey = '__CODEX_SIMULATOR_REVIEW__';
     const state = globalThis[stateKey] ||= {
       createdAt: new Date().toISOString(),
       comments: [],
@@ -8276,9 +7971,10 @@ function runtimeInspectorExpression(args) {
         comments: state.comments.slice(-maxComments),
         errors: state.errors.slice(-20)
       };
-    }
-
-    function capabilityProbe() {
+    }`;
+}
+function runtimeInspectorProbeSection() {
+  return `    function capabilityProbe() {
       return {
         available: true,
         action,
@@ -8315,9 +8011,10 @@ function runtimeInspectorExpression(args) {
           'Run inspector read-comments before final handoff and include comments in the acceptance matrix.'
         ]
       };
-    }
-
-    function installCommentMenu() {
+    }`;
+}
+function runtimeInspectorCommentMenuSection() {
+  return `    function installCommentMenu() {
       state.menuInstalled = true;
       state.commentTitle = commentTitle;
       return {
@@ -8333,9 +8030,10 @@ function runtimeInspectorExpression(args) {
         ],
         limitation: 'Comments entered this way are human-authored notes, not automatically bound to a touched element.'
       };
-    }
-
-    if (action === 'probe') return capabilityProbe();
+    }`;
+}
+function runtimeInspectorDispatchSection() {
+  return `    if (action === 'probe') return capabilityProbe();
     if (action === 'toggle') return { available: false, action, reason: 'Native DevSettings.toggleElementInspector was not found in this Hermes runtime.', probe: capabilityProbe() };
     if (action === 'install-comment-menu') return installCommentMenu();
     if (action === 'read-comments') return { available: true, action, ...commentSummary() };
@@ -8343,8 +8041,7 @@ function runtimeInspectorExpression(args) {
       state.comments = [];
       return { available: true, action, ...commentSummary() };
     }
-    return { available: false, action, reason: 'Unknown inspector action: ' + action };
-  })()`;
+    return { available: false, action, reason: 'Unknown inspector action: ' + action };`;
 }
 function targetSummary3(target) {
   const record = asRecord8(target);
@@ -8356,7 +8053,7 @@ function targetSummary3(target) {
     description: record.description
   };
 }
-function clampNumber14(value, min, max) {
+function clampNumber15(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${value}.`);
@@ -8373,7 +8070,7 @@ function requireOptionalString7(value) {
   if (value === void 0 || value === null || value === "") return null;
   return requireString9(value, "value");
 }
-function truncate12(value, limit = 4e4) {
+function truncate11(value, limit = 4e4) {
   const text = String(value ?? "");
   if (text.length <= limit) return text;
   return `${text.slice(0, limit)}
@@ -8401,7 +8098,7 @@ async function broadcastMetroMessage(metroPort, method, params) {
     await cdpMessage(url, { method, params: params ?? {} }, 2500);
     return { available: true, metroPort, method, url };
   } catch (error) {
-    return { available: false, metroPort, method, url, reason: formatError11(error) };
+    return { available: false, metroPort, method, url, reason: formatError9(error) };
   }
 }
 async function cdpMessage(url, payload, timeoutMs) {
@@ -8414,11 +8111,11 @@ async function cdpMessage(url, payload, timeoutMs) {
   }
 }
 function waitForOpen2(ws, timeoutMs) {
-  return new Promise((resolve15, reject) => {
+  return new Promise((resolve18, reject) => {
     const timer = setTimeout(() => reject(new Error("Timed out opening WebSocket.")), timeoutMs);
     ws.addEventListener("open", () => {
       clearTimeout(timer);
-      resolve15();
+      resolve18();
     }, { once: true });
     ws.addEventListener("error", () => {
       clearTimeout(timer);
@@ -8427,9 +8124,9 @@ function waitForOpen2(ws, timeoutMs) {
   });
 }
 function execFile7(command, args, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile9(command, args, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error: error ? { message: error.message } : null
@@ -8437,14 +8134,14 @@ function execFile7(command, args, options) {
     });
   });
 }
-function formatError11(error) {
+function formatError9(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// src/modules/review-next-guidance/src/main/index.ts
+// src/commands/review-next-guidance/src/main/index.ts
 var SUBORDINATE_RULE = "Do not patch or call done until the current constraint is proven or deliberately elevated.";
 var NON_GOALS = ["Do not change unrelated app contracts, data shape, or navigation model without a separate reason."];
-function toolJson16(value) {
+function toolJson14(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -8453,7 +8150,7 @@ async function reviewNextStep(args = {}) {
   const stage = args.stage ?? "intake";
   const issue = requireOptionalString8(args.issue) ?? "unspecified UI review issue";
   const cwd = requireOptionalString8(args.cwd) ?? ".";
-  const metroPort = clampNumber15(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
   const componentFilter = requireOptionalString8(args.componentFilter);
   const verifierRule = requireOptionalString8(args.verifierRule);
   const flags = reviewFlags(args);
@@ -8461,7 +8158,7 @@ async function reviewNextStep(args = {}) {
   const suggestedCommands = reviewCommandSuggestions({ cwd, metroPort, componentFilter, flags, stage });
   const questionTriggers = reviewQuestionTriggers(flags, verifierRule);
   const constraint = chooseReviewConstraint({ stage, flags, verifierRule });
-  return toolJson16({
+  return toolJson14({
     issue,
     surface,
     stage,
@@ -8631,28 +8328,28 @@ function reviewQuestionTriggers(flags, verifierRule) {
 }
 function reviewCommandSuggestions(args) {
   const base = [
-    `expo-ios --json ux-context --cwd ${shellArg2(args.cwd)} --metro-port ${args.metroPort}${args.componentFilter ? ` --component-filter ${shellArg2(args.componentFilter)}` : ""}`
+    `expo98 --json ux-context --cwd ${shellArg2(args.cwd)} --metro-port ${args.metroPort}${args.componentFilter ? ` --component-filter ${shellArg2(args.componentFilter)}` : ""}`
   ];
   if (args.flags.changedGesture || args.flags.changedChrome || args.flags.changedNavigation || args.flags.addedVisibleControls || args.stage === "interaction") {
     base.push(
-      `expo-ios --json inspector probe --metro-port ${args.metroPort}`,
-      `expo-ios --json inspector toggle --metro-port ${args.metroPort}`,
-      `expo-ios --json inspector install-comment-menu --metro-port ${args.metroPort}`,
-      "expo-ios --json inspector open-dev-menu",
-      `expo-ios --json inspector read-comments --metro-port ${args.metroPort}`,
-      `expo-ios --json review-overlay scaffold --cwd ${shellArg2(args.cwd)}`,
-      `expo-ios --json review-overlay prepare --cwd ${shellArg2(args.cwd)} --serve true`,
-      `expo-ios --json review-overlay read --cwd ${shellArg2(args.cwd)}`
+      `expo98 --json inspector probe --metro-port ${args.metroPort}`,
+      `expo98 --json inspector toggle --metro-port ${args.metroPort}`,
+      `expo98 --json inspector install-comment-menu --metro-port ${args.metroPort}`,
+      "expo98 --json inspector open-dev-menu",
+      `expo98 --json inspector read-comments --metro-port ${args.metroPort}`,
+      `expo98 --json review-overlay scaffold --cwd ${shellArg2(args.cwd)}`,
+      `expo98 --json review-overlay prepare --cwd ${shellArg2(args.cwd)} --serve true`,
+      `expo98 --json review-overlay read --cwd ${shellArg2(args.cwd)}`
     );
   }
   if (args.flags.changedGesture || args.stage === "interaction") {
     base.push(
-      `expo-ios --json trace --action start --metro-port ${args.metroPort}${args.componentFilter ? ` --component-filter ${shellArg2(args.componentFilter)}` : ""}`,
-      "# reproduce the representative gesture in the simulator, or use expo-ios gesture when coordinates are known",
-      "expo-ios --json gesture drag --start-x <x1> --start-y <y1> --end-x <x2> --end-y <y2> --duration-ms 900 --capture-before-after true",
-      "expo-ios --json gesture long-press --x <x> --y <y> --duration-ms 900 --capture-before-after true",
-      `expo-ios --json trace --action read --metro-port ${args.metroPort} --max-events 200`,
-      `expo-ios --json trace --action stop --metro-port ${args.metroPort}`
+      `expo98 --json trace --action start --metro-port ${args.metroPort}${args.componentFilter ? ` --component-filter ${shellArg2(args.componentFilter)}` : ""}`,
+      "# reproduce the representative gesture in the simulator, or use expo98 gesture when coordinates are known",
+      "expo98 --json gesture drag --start-x <x1> --start-y <y1> --end-x <x2> --end-y <y2> --duration-ms 900 --capture-before-after true",
+      "expo98 --json gesture long-press --x <x> --y <y> --duration-ms 900 --capture-before-after true",
+      `expo98 --json trace --action read --metro-port ${args.metroPort} --max-events 200`,
+      `expo98 --json trace --action stop --metro-port ${args.metroPort}`
     );
   }
   if (!args.flags.hasStaticVerifier && args.stage !== "intake") {
@@ -8700,17 +8397,17 @@ function requireOptionalString8(value) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : void 0;
 }
-function clampNumber15(value, min, max) {
+function clampNumber16(value, min, max) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return min;
   return Math.max(min, Math.min(max, Math.trunc(numberValue)));
 }
 
-// src/modules/annotation-server-http/src/main/index.ts
-async function annotationServer(args = {}) {
-  return annotationServerDeprecationPayload(args);
+// src/commands/annotation-server-http/src/main/index.ts
+async function removedAnnotationServerCommand(args = {}) {
+  return removedAnnotationServerHttpPayload(args);
 }
-function annotationServerDeprecationPayload(args = {}) {
+function removedAnnotationServerHttpPayload(args = {}) {
   return {
     available: false,
     action: "annotation-server",
@@ -8733,7 +8430,7 @@ function annotationServerDeprecationPayload(args = {}) {
   };
 }
 
-// src/modules/devtools-diagnostics/src/main/index.ts
+// src/commands/devtools-diagnostics/src/main/index.ts
 var DEVTOOLS_EVENTS_LIMITATIONS = [
   "This v1 collector records DevTools capability/session events, not a raw Chrome DevTools Protocol stream."
 ];
@@ -8745,7 +8442,7 @@ var MAX_ARRAY_ITEMS = 500;
 var defaultDevtoolsDiagnosticsDependencies = {
   evaluateHermesExpression
 };
-function toolJson17(value) {
+function toolJson15(value) {
   return { content: [{ type: "text", text: JSON.stringify(sanitizePayload(value), null, 2) }] };
 }
 function requireString10(value, name) {
@@ -8754,14 +8451,14 @@ function requireString10(value, name) {
   }
   return value.trim();
 }
-function clampNumber16(value, min, max) {
+function clampNumber17(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     throw new Error(`Expected a finite number, got ${String(value)}.`);
   }
   return Math.min(Math.max(number, min), max);
 }
-function truncate13(value, max = MAX_OUTPUT10) {
+function truncate12(value, max = MAX_OUTPUT10) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
@@ -8787,9 +8484,9 @@ function targetSummary4(target) {
 }
 async function devtoolsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   const action = requireString10(args.action ?? "capabilities", "action");
-  if (action === "status" || action === "panels") return toolJson17(await devtoolsStatusPayload(args, action, deps));
-  if (action === "open") return toolJson17(await devtoolsOpenPayload(args, deps));
-  if (action === "events") return toolJson17(await devtoolsEventsPayload(args, deps));
+  if (action === "status" || action === "panels") return toolJson15(await devtoolsStatusPayload(args, action, deps));
+  if (action === "open") return toolJson15(await devtoolsOpenPayload(args, deps));
+  if (action === "events") return toolJson15(await devtoolsEventsPayload(args, deps));
   if (action !== "capabilities") throw new Error(`Unknown devtools action: ${action}`);
   const metro = await metroStatusPayload2(args, deps);
   const rnDevTools = reactNativeDevToolsReport(metro);
@@ -8797,7 +8494,7 @@ async function devtoolsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDepen
   const hasRuntime = metro.targets.some((target) => target.webSocketDebuggerUrl);
   const hasDevtoolsFrontend = rnDevTools.frontend.available;
   const hasNetworkPanel = metro.targets.some(targetHasDevtoolsNetworkPanel);
-  return toolJson17({
+  return toolJson15({
     action,
     metroPort: metro.metroPort,
     reactNativeDevTools: rnDevTools,
@@ -9027,8 +8724,8 @@ async function devtoolsOpenPayload(args = {}, deps = {}) {
     mirrorsUpstreamLaunch: true,
     attachmentState: reactNativeDevTools.attachmentState,
     attachmentRisk: reactNativeDevTools.attachmentRisk,
-    stdout: truncate13(result.stdout),
-    stderr: truncate13(result.stderr),
+    stdout: truncate12(result.stdout),
+    stderr: truncate12(result.stderr),
     error: result.error ?? null
   });
 }
@@ -9066,13 +8763,13 @@ async function errorsCommand(args = {}, deps = defaultDevtoolsDiagnosticsDepende
 }
 async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtoolsDiagnosticsDependencies) {
   const action = args.action ?? "read";
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber16(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber17(args.limit ?? 100, 1, 1e3);
   const targetDiscovery = await metroTargetDiscovery(metroPort, deps);
   const targets = targetDiscovery.targets;
   const webSocketDebuggerUrl = targets[0]?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson17({
+    return toolJson15({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -9085,7 +8782,7 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtools
   }
   if (action === "clear") {
     const result2 = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, clearDiagnosticsExpression(kind), { timeoutMs: 5e3 });
-    return toolJson17({
+    return toolJson15({
       ...valueFromHermes(result2) ?? { available: false, reason: result2?.error ?? "Runtime diagnostics did not return a value." },
       kind,
       action,
@@ -9097,7 +8794,7 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtools
   const result = await evaluateHermesExpression2(deps, webSocketDebuggerUrl, diagnosticsExpression({ kind, limit }), { timeoutMs: 5e3 });
   const value = valueFromHermes(result);
   if (!value) {
-    return toolJson17({
+    return toolJson15({
       available: false,
       kind,
       source: "hermes-runtime",
@@ -9109,7 +8806,7 @@ async function diagnosticMessagesCommand(kind, args = {}, deps = defaultDevtools
   }
   const record = asRecord9(value) ?? {};
   const messages = Array.isArray(record.messages) ? record.messages.slice(-limit) : [];
-  return toolJson17({
+  return toolJson15({
     ...record,
     kind,
     metroPort,
@@ -9200,7 +8897,7 @@ function frontendUrlForTarget(target, metroPort) {
 }
 async function metroStatusPayload2(args, deps) {
   if (deps.metroStatusPayload) return deps.metroStatusPayload(args);
-  const metroPort = clampNumber16(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
   const baseUrl = `http://127.0.0.1:${metroPort}`;
   const status = await fetchText(deps, `${baseUrl}/status`, 1500);
   if (!status.available) {
@@ -9218,7 +8915,7 @@ async function metroStatusPayload2(args, deps) {
   }
   const targetDiscovery = await fetchMetroTargets(deps, metroPort);
   const version = await fetchJson(deps, `${baseUrl}/json/version`, 1500).catch((error) => ({
-    __error: formatError12(error)
+    __error: formatError10(error)
   }));
   const symbolication = await probeMetroSymbolication(deps, metroPort);
   return {
@@ -9237,7 +8934,7 @@ async function metroStatusPayload2(args, deps) {
 }
 async function fetchMetroTargets(deps, metroPort) {
   const raw = await fetchJson(deps, `http://127.0.0.1:${metroPort}/json/list`, 2500).catch((error2) => ({
-    __error: formatError12(error2)
+    __error: formatError10(error2)
   }));
   const error = asRecord9(raw)?.__error;
   if (typeof error === "string") {
@@ -9290,12 +8987,12 @@ function valueFromHermes(result) {
 async function execFile8(deps, file, args, options) {
   if (deps.execFile) return deps.execFile(file, args, options);
   const childProcess = await import("node:child_process");
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     childProcess.execFile(file, args, { timeout: options.timeout }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout,
         stderr,
-        error: error ? formatError12(error) : null
+        error: error ? formatError10(error) : null
       });
     });
   });
@@ -9304,7 +9001,7 @@ function resolveExpoStateRoot4(args, deps) {
   if (deps.resolveExpoStateRoot) return deps.resolveExpoStateRoot(args);
   const explicit = typeof args.stateDir === "string" && args.stateDir.length > 0 ? args.stateDir : null;
   if (explicit?.endsWith("/runs")) return explicit.slice(0, -"/runs".length);
-  return explicit ?? joinPath3(typeof args.root === "string" ? args.root : ".", ".scratch", "expo-ios");
+  return explicit ?? joinPath3(typeof args.root === "string" ? args.root : ".", ".scratch", "expo98");
 }
 async function mkdir11(deps, dir, options) {
   if (deps.mkdir) return deps.mkdir(dir, options);
@@ -9354,7 +9051,7 @@ async function probeMetroSymbolication(deps, metroPort) {
       reason: response.ok ? null : `Metro symbolicate HTTP ${response.status}`
     };
   } catch (error) {
-    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError12(error) };
+    return { available: false, endpoint: "/symbolicate", status: null, reason: formatError10(error) };
   }
 }
 async function fetchText(deps, url, timeoutMs) {
@@ -9362,7 +9059,7 @@ async function fetchText(deps, url, timeoutMs) {
     const response = asFetchResponse(await fetchWithTimeout2(deps, url, { timeoutMs }));
     return { available: response.ok, text: await response.text(), error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {
-    return { available: false, text: null, error: formatError12(error) };
+    return { available: false, text: null, error: formatError10(error) };
   }
 }
 async function fetchJson(deps, url, timeoutMs) {
@@ -9425,23 +9122,23 @@ function responseShape2(value) {
   return { type: typeof value };
 }
 function sanitizePayload(value) {
-  return boundValue(redactValue5(value));
+  return boundValue(redactValue2(value));
 }
 function boundValue(value) {
-  if (typeof value === "string") return truncate13(value);
+  if (typeof value === "string") return truncate12(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS).map(boundValue);
   const record = asRecord9(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue(nested)]));
 }
-function redactValue5(value) {
+function redactValue2(value) {
   if (typeof value === "string") return redactString(value);
-  if (Array.isArray(value)) return value.map(redactValue5);
+  if (Array.isArray(value)) return value.map(redactValue2);
   const record = asRecord9(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
-    isSensitiveKey(key) ? "[redacted]" : redactValue5(nested)
+    isSensitiveKey(key) ? "[redacted]" : redactValue2(nested)
   ]));
 }
 function redactString(value) {
@@ -9462,19 +9159,19 @@ function redactString(value) {
 function isSensitiveKey(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function formatError12(error) {
+function formatError10(error) {
   const record = asRecord9(error);
   const message = record?.message;
   return message == null ? String(error) : String(message);
 }
 
-// src/modules/navigation-deeplinks/src/main/index.ts
+// src/commands/navigation-deeplinks/src/main/index.ts
 var EXPO_IOS_BRIDGE_VERSION = "1.0.0";
 var NAVIGATION_LIMITATIONS = [
   "Navigation state and imperative navigation actions require the dev-only app instrumentation bridge.",
   "Use open-route or navigation deep-link when only URL navigation is available."
 ];
-function clampNumber17(value, min, max) {
+function clampNumber18(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9532,13 +9229,17 @@ async function navigationPolicyDecision(args, action, deps = {}) {
     };
   }
   if (action === "deep-link") {
-    return {
-      checked: true,
-      action: `navigation.${action}`,
-      sideEffect,
-      allowed: true,
-      reason: "Deep-link navigation uses the existing open-route fallback policy."
-    };
+    if (!deps.policyDecision) {
+      return {
+        checked: true,
+        action: "open-route",
+        sideEffect,
+        allowed: false,
+        source: null,
+        reason: "No action policy allowed this state-changing operation."
+      };
+    }
+    return deps.policyDecision(args, "open-route", "device");
   }
   if (!deps.policyDecision) {
     return {
@@ -9557,11 +9258,11 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
   if (!["state", "back", "pop-to-root", "tab", "deep-link"].includes(action)) {
     throw new Error(`Unknown navigation action: ${action}`);
   }
-  if (action === "deep-link") return toolJson18(await navigationDeepLink(args, deps));
-  const metroPort = clampNumber17(args.metroPort ?? 8081, 1, 65535);
+  if (action === "deep-link") return toolJson16(await navigationDeepLink(args, deps));
+  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
   const policy = await navigationPolicyDecision(args, action, deps);
   if (!policy.allowed) {
-    return toolJson18({
+    return toolJson16({
       available: false,
       action,
       metroPort,
@@ -9576,10 +9277,10 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson18(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
+    return toolJson16(navigationUnavailable({ action, metroPort, reason: "No Metro inspector target.", policy }));
   }
   if (!deps.evaluateHermesExpression) {
-    return toolJson18(navigationUnavailable({
+    return toolJson16(navigationUnavailable({
       action,
       metroPort,
       reason: "No Hermes evaluator is configured.",
@@ -9594,7 +9295,7 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
   );
   const value = result?.result?.result?.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return toolJson18(navigationUnavailable({
+    return toolJson16(navigationUnavailable({
       action,
       metroPort,
       reason: result?.error ?? "Navigation bridge did not return a value.",
@@ -9602,7 +9303,7 @@ async function navigationCommand(args = {}, deps = defaultNavigationDependencies
       policy
     }));
   }
-  return toolJson18({
+  return toolJson16({
     ...value,
     action,
     metroPort,
@@ -9619,7 +9320,7 @@ async function navigationDeepLink(args = {}, deps = defaultNavigationDependencie
     return { available: false, action: "deep-link", reason: "No open-route adapter is configured.", policy };
   }
   const route = args.route ?? args._?.[1] ?? args._?.[0];
-  const openedRaw = unwrapToolJson8(await deps.openExpoRoute({ ...args, route }));
+  const openedRaw = unwrapToolJson5(await deps.openExpoRoute({ ...args, route }));
   if (!openedRaw || typeof openedRaw !== "object" || Array.isArray(openedRaw)) {
     return {
       available: false,
@@ -9654,7 +9355,8 @@ async function navigationDeepLink(args = {}, deps = defaultNavigationDependencie
 var defaultNavigationDependencies = {
   metroTargets: (metroPort) => metroTargets(metroPort),
   evaluateHermesExpression,
-  openExpoRoute
+  openExpoRoute,
+  policyDecision: (args, action) => routeActionPolicyDecision(args, action)
 };
 function navigationExpression(args) {
   return `(() => {
@@ -9771,11 +9473,11 @@ function requireString11(value, field) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string.`);
   return value.trim();
 }
-function toolJson18(value) {
+function toolJson16(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
-function unwrapToolJson8(result) {
+function unwrapToolJson5(result) {
   if (isToolTextResult(result)) {
     const text = result.content[0]?.text;
     if (typeof text === "string") {
@@ -9811,18 +9513,18 @@ function redactSensitiveUrlQuery2(value) {
   );
 }
 
-// src/modules/network-evidence/src/main/index.ts
+// src/commands/network-evidence/src/main/index.ts
 import { promises as fs8 } from "node:fs";
 import path8 from "node:path";
-var CLI_NAME4 = "expo-ios";
-var CLI_VERSION5 = "0.1.0";
+var CLI_NAME4 = CURRENT_CLI_NAME;
+var CLI_VERSION3 = "0.1.0";
 var EXPO_IOS_BRIDGE_VERSION2 = "1.0.0";
-var REDACTED4 = "[redacted]";
+var REDACTED3 = "[redacted]";
 var UNAVAILABLE_LIMITATIONS = [
   "Network evidence requires dev-only app instrumentation that patches fetch/XHR or an equivalent app network adapter.",
   "Native networking stacks are unavailable unless the app exposes them through the bridge."
 ];
-function clampNumber18(value, min, max) {
+function clampNumber19(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -9837,13 +9539,13 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   if (harAction && !["start", "stop"].includes(harAction)) {
     throw new Error(`Unknown network HAR action: ${harAction}`);
   }
-  const metroPort = clampNumber18(args.metroPort ?? 8081, 1, 65535);
-  const limit = clampNumber18(args.limit ?? 100, 1, 1e3);
+  const metroPort = clampNumber19(args.metroPort ?? 8081, 1, 65535);
+  const limit = clampNumber19(args.limit ?? 100, 1, 1e3);
   const targets = await deps.metroTargets(metroPort);
   const target = targets.find((item) => item.webSocketDebuggerUrl) ?? targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
   if (!webSocketDebuggerUrl) {
-    return toolJson19(networkUnavailable({
+    return toolJson17(networkUnavailable({
       action: bridgeAction,
       metroPort,
       code: "no-runtime-target",
@@ -9851,7 +9553,7 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     }));
   }
   if (!deps.evaluateHermesExpression) {
-    return toolJson19(networkUnavailable({
+    return toolJson17(networkUnavailable({
       action: bridgeAction,
       metroPort,
       code: "transport-failure",
@@ -9866,7 +9568,7 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
   );
   const value = result?.result?.result?.value;
   if (!value) {
-    return toolJson19(networkUnavailable({
+    return toolJson17(networkUnavailable({
       action: bridgeAction,
       metroPort,
       code: "transport-failure",
@@ -9893,7 +9595,7 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     const fileSystem = deps.fileSystem ?? defaultFileSystem;
     await fileSystem.mkdir(paths.dirname(outputPath), { recursive: true });
     await fileSystem.writeJsonFile(outputPath, har);
-    return toolJson19({
+    return toolJson17({
       ...redacted,
       action: bridgeAction,
       metroPort,
@@ -9916,7 +9618,7 @@ async function networkCommand(args = {}, deps = defaultNetworkDependencies) {
     limitations: networkLimitations(redacted),
     captureTiming: networkCaptureTiming(redacted, clock)
   };
-  return toolJson19(action === "waterfall" ? networkWaterfallPayload(payload) : payload);
+  return toolJson17(action === "waterfall" ? networkWaterfallPayload(payload) : payload);
 }
 var defaultNetworkDependencies = {
   metroTargets: defaultMetroTargets,
@@ -10281,7 +9983,7 @@ function harFromNetworkRequests(requests, clock = systemClock2) {
   return {
     log: {
       version: "1.2",
-      creator: { name: CLI_NAME4, version: CLI_VERSION5 },
+      creator: { name: CLI_NAME4, version: CLI_VERSION3 },
       entries: requests.map((request) => ({
         startedDateTime: request.startedAt ?? clock.now().toISOString(),
         time: request.durationMs ?? 0,
@@ -10305,7 +10007,7 @@ function harFromNetworkRequests(requests, clock = systemClock2) {
 }
 function annotateHar(har, metadata) {
   const copy = cloneJson(isRecord8(har) ? har : harFromNetworkRequests([]));
-  const log = isRecord8(copy.log) ? copy.log : { version: "1.2", creator: { name: CLI_NAME4, version: CLI_VERSION5 }, entries: [] };
+  const log = isRecord8(copy.log) ? copy.log : { version: "1.2", creator: { name: CLI_NAME4, version: CLI_VERSION3 }, entries: [] };
   copy.log = log;
   log._expoIos = {
     source: metadata.source,
@@ -10338,7 +10040,7 @@ function targetSummary6(target) {
     }
   };
 }
-function toolJson19(value) {
+function toolJson17(value) {
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
 }
 function requireString12(value, field) {
@@ -10356,7 +10058,7 @@ function redactNetworkRequest(request) {
     request: request.request ? redactNetworkMessage(request.request) : void 0,
     response: request.response ? redactNetworkMessage(request.response) : void 0,
     headers: request.headers ? redactHeaders(request.headers) : void 0,
-    cookies: request.cookies ? REDACTED4 : void 0,
+    cookies: request.cookies ? REDACTED3 : void 0,
     body: void 0,
     postData: void 0,
     content
@@ -10369,7 +10071,7 @@ function redactNetworkMessage(message) {
     ...message,
     url: redactNetworkUrl(message.url),
     headers: message.headers ? redactHeaders(message.headers) : void 0,
-    cookies: message.cookies ? REDACTED4 : void 0,
+    cookies: message.cookies ? REDACTED3 : void 0,
     body: void 0,
     postData: void 0,
     content
@@ -10382,14 +10084,14 @@ function redactHeaders(headers) {
       const name = String(header.name ?? "");
       return {
         ...header,
-        value: /authorization|cookie|token|secret|api[-_]?key|password|set-cookie/i.test(name) ? REDACTED4 : header.value
+        value: /authorization|cookie|token|secret|api[-_]?key|password|set-cookie/i.test(name) ? REDACTED3 : header.value
       };
     });
   }
   if (!isRecord8(headers)) return headers;
   return Object.fromEntries(Object.entries(headers).map(([key, value]) => [
     key,
-    /authorization|cookie|token|secret|api[-_]?key|password|set-cookie/i.test(key) ? REDACTED4 : value
+    /authorization|cookie|token|secret|api[-_]?key|password|set-cookie/i.test(key) ? REDACTED3 : value
   ]));
 }
 function redactNetworkUrl(url) {
@@ -10397,13 +10099,13 @@ function redactNetworkUrl(url) {
   try {
     const parsed = new URL(String(url));
     for (const key of [...parsed.searchParams.keys()]) {
-      if (/token|secret|key|password|auth|session|cookie/i.test(key)) parsed.searchParams.set(key, REDACTED4);
+      if (/token|secret|key|password|auth|session|cookie/i.test(key)) parsed.searchParams.set(key, REDACTED3);
     }
-    parsed.username = parsed.username ? REDACTED4 : "";
-    parsed.password = parsed.password ? REDACTED4 : "";
+    parsed.username = parsed.username ? REDACTED3 : "";
+    parsed.password = parsed.password ? REDACTED3 : "";
     return parsed.toString();
   } catch {
-    return String(url).replace(/([?&][^=]*(token|secret|key|password|auth|session|cookie)[^=]*=)[^&]+/gi, `$1${REDACTED4}`);
+    return String(url).replace(/([?&][^=]*(token|secret|key|password|auth|session|cookie)[^=]*=)[^&]+/gi, `$1${REDACTED3}`);
   }
 }
 function redactHar(har) {
@@ -10475,16 +10177,16 @@ var defaultFileSystem = {
 };
 function defaultResolveExpoStateRoot(args) {
   if (typeof args.stateDir === "string" && args.stateDir.length > 0) return args.stateDir;
-  return ".scratch/expo-ios";
+  return ".scratch/expo98";
 }
 
-// src/modules/bridge-domain-actions/src/main/index.ts
+// src/commands/bridge-domain-actions/src/main/index.ts
 import { readFile as readFile12 } from "node:fs/promises";
 import path9 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION3 = "1.0.0";
 var MAX_OUTPUT11 = 4e4;
 var MAX_ARRAY_ITEMS2 = 1e3;
-function toolJson20(value) {
+function toolJson18(value) {
   return { content: [{ type: "text", text: stringifyBoundedJson(value) }] };
 }
 async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies) {
@@ -10495,9 +10197,9 @@ async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies)
   const key = args.key ?? positionals[2];
   const sideEffect = action === "list" || action === "get" ? "read" : "write";
   const policy = await policyDecision(args, `storage.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson20(policyDeniedPayload3({ domain: "storage", action, policy }));
+  if (!policy.allowed) return toolJson18(policyDeniedPayload({ domain: "storage", action, policy }));
   const value = action === "set" ? parseStorageValue(args.value ?? positionals[3]) : null;
-  return toolJson20(await bridgeDomainCommand({
+  return toolJson18(await bridgeDomainCommand({
     args,
     domain: "storage",
     action,
@@ -10506,7 +10208,7 @@ async function storageCommand(args = {}, deps = defaultBridgeDomainDependencies)
       action,
       key,
       value,
-      limit: clampNumber19(args.limit ?? 100, 1, 1e3)
+      limit: clampNumber20(args.limit ?? 100, 1, 1e3)
     }),
     policy
   }, deps));
@@ -10515,10 +10217,10 @@ async function stateCommand(args = {}, deps = defaultBridgeDomainDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString13(args.action ?? positionals[0] ?? "list", "action");
   if (!["list", "save", "load", "clear"].includes(action)) throw new Error(`Unknown state action: ${action}`);
-  const sideEffect = action === "list" || action === "save" ? "read" : "write";
+  const sideEffect = action === "list" ? "read" : "write";
   const policy = await policyDecision(args, `state.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson20(policyDeniedPayload3({ domain: "state", action, policy }));
-  return toolJson20(await bridgeDomainCommand({
+  if (!policy.allowed) return toolJson18(policyDeniedPayload({ domain: "state", action, policy }));
+  return toolJson18(await bridgeDomainCommand({
     args,
     domain: "state",
     action,
@@ -10532,8 +10234,8 @@ async function controlsCommand(args = {}, deps = defaultBridgeDomainDependencies
   if (!["list", "get", "press"].includes(action)) throw new Error(`Unknown controls action: ${action}`);
   const sideEffect = action === "press" ? "device" : "read";
   const policy = await policyDecision(args, `controls.${action}`, sideEffect, deps);
-  if (!policy.allowed) return toolJson20(policyDeniedPayload3({ domain: "controls", action, policy }));
-  return toolJson20(await bridgeDomainCommand({
+  if (!policy.allowed) return toolJson18(policyDeniedPayload({ domain: "controls", action, policy }));
+  return toolJson18(await bridgeDomainCommand({
     args,
     domain: "controls",
     action,
@@ -10548,10 +10250,10 @@ var defaultBridgeDomainDependencies = {
   resolvePath: (file) => path9.resolve(file)
 };
 async function bridgeDomainCommand(input, deps = defaultBridgeDomainDependencies) {
-  const metroPort = clampNumber19(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
   const sideEffect = bridgeActionSideEffect(input.domain, input.action);
   if (sideEffect !== "read" && input.policy?.allowed !== true) {
-    return policyDeniedPayload3({ domain: input.domain, action: input.action, policy: input.policy ?? {
+    return policyDeniedPayload({ domain: input.domain, action: input.action, policy: input.policy ?? {
       checked: true,
       action: `${input.domain}.${input.action}`,
       sideEffect,
@@ -10635,19 +10337,6 @@ function bridgeRuntimeTransport(metroPort, target, cdp = null) {
     cdp
   });
 }
-function policyDeniedPayload3(args) {
-  return sanitizePayload2({
-    available: false,
-    domain: args.domain,
-    action: args.action,
-    source: "policy",
-    evidenceSource: "policy",
-    code: "policy-denied",
-    denied: true,
-    reason: "Policy denied action.",
-    policy: args.policy
-  });
-}
 async function policyDecision(args, action, sideEffect, deps = {}) {
   if (sideEffect === "read") {
     return { checked: true, action, sideEffect, allowed: true, source: null, reason: "Read action does not require policy approval." };
@@ -10659,7 +10348,7 @@ async function policyDecision(args, action, sideEffect, deps = {}) {
   const resolved = deps.resolvePath ? deps.resolvePath(policyPath) : policyPath;
   if (!deps.readJsonFile) throw new Error("policyDecision requires readJsonFile when actionPolicy is supplied.");
   const policy = await deps.readJsonFile(resolved);
-  const allowed = policyAllowsAction(policy, action);
+  const allowed = policyAllowsAction2(policy, action);
   return {
     checked: true,
     action,
@@ -10669,7 +10358,7 @@ async function policyDecision(args, action, sideEffect, deps = {}) {
     reason: allowed ? "Action allowed by policy." : "Action policy did not allow this operation."
   };
 }
-function policyAllowsAction(policy, action) {
+function policyAllowsAction2(policy, action) {
   const record = asRecord10(policy);
   if (Array.isArray(record?.allow) && record.allow.includes(action)) return true;
   const actions = asRecord10(record?.actions);
@@ -10681,7 +10370,7 @@ function parseStorageValue(value) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    throw new Error(`Invalid JSON for --value: ${formatError13(error)}`);
+    throw new Error(`Invalid JSON for --value: ${formatError11(error)}`);
   }
 }
 function storageExpression(args) {
@@ -10831,7 +10520,7 @@ function targetSummary7(target) {
     }
   });
 }
-function clampNumber19(value, min, max) {
+function clampNumber20(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -10844,7 +10533,7 @@ function optionalString7(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 function sanitizePayload2(value) {
-  return boundValue2(redactValue6(value));
+  return boundValue2(redactValue3(value));
 }
 function stringifyBoundedJson(value) {
   const sanitized = sanitizePayload2(value);
@@ -10874,25 +10563,25 @@ function stringifyBoundedJson(value) {
 }
 function bridgeActionSideEffect(domain, action) {
   if (domain === "storage") return action === "list" || action === "get" ? "read" : "write";
-  if (domain === "state") return action === "list" || action === "save" ? "read" : "write";
+  if (domain === "state") return action === "list" ? "read" : "write";
   if (domain === "controls") return action === "press" ? "device" : "read";
   return "unknown";
 }
 function boundValue2(value) {
-  if (typeof value === "string") return truncate14(value);
+  if (typeof value === "string") return truncate13(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS2).map(boundValue2);
   const record = asRecord10(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue2(nested)]));
 }
-function redactValue6(value) {
+function redactValue3(value) {
   if (typeof value === "string") return redactString2(value);
-  if (Array.isArray(value)) return value.map(redactValue6);
+  if (Array.isArray(value)) return value.map(redactValue3);
   const record = asRecord10(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
-    isSensitiveKey2(key) ? "[redacted]" : redactValue6(nested)
+    isSensitiveKey2(key) ? "[redacted]" : redactValue3(nested)
   ]));
 }
 function redactString2(value) {
@@ -10913,7 +10602,7 @@ function redactString2(value) {
 function isSensitiveKey2(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function truncate14(value, max = MAX_OUTPUT11) {
+function truncate13(value, max = MAX_OUTPUT11) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
@@ -10922,30 +10611,34 @@ function truncate14(value, max = MAX_OUTPUT11) {
 function asRecord10(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-function formatError13(error) {
+function formatError11(error) {
   const record = asRecord10(error);
   return record?.message == null ? String(error) : String(record.message);
 }
 
-// src/modules/bridge-command-adapter/src/main/index.ts
+// src/commands/bridge-command-adapter/src/main/index.ts
 import { promises as fs9 } from "node:fs";
 import path10 from "node:path";
 var EXPO_IOS_BRIDGE_VERSION4 = "1.0.0";
 var BRIDGE_SCHEMA_VERSION = 1;
+var BRIDGE_DIR = ".expo98";
+var LEGACY_BRIDGE_DIR = ".expo-ios";
+var BRIDGE_SOURCE_FILE = "expo98-devtools-bridge.ts";
+var LEGACY_BRIDGE_SOURCE_FILE = "expo-ios-devtools-bridge.ts";
 async function bridgeCommand(args = {}, dependencies = {}) {
   const action = requireBridgeAction(args.action ?? "status");
   const io = bridgeCommandIo(dependencies);
   const cwd = await resolveProjectCwd(args.cwd, io);
   const status = await bridgeInstallStatus(cwd, io);
   const plan = bridgeInstallPlan(cwd, status);
-  if (action === "status") return toolJson21({ available: true, action, ...status });
-  if (action === "plan") return toolJson21({ available: true, action, status: status.state, projectRoot: status.projectRoot, plan });
+  if (action === "status") return toolJson19({ available: true, action, ...status });
+  if (action === "plan") return toolJson19({ available: true, action, status: status.state, projectRoot: status.projectRoot, plan });
   if (action === "health" || action === "domains") {
-    return toolJson21(await io.bridgeHealthPayload(args, { action, status, plan }));
+    return toolJson19(await io.bridgeHealthPayload(args, { action, status, plan }));
   }
   const permission = action === "install" ? "bridge-install" : "bridge-remove";
   if (!hasExplicitConfirmation2(args.confirmActions, permission)) {
-    return toolJson21({
+    return toolJson19({
       available: false,
       action,
       status: status.state,
@@ -10956,25 +10649,29 @@ async function bridgeCommand(args = {}, dependencies = {}) {
     });
   }
   if (action === "install") {
-    await io.mkdir(io.joinPath(cwd, ".expo-ios"), { recursive: true });
+    await io.mkdir(io.joinPath(cwd, BRIDGE_DIR), { recursive: true });
     await io.mkdir(io.joinPath(cwd, "src"), { recursive: true });
-    await io.writeJsonFile(io.joinPath(cwd, ".expo-ios", "bridge.json"), bridgeMetadata());
-    await io.writeFile(io.joinPath(cwd, "src", "expo-ios-devtools-bridge.ts"), bridgeSource(), "utf8");
-    return toolJson21({ available: true, action, projectRoot: cwd, installed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
+    await io.writeJsonFile(io.joinPath(cwd, BRIDGE_DIR, "bridge.json"), bridgeMetadata());
+    await io.writeFile(io.joinPath(cwd, "src", BRIDGE_SOURCE_FILE), bridgeSource(), "utf8");
+    return toolJson19({ available: true, action, projectRoot: cwd, installed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
   }
-  await removeIgnoringErrors(io, io.joinPath(cwd, ".expo-ios", "bridge.json"));
-  await removeIgnoringErrors(io, io.joinPath(cwd, "src", "expo-ios-devtools-bridge.ts"));
-  return toolJson21({ available: true, action, projectRoot: cwd, removed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
+  await removeIgnoringErrors(io, io.joinPath(cwd, BRIDGE_DIR, "bridge.json"));
+  await removeIgnoringErrors(io, io.joinPath(cwd, LEGACY_BRIDGE_DIR, "bridge.json"));
+  await removeIgnoringErrors(io, io.joinPath(cwd, "src", BRIDGE_SOURCE_FILE));
+  await removeIgnoringErrors(io, io.joinPath(cwd, "src", LEGACY_BRIDGE_SOURCE_FILE));
+  return toolJson19({ available: true, action, projectRoot: cwd, removed: true, status: (await bridgeInstallStatus(cwd, io)).state, plan });
 }
 async function bridgeInstallStatus(projectRoot, dependencies = {}) {
   const io = bridgeCommandIo(dependencies);
   const packageJsonPath = io.joinPath(projectRoot, "package.json");
   const packageJson = await readJsonOrNull(io.readJsonFile, packageJsonPath);
   const deps = packageJson ? dependencyMap(packageJson) : {};
-  const metadataPath = io.joinPath(projectRoot, ".expo-ios", "bridge.json");
-  const sourcePath = io.joinPath(projectRoot, "src", "expo-ios-devtools-bridge.ts");
-  const metadata = await readJsonOrNull(io.readJsonFile, metadataPath);
-  const sourceExists = await Promise.resolve(io.pathExists(sourcePath));
+  const metadataPath = io.joinPath(projectRoot, BRIDGE_DIR, "bridge.json");
+  const sourcePath = io.joinPath(projectRoot, "src", BRIDGE_SOURCE_FILE);
+  const legacyMetadataPath = io.joinPath(projectRoot, LEGACY_BRIDGE_DIR, "bridge.json");
+  const legacySourcePath = io.joinPath(projectRoot, "src", LEGACY_BRIDGE_SOURCE_FILE);
+  const metadata = await readJsonOrNull(io.readJsonFile, metadataPath) ?? await readJsonOrNull(io.readJsonFile, legacyMetadataPath);
+  const sourceExists = await Promise.resolve(io.pathExists(sourcePath)) || await Promise.resolve(io.pathExists(legacySourcePath));
   const hasExpo = typeof deps.expo === "string";
   const rozenitePackages = Object.keys(deps).filter((name) => name === "rozenite" || name.startsWith("@rozenite/")).sort();
   let state = "absent";
@@ -11031,7 +10728,7 @@ function bridgeInstallPlan(projectRoot, status) {
     developmentOnly: true,
     productionExclusion: [
       "Bridge code must be imported only from development-only app entrypoints or guarded by __DEV__.",
-      "Production/release builds must not import src/expo-ios-devtools-bridge.ts."
+      `Production/release builds must not import src/${BRIDGE_SOURCE_FILE}.`
     ],
     filesToAddOrChange: [
       {
@@ -11065,29 +10762,30 @@ function bridgeMetadata() {
     schemaVersion: BRIDGE_SCHEMA_VERSION,
     bridgeVersion: EXPO_IOS_BRIDGE_VERSION4,
     developmentOnly: true,
-    generatedBy: "expo-ios",
+    generatedBy: "expo98",
     domains: ["navigation", "network", "storage", "controls", "performance", "snapshot"]
   };
 }
 function bridgeSource() {
-  return `// Generated by expo-ios. Import this file only from development-only app code guarded by __DEV__.
-export const expoIosDevtoolsBridgeMetadata = ${JSON.stringify(bridgeMetadata(), null, 2)} as const;
+  return `// Generated by expo98. Import this file only from development-only app code guarded by __DEV__.
+export const expo98DevtoolsBridgeMetadata = ${JSON.stringify(bridgeMetadata(), null, 2)} as const;
+export const expoIosDevtoolsBridgeMetadata = expo98DevtoolsBridgeMetadata;
 
 export function registerExpoIosDevtoolsBridge() {
   if (typeof __DEV__ === "undefined") return { registered: false, reason: "development-mode-required" };
   if (!__DEV__) return { registered: false, reason: "production-build" };
   const bridge = {
     registered: true,
-    metadata: expoIosDevtoolsBridgeMetadata,
-    bridgeVersion: expoIosDevtoolsBridgeMetadata.bridgeVersion,
-    domains: expoIosDevtoolsBridgeMetadata.domains.map((name) => ({ name })),
+    metadata: expo98DevtoolsBridgeMetadata,
+    bridgeVersion: expo98DevtoolsBridgeMetadata.bridgeVersion,
+    domains: expo98DevtoolsBridgeMetadata.domains.map((name) => ({ name })),
   };
   globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ = bridge;
-  return { registered: true, metadata: expoIosDevtoolsBridgeMetadata };
+  return { registered: true, metadata: expo98DevtoolsBridgeMetadata };
 }
 `;
 }
-function toolJson21(value) {
+function toolJson19(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
 }
@@ -11183,12 +10881,12 @@ function asRecord11(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 
-// src/modules/accessibility-actions/src/main/index.ts
+// src/commands/accessibility-actions/src/main/index.ts
 import { readdir as readdir8, readFile as readFile13 } from "node:fs/promises";
 import { execFile as nodeExecFile10 } from "node:child_process";
 import { basename as basename5, join as join10, resolve as resolve5 } from "node:path";
 var FOCUS_LIMITATION = "Native iOS accessibility focus APIs are not exposed by stable local simulator tooling here; this command focuses the element through the available ref tap path.";
-function toolJson22(value) {
+function toolJson20(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -11198,9 +10896,9 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
   if (!["tree", "inspect", "audit", "focus"].includes(action)) throw new Error(`Unknown accessibility action: ${action}`);
   if (action === "focus") {
     const ref = requireString15(args.ref ?? positionals[1], "ref");
-    if (!deps.refActionCommand) return toolJson22({ available: false, action, ref, reason: "No ref action adapter is configured." });
-    const result = unwrapToolJson9(await deps.refActionCommand({ ...args, command: "focus", ref }));
-    return toolJson22({
+    if (!deps.refActionCommand) return toolJson20({ available: false, action, ref, reason: "No ref action adapter is configured." });
+    const result = asRecord12(unwrapToolJson(await deps.refActionCommand({ ...args, command: "focus", ref }))) ?? {};
+    return toolJson20({
       ...result,
       action,
       source: result.source ?? "ref-action",
@@ -11210,23 +10908,23 @@ async function accessibilityCommand(args = {}, deps = defaultAccessibilityDepend
   if (action === "inspect") {
     const ref = requireString15(args.ref ?? positionals[1], "ref");
     const cache = await readLatestRefCache4(args, deps);
-    if (!cache) return toolJson22({ available: false, action, reason: "No snapshot exists for the current session.", ref });
+    if (!cache) return toolJson20({ available: false, action, reason: "No snapshot exists for the current session.", ref });
     const record = (cache.refs ?? []).find((item) => item.ref === ref);
-    return toolJson22(record ? { available: true, action, ref, snapshotId: cache.snapshotId, targetId: cache.targetId, record } : { available: false, action, reason: "Ref not found in the latest snapshot.", ref });
+    return toolJson20(record ? { available: true, action, ref, snapshotId: cache.snapshotId, targetId: cache.targetId, record } : { available: false, action, reason: "Ref not found in the latest snapshot.", ref });
   }
   if (action === "audit") {
     const cache = await readLatestRefCache4(args, deps);
-    if (!cache) return toolJson22({ available: false, action, reason: "No snapshot exists for the current session.", issues: [] });
+    if (!cache) return toolJson20({ available: false, action, reason: "No snapshot exists for the current session.", issues: [] });
     const issues = auditAccessibilityRefs(cache);
-    return toolJson22({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
+    return toolJson20({ available: true, action, snapshotId: cache.snapshotId, targetId: cache.targetId, issueCount: issues.length, issues });
   }
-  return toolJson22(await accessibilityTreePayload(args, deps));
+  return toolJson20(await accessibilityTreePayload(args, deps));
 }
 var defaultAccessibilityDependencies = {
   commandPath: defaultCommandPath2,
   resolveIosDevice: (device, options) => resolveIosDevice(typeof device === "string" ? device : null, options),
   execFile: defaultExecFile4,
-  refActionCommand: (args) => toolJson22({
+  refActionCommand: (args) => toolJson20({
     available: false,
     action: "focus",
     ref: args.ref ?? null,
@@ -11234,19 +10932,19 @@ var defaultAccessibilityDependencies = {
   })
 };
 function defaultCommandPath2(command) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile10("which", [command], { timeout: 5e3 }, (error, stdout) => {
-      resolve15(error ? null : String(stdout ?? "").trim() || null);
+      resolve18(error ? null : String(stdout ?? "").trim() || null);
     });
   });
 }
 function defaultExecFile4(file, argv, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile10(file, argv, {
       timeout: options.timeout,
       maxBuffer: options.maxBuffer
     }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error: error ? { message: error.message, code: error.code, signal: error.signal } : void 0
@@ -11267,7 +10965,7 @@ async function accessibilityTreePayload(args, deps = {}) {
     rejectOnError: false
   });
   if (result.error) {
-    return { available: false, action: "tree", reason: "Native accessibility tree failed.", stderr: truncate15(result.stderr), error: result.error, semanticBridge };
+    return { available: false, action: "tree", reason: "Native accessibility tree failed.", stderr: truncate14(result.stderr), error: result.error, semanticBridge };
   }
   const tree = JSON.parse(result.stdout || "[]");
   return {
@@ -11298,7 +10996,7 @@ async function semanticBridgeTree(args, deps = {}) {
       filters: { interactiveOnly: false, compact: false, depth: null, includeSource: true, includeBounds: true }
     });
   } catch (error) {
-    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError14(error) };
+    return { available: false, source: "plugin-bridge-semantic", code: "transport-failure", reason: formatError12(error) };
   }
 }
 async function readLatestSession4(stateRoot) {
@@ -11319,7 +11017,7 @@ function resolveExpoStateRoot5(args = {}) {
     return basename5(resolved) === "runs" ? resolve5(join10(resolved, "..")) : resolved;
   }
   const root = resolve5(args.root ?? args.cwd ?? process.cwd());
-  return join10(root, ".scratch", "expo-ios");
+  return join10(root, ".scratch", "expo98");
 }
 function sessionDirectory2(stateRoot, sessionId) {
   return join10(stateRoot, "sessions", sessionId);
@@ -11331,15 +11029,12 @@ function requireString15(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function truncate15(value, max = 4e4) {
+function truncate14(value, max = 4e4) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...[truncated ${text.length - max} chars]`;
 }
-function unwrapToolJson9(result) {
-  return JSON.parse(result.content[0]?.text ?? "null");
-}
-function formatError14(error) {
+function formatError12(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
@@ -11347,10 +11042,10 @@ function asRecord12(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/modules/modal-blocker-actions/src/main/index.ts
+// src/commands/modal-blocker-actions/src/main/index.ts
 var MAX_OUTPUT12 = 4e4;
 var MAX_ARRAY_ITEMS3 = 1e3;
-function toolJson23(value) {
+function toolJson21(value) {
   return { content: [{ type: "text", text: stringifyBoundedJson2(value) }] };
 }
 async function dialogCommand(args = {}, deps = defaultModalBridgeDependencies) {
@@ -11375,7 +11070,7 @@ async function modalBridgeCommand(input, deps) {
     allowed: true,
     reason: "Modal action is non-destructive."
   };
-  return toolJson23(await bridgeDomainCommand2({
+  return toolJson21(await bridgeDomainCommand2({
     args: input.args,
     domain: input.domain,
     action,
@@ -11388,7 +11083,7 @@ async function modalBridgeCommand(input, deps) {
   }, deps));
 }
 async function bridgeDomainCommand2(input, deps) {
-  const metroPort = clampNumber20(input.args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber21(input.args.metroPort ?? 8081, 1, 65535);
   const targets = deps.metroTargets ? await deps.metroTargets(metroPort) : [];
   const target = targets[0] ?? null;
   const webSocketDebuggerUrl = target?.webSocketDebuggerUrl ?? null;
@@ -11496,7 +11191,7 @@ function targetSummary8(target) {
     }
   });
 }
-function clampNumber20(value, min, max) {
+function clampNumber21(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -11506,7 +11201,7 @@ function requireString16(value, name) {
   return value.trim();
 }
 function sanitizePayload3(value) {
-  return boundValue3(redactValue7(value));
+  return boundValue3(redactValue4(value));
 }
 function stringifyBoundedJson2(value) {
   const sanitized = sanitizePayload3(value);
@@ -11535,20 +11230,20 @@ function stringifyBoundedJson2(value) {
   return output;
 }
 function boundValue3(value) {
-  if (typeof value === "string") return truncate16(value);
+  if (typeof value === "string") return truncate15(value);
   if (Array.isArray(value)) return value.slice(-MAX_ARRAY_ITEMS3).map(boundValue3);
   const record = asRecord13(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [key, boundValue3(nested)]));
 }
-function redactValue7(value) {
+function redactValue4(value) {
   if (typeof value === "string") return redactString3(value);
-  if (Array.isArray(value)) return value.map(redactValue7);
+  if (Array.isArray(value)) return value.map(redactValue4);
   const record = asRecord13(value);
   if (!record) return value;
   return Object.fromEntries(Object.entries(record).map(([key, nested]) => [
     key,
-    isSensitiveKey3(key) ? "[redacted]" : redactValue7(nested)
+    isSensitiveKey3(key) ? "[redacted]" : redactValue4(nested)
   ]));
 }
 function redactString3(value) {
@@ -11569,7 +11264,7 @@ function redactString3(value) {
 function isSensitiveKey3(key) {
   return /token|authorization|cookie|password|secret|apikey|apiKey/i.test(key);
 }
-function truncate16(value, max = MAX_OUTPUT12) {
+function truncate15(value, max = MAX_OUTPUT12) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}
@@ -11579,12 +11274,12 @@ function asRecord13(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/modules/record-artifacts/src/main/index.ts
+// src/commands/record-artifacts/src/main/index.ts
 import { spawn as spawn3 } from "node:child_process";
 import { access as access4, mkdir as mkdir12, readdir as readdir9, readFile as readFile14, writeFile as writeFile7 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname4, join as join11, resolve as resolve6 } from "node:path";
 var RECORD_LIMITATION = "Simulator video capture uses xcrun simctl io recordVideo and requires a booted iOS simulator.";
-function toolJson24(value) {
+function toolJson22(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -11620,7 +11315,7 @@ async function recordCommand(args = {}, deps = {}) {
       limitations: [RECORD_LIMITATION]
     };
     await writeJsonFile5(metadataPath, metadata2);
-    return toolJson24({ ...metadata2, metadataPath });
+    return toolJson22({ ...metadata2, metadataPath });
   }
   const previous = asRecord14(await readJsonFile8(metadataPath).catch(() => null));
   const previousPid = Number(previous?.pid);
@@ -11645,7 +11340,7 @@ async function recordCommand(args = {}, deps = {}) {
     fileExists: await pathExists5(finalOutputPath)
   };
   await writeJsonFile5(metadataPath, metadata);
-  return toolJson24(metadata);
+  return toolJson22(metadata);
 }
 function runRecordMetadataPath(stateRoot) {
   return join11(stateRoot, "artifacts", "recordings", "recording.json");
@@ -11668,7 +11363,7 @@ function resolveExpoStateRoot6(args = {}) {
     return basename6(resolved) === "runs" ? resolve6(join11(resolved, "..")) : resolved;
   }
   const root = resolve6(args.root ?? args.cwd ?? process.cwd());
-  return join11(root, ".scratch", "expo-ios");
+  return join11(root, ".scratch", "expo98");
 }
 async function readJsonFile8(file) {
   return JSON.parse(await readFile14(file, "utf8"));
@@ -11707,12 +11402,12 @@ function asRecord14(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/modules/review-evidence-reports/src/main/index.ts
+// src/commands/review-evidence-reports/src/main/index.ts
 import { mkdir as mkdir13, readdir as readdir10, readFile as readFile15, stat as stat6, writeFile as writeFile8 } from "node:fs/promises";
 import { basename as basename7, dirname as dirname5, join as join12, resolve as resolve7 } from "node:path";
 var REVIEW_LIMITATION = "Review reports assemble evidence already captured by other commands; they do not independently judge UI quality.";
 var ROUTE_DIFF_LIMITATION = "Route diff captures route-open evidence and optional screenshots; semantic visual comparison is left to the caller.";
-function toolJson25(value) {
+function toolJson23(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -11728,7 +11423,7 @@ async function reviewCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const latestRefs = await readLatestRefCache5(args);
   const payload = action === "matrix" ? reviewMatrixPayload({ stateRoot, session, runs, latestRefs, outputPath }) : reviewReportPayload({ stateRoot, session, runs, latestRefs, outputPath });
   await writeJsonFile6(outputPath, payload);
-  return toolJson25(payload);
+  return toolJson23(payload);
 }
 async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
@@ -11755,7 +11450,7 @@ async function diffCommand(args = {}, deps = defaultReviewDiffDependencies) {
     outputPath
   };
   await writeJsonFile6(outputPath, payload);
-  return toolJson25(payload);
+  return toolJson23(payload);
 }
 var defaultReviewDiffDependencies = {
   openExpoRoute,
@@ -11809,9 +11504,9 @@ async function routeDiffPayload(args = {}, deps = defaultReviewDiffDependencies)
   const routeB = requireString18(args.routeB, "routeB");
   const screenshot = args.screenshot === true;
   if (!deps.openExpoRoute) return { available: false, routeA, routeB, reason: "No open-route adapter is configured." };
-  const openedA = unwrapToolJson10(await deps.openExpoRoute({ ...args, route: routeA }));
+  const openedA = unwrapToolJson6(await deps.openExpoRoute({ ...args, route: routeA }));
   const shotA = screenshot ? await captureRouteScreenshot(args, deps, `route-a-${nowMs2(deps)}.png`) : null;
-  const openedB = unwrapToolJson10(await deps.openExpoRoute({ ...args, route: routeB }));
+  const openedB = unwrapToolJson6(await deps.openExpoRoute({ ...args, route: routeB }));
   const shotB = screenshot ? await captureRouteScreenshot(args, deps, `route-b-${nowMs2(deps)}.png`) : null;
   return {
     available: true,
@@ -11915,7 +11610,7 @@ function resolveExpoStateRoot7(args = {}) {
     return basename7(resolved) === "runs" ? resolve7(join12(resolved, "..")) : resolved;
   }
   const root = resolve7(args.root ?? args.cwd ?? process.cwd());
-  return join12(root, ".scratch", "expo-ios");
+  return join12(root, ".scratch", "expo98");
 }
 function sessionDirectory3(stateRoot, sessionId) {
   return join12(stateRoot, "sessions", sessionId);
@@ -11941,7 +11636,7 @@ async function captureRouteScreenshot(args, deps, filename) {
   const outputPath = join12(resolveExpoStateRoot7(args), "artifacts", filename);
   return deps.captureScreenshot({ ...args, outputPath });
 }
-function unwrapToolJson10(result) {
+function unwrapToolJson6(result) {
   const text = result.content[0]?.text ?? "null";
   return JSON.parse(text);
 }
@@ -11955,15 +11650,15 @@ function asRecord15(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/modules/debug-inspect-highlight/src/main/index.ts
+// src/commands/debug-inspect-highlight/src/main/index.ts
 import { mkdir as fsMkdir, readdir as readdir11, readFile as readFile16, writeFile as fsWriteFile } from "node:fs/promises";
 import { basename as basename8, dirname as dirname6, join as join13, resolve as resolve8 } from "node:path";
-function toolJson26(value) {
+function toolJson24(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
 async function debugInspectCommand(args = {}, deps = {}) {
-  return toolJson26(await debugInspectPayload(args, deps));
+  return toolJson24(await debugInspectPayload(args, deps));
 }
 async function debugInspectPayload(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
@@ -11977,7 +11672,7 @@ async function debugInspectPayload(args = {}, deps = {}) {
       sessionId: session?.sessionId ?? null
     };
   }
-  const metroPort = clampNumber21(args.metroPort ?? 8081, 1, 65535);
+  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
   const metro = await metroStatus({ metroPort }, deps);
   const target = session ? await selectedTarget(stateRoot, session, deps) : null;
   const record = found.record;
@@ -12022,9 +11717,9 @@ async function debugInspectPayload(args = {}, deps = {}) {
 async function highlightCommand(args = {}, deps = {}) {
   const ref = requireString19(args.ref ?? firstPositional(args), "ref");
   const found = await readRefRecord2(ref, args, deps);
-  if (found.available === false) return toolJson26({ ...found, action: "highlight" });
+  if (found.available === false) return toolJson24({ ...found, action: "highlight" });
   if (!found.record.box) {
-    return toolJson26({
+    return toolJson24({
       available: false,
       action: "highlight",
       ref,
@@ -12034,7 +11729,7 @@ async function highlightCommand(args = {}, deps = {}) {
   }
   const box = asBox(found.record.box);
   if (box.width <= 0 || box.height <= 0) {
-    return toolJson26({
+    return toolJson24({
       available: false,
       action: "highlight",
       ref,
@@ -12047,7 +11742,7 @@ async function highlightCommand(args = {}, deps = {}) {
   const outputPath = resolve8(String(args.outputPath ?? join13(stateRoot, "artifacts", `highlight-${ref.replace(/[^a-z0-9]/gi, "")}-${timestamp}.svg`)));
   await (deps.mkdir ?? fsMkdir)(dirname6(outputPath), { recursive: true });
   await (deps.writeFile ?? fsWriteFile)(outputPath, highlightSvg({ ref, record: found.record, durationMs: args.durationMs }), "utf8");
-  return toolJson26({
+  return toolJson24({
     available: true,
     action: "highlight",
     ref,
@@ -12108,7 +11803,7 @@ function resolveExpoStateRoot8(args = {}) {
     return basename8(resolved) === "runs" ? resolve8(join13(resolved, "..")) : resolved;
   }
   const root = resolve8(args.root ?? args.cwd ?? process.cwd());
-  return join13(root, ".scratch", "expo-ios");
+  return join13(root, ".scratch", "expo98");
 }
 function sessionDirectory4(stateRoot, sessionId) {
   return join13(stateRoot, "sessions", sessionId);
@@ -12120,7 +11815,7 @@ function requireString19(value, name) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
   return value.trim();
 }
-function clampNumber21(value, min, max) {
+function clampNumber22(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -12153,18 +11848,18 @@ function asRecord16(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/modules/expo-introspection-actions/src/main/index.ts
+// src/commands/expo-introspection-actions/src/main/index.ts
 import { access as access5, readFile as readFile17, stat as stat7 } from "node:fs/promises";
 import path11 from "node:path";
 var EXPO_ACTIONS = ["modules", "config", "doctor", "upstream-policy", "prebuild-plan"];
-function toolJson27(value) {
+function toolJson25(value) {
   return {
     content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }],
     isError: false
   };
 }
-function unwrapToolJson11(value) {
+function unwrapToolJson7(value) {
   const text = asRecord17(value)?.content;
   if (!Array.isArray(text)) return value;
   const first = asRecord17(text[0]);
@@ -12181,17 +11876,17 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   const cwd = await deps.normalizeProjectCwd(args.cwd, { allowMissingPackageJson: true }).catch(() => deps.resolvePath(args.cwd ?? deps.currentWorkingDirectory()));
   const summary = await deps.runtimeSummary(cwd);
   if (action === "doctor") {
-    return toolJson27({
+    return toolJson25({
       available: true,
       action,
       sources: ["project", "native"],
       projectRoot: summary.projectRoot,
-      summary: unwrapToolJson11(await deps.doctor({ cwd: summary.projectRoot }))
+      summary: unwrapToolJson7(await deps.doctor({ cwd: summary.projectRoot }))
     });
   }
   if (action === "upstream-policy") {
-    const info = asRecord17(unwrapToolJson11(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
-    return toolJson27({
+    const info = asRecord17(unwrapToolJson7(await deps.projectInfo({ cwd: summary.projectRoot }))) ?? {};
+    return toolJson25({
       available: Boolean(info.isExpoProject),
       action,
       sources: ["project"],
@@ -12203,7 +11898,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
     });
   }
   if (action === "config") {
-    return toolJson27({
+    return toolJson25({
       available: true,
       action,
       sources: ["project"],
@@ -12213,7 +11908,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
   }
   const modules = await expoModuleRecords(summary.projectRoot, deps);
   if (action === "modules") {
-    return toolJson27({
+    return toolJson25({
       available: true,
       action,
       sources: ["project"],
@@ -12225,7 +11920,7 @@ async function expoCommand(args = {}, deps = defaultExpoCommandDependencies) {
     });
   }
   const risks = await expoPrebuildRisks(summary.projectRoot, modules, deps);
-  return toolJson27({
+  return toolJson25({
     available: true,
     action,
     sources: ["project"],
@@ -12245,7 +11940,7 @@ var defaultExpoCommandDependencies = {
   resolvePath: (input) => path11.resolve(input),
   currentWorkingDirectory: () => process.cwd(),
   runtimeSummary: async (cwd) => {
-    const info = asRecord17(unwrapToolJson11(await projectInfo({ cwd }))) ?? {};
+    const info = asRecord17(unwrapToolJson7(await projectInfo({ cwd }))) ?? {};
     return {
       projectRoot: String(info.projectRoot ?? cwd),
       expoDependency: info.expoDependency ?? null,
@@ -12376,10 +12071,10 @@ async function findUp3(projectRoot, filename) {
   }
 }
 
-// src/modules/rn-introspection/src/main/index.ts
+// src/commands/rn-introspection/src/main/index.ts
 import { readdir as readdir12, readFile as readFile18 } from "node:fs/promises";
 import { basename as basename9, join as join14, resolve as resolve9 } from "node:path";
-function toolJson28(value) {
+function toolJson26(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -12387,7 +12082,7 @@ async function rnCommand(args = {}, deps = defaultRnDependencies) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString21(args.action ?? positionals[0] ?? "tree", "action");
   if (!["tree", "inspect", "renders", "fiber"].includes(action)) throw new Error(`Unknown React Native action: ${action}`);
-  if (action === "inspect") return toolJson28(await rnInspectPayload(args, deps));
+  if (action === "inspect") return toolJson26(await rnInspectPayload(args, deps));
   const subaction = action === "renders" ? requireString21(args.subaction ?? positionals[1] ?? "read", "subaction") : null;
   if (subaction && !["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown React Native renders action: ${subaction}`);
   const bridgeAction = action === "renders" ? `renders-${subaction}` : action;
@@ -12405,7 +12100,7 @@ async function rnCommand(args = {}, deps = defaultRnDependencies) {
     }
   });
   const outputPayload = action === "tree" && !wantsRawOutput(args) ? summarizeRnTreePayload(bridgePayload) : bridgePayload;
-  return toolJson28({
+  return toolJson26({
     ...outputPayload,
     action,
     ...subaction ? { subaction, bridgeAction } : {},
@@ -12683,7 +12378,7 @@ function resolveExpoStateRoot9(args = {}) {
     return basename9(resolved) === "runs" ? resolve9(join14(resolved, "..")) : resolved;
   }
   const root = resolve9(args.root ?? args.cwd ?? process.cwd());
-  return join14(root, ".scratch", "expo-ios");
+  return join14(root, ".scratch", "expo98");
 }
 function sessionDirectory5(stateRoot, sessionId) {
   return join14(stateRoot, "sessions", sessionId);
@@ -12988,396 +12683,155 @@ function pickDefined4(record) {
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== void 0));
 }
 
-// src/modules/perf-evidence/src/main/index.ts
+// src/commands/perf-evidence/src/main/common.ts
+import { basename as basename10, join as join15, resolve as resolve10 } from "node:path";
+function resolveExpoStateRoot10(args = {}) {
+  if (args.stateDir) {
+    const resolved = resolve10(args.stateDir);
+    return basename10(resolved) === "runs" ? resolve10(join15(resolved, "..")) : resolved;
+  }
+  const root = resolve10(args.root ?? args.cwd ?? process.cwd());
+  return join15(root, ".scratch", "expo98");
+}
+function requireString22(value, name) {
+  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
+  return value.trim();
+}
+function requireOptionalString9(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+function clampNumber23(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
+  return Math.min(Math.max(number, min), max);
+}
+function firstPositional2(args) {
+  return Array.isArray(args._) ? args._[0] : void 0;
+}
+
+// src/commands/perf-evidence/src/main/actions.ts
+import { mkdir as fsMkdir3, writeFile as fsWriteFile3 } from "node:fs/promises";
+import { dirname as dirname8, join as join17, resolve as resolve13 } from "node:path";
+
+// src/commands/perf-evidence/src/main/artifacts.ts
+import { mkdir as fsMkdir2, readFile as readFile20 } from "node:fs/promises";
+import { dirname as dirname7, join as join16, resolve as resolve12 } from "node:path";
+
+// src/commands/perf-evidence/src/main/dependencies.ts
 import { execFile as nodeExecFile11 } from "node:child_process";
-import { mkdir as fsMkdir2, readFile as readFile19, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
-import { basename as basename10, dirname as dirname7, join as join15, resolve as resolve10 } from "node:path";
-var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
-var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph", "interaction", "report"];
-function toolJson29(value) {
-  return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
-` }] };
-}
-async function perfCommand(args = {}, deps = {}) {
-  const action = requireString22(args.action ?? firstPositional2(args) ?? "summary", "action");
-  if (!PERF_ACTIONS.includes(action)) throw new Error(`Unknown performance action: ${action}`);
-  if (action === "summary") return toolJson29(await perfSummaryPayload(args, deps));
-  if (action === "bundle") return toolJson29(await perfBundlePayload(args, deps));
-  if (action === "compare") return toolJson29(await perfComparePayload(args, deps));
-  if (action === "budget") return toolJson29(await perfBudgetPayload(args, deps));
-  if (action === "memory") return toolJson29(await perfMemoryPayload(args, deps));
-  if (action === "ettrace" || action === "memgraph") return toolJson29(await perfNativeProfilerPayload(args, action, deps));
-  if (action === "interaction") return toolJson29(await perfInteractionPayload(args, deps));
-  if (action === "report") return toolJson29(await perfReportPayload(args, deps));
-  if (["mark", "measure", "js-thread", "frames"].includes(action)) return toolJson29(await perfInstrumentedPayload(args, action, deps));
-  return toolJson29(await perfRuntimePayload(args, action, deps));
-}
-async function perfSummaryPayload(args = {}, deps = {}) {
-  const cwd = await projectCwd(args.cwd, deps);
-  const summary = await projectSummary(cwd, deps);
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
-  const metro = await metroStatus2({ metroPort }, deps);
-  const metrics = [];
-  const unavailableSources = [];
-  const packageJsonPath = await findUpFile(summary.projectRoot, "package.json", deps);
-  if (packageJsonPath) {
-    const packageJson = await readJson6(packageJsonPath, deps);
-    metrics.push(perfMetric({
-      name: "project.dependencies",
-      value: Object.keys({ ...packageJson.dependencies ?? {}, ...packageJson.devDependencies ?? {} }).length,
-      unit: "count",
-      source: "project",
-      confidence: "low"
-    }));
-  } else {
-    unavailableSources.push({ source: "project", reason: "No package.json found." });
+import { readFile as readFile19, stat as fsStat, writeFile as fsWriteFile2 } from "node:fs/promises";
+import { resolve as resolve11 } from "node:path";
+async function projectCwd(cwd, deps) {
+  if (deps.normalizeProjectCwd) {
+    return Promise.resolve(deps.normalizeProjectCwd(cwd, { allowMissingPackageJson: true })).catch(() => resolve11(String(cwd ?? process.cwd())));
   }
-  if (metro.available) {
-    metrics.push(perfMetric({
-      name: "metro.targets",
-      value: metro.targetCount,
-      unit: "count",
-      source: "metro",
-      confidence: "medium"
-    }));
-  } else {
-    unavailableSources.push({ source: "metro", reason: metro.reason });
-  }
-  const capabilities = [
-    { source: "plugin-bridge-performance", available: metro.targets?.some((target) => target.capabilities?.hermesRuntime) === true, type: "upstream-plugin", confidence: "medium" },
-    { source: "expo-devtools-performance", available: metro.available === true, type: "upstream-devtools", confidence: "low" },
-    { source: "native-profiler", available: true, type: "native-fallback", confidence: "high" },
-    { source: "bundle-artifact", available: false, type: "static-fallback", confidence: "high" }
-  ];
-  unavailableSources.push({ source: "plugin-bridge-performance", reason: "Run perf startup/action/mark against an app with the performance bridge domain registered." });
-  unavailableSources.push({ source: "expo-devtools-performance", reason: "No machine-readable Expo DevTools performance domain was confirmed." });
-  unavailableSources.push({ source: "bundle-artifact", reason: "Pass an existing bundle artifact to perf bundle for byte evidence." });
-  const payload = {
-    available: true,
-    action: "summary",
-    mode: "development",
-    sources: ["project", "metro"],
-    capabilities,
-    confidence: perfOverallConfidence(metrics),
-    context: await perfContext({ args, projectRoot: summary.projectRoot, metro }),
-    metrics,
-    unavailableSources,
-    limitations: perfDevelopmentLimitations(["Summary reports evidence availability and lightweight signals; it is not a performance score."])
-  };
-  return {
-    ...payload,
-    realValidation: perfValidation(payload, "summary")
-  };
+  return resolve11(String(cwd ?? process.cwd()));
 }
-async function perfRuntimePayload(args = {}, action, deps = {}) {
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
-  const targets = await listMetroTargets(metroPort, deps);
-  const target = targets[0] ?? null;
-  const projectRoot = await projectCwd(args.cwd, deps);
-  const metro = target ? { available: true, metroPort, status: "available", statusText: null, targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
-  let bridgePayload = null;
-  if (target?.webSocketDebuggerUrl) {
-    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression({ action, label: args.label }), deps);
-    bridgePayload = result?.result?.result?.value ?? null;
-  }
-  const basePayload = bridgePayload && typeof bridgePayload === "object" ? normalizePerfBridgePayload(redactValue8(bridgePayload), action) : {
-    available: false,
-    sources: ["runtime", "app-instrumentation"],
-    metrics: [],
-    code: target ? "malformed-payload" : "no-runtime-target",
-    reason: target ? "Performance bridge did not return a value." : "No Metro inspector target."
-  };
-  const payload = {
-    ...basePayload,
-    action,
-    ...action === "action" ? { actionName: requireString22(args.label, "label") } : {},
-    mode: "development",
-    context: await perfContext({ args, projectRoot, metro, target }),
-    transport: perfTransport(metroPort, target, null),
-    evidenceSource: perfEvidenceSource(basePayload),
-    confidence: perfOverallConfidence(basePayload.metrics ?? []),
-    limitations: perfDevelopmentLimitations(basePayload.limitations)
-  };
-  return writePerfArtifact(args, action, { ...payload, realValidation: perfValidation(payload, action) }, deps);
+async function projectSummary(cwd, deps) {
+  return deps.expoProjectRuntimeSummary ? deps.expoProjectRuntimeSummary(cwd) : { projectRoot: cwd };
 }
-async function perfInstrumentedPayload(args = {}, action, deps = {}) {
-  const subaction = requireOptionalString9(args.subaction);
-  const label = requireOptionalString9(args.label);
-  const bridgeAction = perfBridgeAction(action, subaction);
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
-  const targets = await listMetroTargets(metroPort, deps);
-  const target = targets[0] ?? null;
-  const projectRoot = await projectCwd(args.cwd, deps);
-  const metro = target ? { available: true, metroPort, status: "available", targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
-  let bridgePayload = null;
-  if (target?.webSocketDebuggerUrl) {
-    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression({ action: bridgeAction, label }), deps);
-    bridgePayload = result?.result?.result?.value ?? null;
-  }
-  const basePayload = bridgePayload && typeof bridgePayload === "object" ? normalizePerfBridgePayload(redactValue8(bridgePayload), action) : {
-    available: false,
-    sources: ["runtime", "app-instrumentation"],
-    metrics: [],
-    code: target ? "malformed-payload" : "no-runtime-target",
-    reason: target ? "Performance bridge did not return a value." : "No Metro inspector target."
-  };
-  const payload = {
-    ...basePayload,
-    action,
-    subaction,
-    bridgeAction,
-    mode: "development",
-    context: await perfContext({ args, projectRoot, metro, target }),
-    transport: perfTransport(metroPort, target, null),
-    evidenceSource: perfEvidenceSource(basePayload),
-    confidence: perfOverallConfidence(basePayload.metrics ?? []),
-    limitations: perfDevelopmentLimitations(basePayload.limitations)
-  };
-  return writePerfArtifact(args, action, { ...payload, realValidation: perfValidation(payload, action) }, deps);
+async function metroStatus2(args, deps) {
+  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : metroStatusPayload(args);
 }
-function perfBridgeAction(action, subaction) {
-  if (action === "mark") return `mark-${subaction ?? "list"}`;
-  if (action === "measure") return `measure-${subaction ?? "start"}`;
-  if (action === "interaction") return `interaction-${subaction ?? "read"}`;
-  return action;
+async function listMetroTargets(metroPort, deps) {
+  return deps.metroTargets ? deps.metroTargets(metroPort) : metroTargets(metroPort);
 }
-async function perfInteractionPayload(args = {}, deps = {}) {
-  const subaction = requireString22(args.subaction ?? "read", "subaction");
-  if (!["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown performance interaction action: ${subaction}`);
-  const label = requireOptionalString9(args.label ?? args.interaction);
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
-  const targets = await listMetroTargets(metroPort, deps);
-  const target = targets[0] ?? null;
-  const projectRoot = await projectCwd(args.cwd, deps);
-  const metro = target ? { available: true, metroPort, status: "available", targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
-  let bridgePayload = null;
-  let diagnostics = null;
-  if (target?.webSocketDebuggerUrl) {
-    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression({ action: `interaction-${subaction}`, label }), deps);
-    bridgePayload = result?.result?.result?.value ?? null;
-    diagnostics = result?.diagnostics ?? null;
-  }
-  const basePayload = bridgePayload && typeof bridgePayload === "object" ? normalizePerfBridgePayload(redactValue8(bridgePayload), "interaction") : {
-    available: false,
-    sources: ["runtime", "app-instrumentation"],
-    metrics: [],
-    code: target ? "malformed-payload" : "no-runtime-target",
-    reason: target ? "Performance interaction bridge did not return a value." : "No Metro inspector target."
-  };
-  const payload = {
-    ...basePayload,
-    action: "interaction",
-    subaction,
-    interaction: label,
-    mode: "development",
-    context: await perfContext({ args, projectRoot, metro, target }),
-    transport: perfTransport(metroPort, target, diagnostics),
-    evidenceSource: perfEvidenceSource(basePayload),
-    confidence: perfOverallConfidence(basePayload.metrics ?? []),
-    limitations: perfDevelopmentLimitations(basePayload.limitations)
-  };
-  return writePerfArtifact(args, "interaction", { ...payload, realValidation: perfValidation(payload, "interaction") }, deps);
+async function evaluateHermes(url, expression, deps) {
+  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5e3 }) : evaluateHermesExpression(url, expression, { timeoutMs: 5e3 });
 }
-async function perfReportPayload(args = {}, deps = {}) {
-  const metroPort = clampNumber22(args.metroPort ?? 8081, 1, 65535);
-  const targets = await listMetroTargets(metroPort, deps);
-  const target = targets[0] ?? null;
-  const projectRoot = await projectCwd(args.cwd, deps);
-  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
-  let runtimePayload = null;
-  let diagnostics = null;
-  if (target?.webSocketDebuggerUrl) {
-    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression({ action: "report", label: args.interaction ?? args.label }), deps);
-    runtimePayload = result?.result?.result?.value ?? null;
-    diagnostics = result?.diagnostics ?? null;
-  }
-  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve10(nativeArtifact), deps) : null;
-  const report = normalizePerfReport(runtimePayload, nativeSummary);
-  const metro = target ? { available: true, metroPort, status: "available", targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
-  const payload = {
-    available: report.available,
-    action: "report",
-    interaction: args.interaction ?? args.label ?? null,
-    mode: "development",
-    sources: report.sources,
-    findings: report.findings,
-    metrics: report.metrics,
-    runtime: report.runtime,
-    nativeSummary,
-    context: await perfContext({ args, projectRoot, metro, target }),
-    transport: perfTransport(metroPort, target, diagnostics),
-    confidence: report.confidence,
-    limitations: perfDevelopmentLimitations(report.limitations)
-  };
-  return writePerfArtifact(args, "report", { ...payload, realValidation: perfValidation(payload, "report") }, deps);
+async function findUpFile(cwd, name, deps) {
+  return deps.findUp ? deps.findUp(cwd, name) : null;
 }
-async function perfComparePayload(args = {}, deps = {}) {
-  const baselinePath = resolve10(requireString22(args.baseline, "baseline"));
-  const candidatePath = resolve10(requireString22(args.candidate, "candidate"));
-  const baseline = await readJson6(baselinePath, deps);
-  const candidate = await readJson6(candidatePath, deps);
-  const candidateMetrics = metricMap(candidate.metrics ?? []);
-  const deltas = [];
-  for (const metric of baseline.metrics ?? []) {
-    const next = candidateMetrics.get(metric.name);
-    if (!next || typeof metric.value !== "number" || typeof next.value !== "number") continue;
-    deltas.push({
-      metric: metric.name,
-      baseline: metric.value,
-      candidate: next.value,
-      delta: next.value - metric.value,
-      unit: next.unit ?? metric.unit,
-      improved: next.value <= metric.value,
-      confidence: lowerConfidence(metric.confidence, next.confidence)
-    });
-  }
-  return writePerfArtifact(args, "compare", {
-    available: true,
-    action: "compare",
-    sources: ["artifact"],
-    baseline: baselinePath,
-    candidate: candidatePath,
-    deltas,
-    confidence: perfOverallConfidence(deltas.map((delta) => ({ confidence: delta.confidence }))),
-    limitations: ["Comparison uses only matching metric names and does not infer user impact without workflow context."]
-  }, deps);
+async function readJson6(file, deps) {
+  if (deps.readJsonFile) return deps.readJsonFile(file);
+  return JSON.parse(await readFile19(file, "utf8"));
 }
-async function perfBudgetPayload(args = {}, deps = {}) {
-  const subaction = requireString22(args.subaction ?? "check", "subaction");
-  if (subaction !== "check") throw new Error(`Unknown performance budget action: ${subaction}`);
-  const budgetPath = resolve10(requireString22(args.file, "file"));
-  const candidatePath = resolve10(requireString22(args.candidate, "candidate"));
-  const budget = await readJson6(budgetPath, deps);
-  const candidate = await readJson6(candidatePath, deps);
-  const metrics = metricMap(candidate.metrics ?? []);
-  const checks = (budget.budgets ?? []).map((rule) => {
-    const metric = metrics.get(rule.metric);
-    const value = metric?.value ?? null;
-    const passed = typeof value === "number" && (typeof rule.max !== "number" || value <= rule.max) && (typeof rule.min !== "number" || value >= rule.min);
-    return { metric: rule.metric, value, min: rule.min ?? null, max: rule.max ?? null, passed, unit: metric?.unit ?? null };
-  });
-  return writePerfArtifact(args, "budget", {
-    available: true,
-    action: "budget",
-    subaction,
-    sources: ["artifact"],
-    file: budgetPath,
-    candidate: candidatePath,
-    passed: checks.every((check) => check.passed),
-    checks,
-    limitations: ["Budget checks compare numeric metrics only; choose budgets that match build mode and device context."]
-  }, deps);
-}
-async function perfMemoryPayload(args = {}, deps = {}) {
-  const samples = clampNumber22(args.samples ?? 1, 1, 100);
-  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
-  const projectRoot = await projectCwd(args.cwd, deps);
-  const metrics = [perfMetric({
-    name: "memory.samples",
-    value: samples,
-    unit: "count",
-    source: nativeArtifact ? "memgraph" : "simulator",
-    confidence: samples >= 2 || nativeArtifact ? "medium" : "low"
-  })];
-  const leakAllowed = samples >= 2 || Boolean(nativeArtifact);
-  const payload = {
-    available: true,
-    action: "memory",
-    mode: "development",
-    sources: nativeArtifact ? ["native-profiler", "memgraph"] : ["simulator"],
-    metrics,
-    context: await perfContext({ args, projectRoot, metro: null }),
-    leakClaim: {
-      allowed: leakAllowed,
-      reason: leakAllowed ? "Repeated measurements or native artifacts are present." : "Repeated measurements or a native memgraph artifact are required before making a memory-leak claim."
-    },
-    nativeArtifact: nativeArtifact ? resolve10(nativeArtifact) : null,
-    confidence: perfOverallConfidence(metrics),
-    limitations: perfDevelopmentLimitations(["A single memory sample is only a hint, not leak evidence."])
-  };
-  return writePerfArtifact(args, "memory", { ...payload, realValidation: perfValidation(payload, "memory") }, deps);
-}
-async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
-  const subaction = requireString22(args.subaction ?? (profiler === "memgraph" ? "capture" : "stop"), "subaction");
-  const allowed = profiler === "ettrace" ? ["start", "stop"] : ["capture"];
-  if (!allowed.includes(subaction)) throw new Error(`Unknown ${profiler} action: ${subaction}`);
-  const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
-  const nativeArtifact = resolve10(args.nativeArtifact ?? join15(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
-  await (deps.mkdir ?? fsMkdir2)(dirname7(nativeArtifact), { recursive: true });
-  let sampleResult = null;
-  let samplePid = null;
-  let sampleSeconds = null;
-  if (profiler === "ettrace" && subaction === "start" && args.pid !== void 0) {
-    const pid = requirePid(args.pid);
-    samplePid = pid;
-    const seconds = String(clampNumber22(args.seconds ?? 1, 1, 30));
-    sampleSeconds = Number(seconds);
-    sampleResult = await execFile9("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1e3 });
-  } else if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
-    await (deps.writeFile ?? fsWriteFile2)(nativeArtifact, `${profiler} placeholder
+async function writeJsonFile7(file, value, deps) {
+  await (deps.writeFile ?? fsWriteFile2)(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
-  }
-  const projectRoot = await projectCwd(args.cwd, deps);
-  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact, deps);
-  const payload = {
-    available: true,
-    action: profiler,
-    subaction,
-    profiler,
-    mode: "development",
-    sources: ["native-profiler"],
-    nativeArtifact,
-    pid: samplePid,
-    seconds: sampleSeconds,
-    sample: sampleResult,
-    nativeSummary,
-    metrics: [],
-    context: await perfContext({ args, projectRoot, metro: null }),
-    confidence: subaction === "start" ? "low" : "high",
-    limitations: [
-      `${profiler} metadata records native profiler evidence boundaries; collect and symbolicate native profiler artifacts before making native CPU or memory claims.`,
-      "Native profiler workflows are heavier than routine runtime evidence and may require platform tooling outside this CLI."
-    ]
+}
+async function exists(path12, deps) {
+  return deps.pathExists ? deps.pathExists(path12) : fsStat(path12).then(() => true, () => false);
+}
+async function fileStat(path12, deps) {
+  return deps.stat ? deps.stat(path12) : fsStat(path12).catch(() => null);
+}
+function execFile9(file, argv, options) {
+  return new Promise((resolveExec) => {
+    nodeExecFile11(file, argv, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolveExec({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        error: error ? { message: error.message, code: error.code, signal: error.signal } : null
+      });
+    });
+  });
+}
+
+// src/commands/perf-evidence/src/main/artifacts.ts
+async function writePerfArtifact(args, action, payload, deps = {}) {
+  const timestamp = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+  const artifactPath = resolve12(args.outputPath ?? join16(resolveExpoStateRoot10(args), "artifacts", "perf", `${action}-${timestamp}.json`));
+  await (deps.mkdir ?? fsMkdir2)(dirname7(artifactPath), { recursive: true });
+  const withArtifact = { ...payload, artifacts: [...payload.artifacts ?? [], artifactPath] };
+  await writeJsonFile7(artifactPath, withArtifact, deps);
+  return withArtifact;
+}
+async function parseNativeSampleArtifact(file, deps = {}) {
+  const text = await readFile20(file, "utf8").catch(() => null);
+  if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
+  const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);
+  const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/);
+  const mainThreadSamples = numberFromMatch(text, /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s);
+  const idleSamples = countSampleBucket(text, [/mach_msg/i, /CFRunLoopServiceMachPort/i]);
+  const buckets = {
+    hermes: countSampleBucket(text, [/hermes/i]),
+    yoga: countSampleBucket(text, [/yoga/i]),
+    mounting: countSampleBucket(text, [/RCTMountingManager/i, /RCTPerformMountInstructions/i]),
+    coreAnimation: countSampleBucket(text, [/QuartzCore/i, /CA::Layer/i, /CoreAnimation/i]),
+    uiKit: countSampleBucket(text, [/UIKitCore/i])
   };
-  return writePerfArtifact(args, profiler, { ...payload, realValidation: perfValidation(payload, profiler) }, deps);
+  const topSymbols = [...text.matchAll(/^\s*([0-9]+)\s+(.+?)\s+\(in\s+(.+?)\)/gm)].slice(0, 30).map((match) => ({ samples: Number(match[1]), symbol: match[2].trim(), library: match[3].trim() }));
+  return {
+    available: Boolean(physicalFootprintMb || peakFootprintMb || topSymbols.length),
+    artifact: file,
+    bytes: Buffer.byteLength(text),
+    physicalFootprintMb,
+    peakFootprintMb,
+    mainThreadSamples,
+    estimatedMainThreadIdleSamples: idleSamples,
+    estimatedMainThreadBusySamples: mainThreadSamples == null ? null : Math.max(0, mainThreadSamples - idleSamples),
+    buckets,
+    topSymbols
+  };
 }
-function requirePid(value) {
-  const pid = Number(value);
-  if (!Number.isInteger(pid) || pid <= 0) throw new Error(`pid must be a positive integer, got ${String(value)}.`);
-  return pid;
+function numberFromMatch(text, pattern) {
+  const match = pattern.exec(text);
+  return match ? Number(match[1]) : null;
 }
-async function perfBundlePayload(args = {}, deps = {}) {
-  const cwd = await projectCwd(args.cwd, deps);
-  const bundleArtifact = requireOptionalString9(args.bundleArtifact);
-  const metrics = [];
-  const unavailableSources = [];
-  let available = false;
-  let bundlePath = null;
-  if (bundleArtifact) {
-    bundlePath = resolve10(bundleArtifact);
-    const stat8 = await fileStat(bundlePath, deps);
-    if (stat8?.isFile()) {
-      available = true;
-      metrics.push(perfMetric({ name: "bundle.bytes", value: stat8.size, unit: "bytes", source: "metro", confidence: "high" }));
-    } else {
-      unavailableSources.push({ source: "bundle-artifact", reason: "Bundle artifact was not found.", path: bundlePath });
-    }
-  } else {
-    unavailableSources.push({ source: "bundle-artifact", reason: "Pass an existing Metro/Expo bundle artifact path." });
+function countSampleBucket(text, patterns) {
+  let count = 0;
+  for (const line of text.split(/\r?\n/)) {
+    if (!patterns.some((pattern) => pattern.test(line))) continue;
+    const match = /^\s*[+!:| ]*\s*(\d+)\s+/.exec(line);
+    count += match ? Number(match[1]) : 1;
   }
-  return writePerfArtifact(args, "bundle", {
-    available,
-    action: "bundle",
-    mode: "development",
-    sources: available ? ["project", "metro"] : ["project"],
-    bundleArtifact: bundlePath,
-    metrics,
-    unavailableSources,
-    context: await perfContext({ args, projectRoot: cwd, metro: null }),
-    confidence: perfOverallConfidence(metrics),
-    limitations: perfDevelopmentLimitations(["Bundle byte evidence depends on the supplied artifact and does not imply release performance unless the artifact is release-like."])
-  }, deps);
+  return count;
 }
+
+// src/commands/perf-evidence/src/main/redaction.ts
+function redactPerfValue(value) {
+  if (Array.isArray(value)) return value.map(redactPerfValue);
+  if (!value || typeof value !== "object") return value;
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (/body|postData/i.test(key)) continue;
+    result[key] = /token|authorization|cookie|password|secret|apikey/i.test(key) ? "[redacted]" : redactPerfValue(item);
+  }
+  return result;
+}
+
+// src/commands/perf-evidence/src/main/model.ts
 function metricMap(metrics) {
   return new Map((metrics ?? []).map((metric) => [metric.name, metric]));
 }
@@ -13404,7 +12858,7 @@ function normalizePerfBridgePayload(value, action) {
   return { ...value, action, metrics };
 }
 function normalizePerfReport(runtimePayload, nativeSummary) {
-  const runtime2 = runtimePayload && typeof runtimePayload === "object" && !Array.isArray(runtimePayload) ? redactValue8(runtimePayload) : null;
+  const runtime2 = runtimePayload && typeof runtimePayload === "object" && !Array.isArray(runtimePayload) ? redactPerfValue(runtimePayload) : null;
   const requests = Array.isArray(runtime2?.network?.requests) ? runtime2.network.requests : [];
   const renders = Array.isArray(runtime2?.renders?.commits) ? runtime2.renders.commits : [];
   const frames = Array.isArray(runtime2?.frames?.samples) ? runtime2.frames.samples : [];
@@ -13482,12 +12936,188 @@ function perfEvidenceSource(value) {
 function perfTransport(metroPort, target, cdp = null) {
   return { name: "metro-inspector-hermes-cdp", metroPort, protocol: "Runtime.evaluate", target: targetSummary9(target), cdp };
 }
+async function perfContext({ args, projectRoot, metro, target = null }) {
+  const buildMode = normalizePerfBuildKind(args.buildKind);
+  return {
+    projectRoot,
+    build: { mode: buildMode, releaseLike: ["preview", "release-export", "production"].includes(buildMode) },
+    platform: args.platform ?? "ios",
+    device: target?.deviceName ?? null,
+    metro: metro ? { port: metro.metroPort ?? args.metroPort ?? 8081, status: metro.available ? "available" : "unavailable", targetCount: metro.targetCount ?? 0, devMode: buildMode === "development" ? true : null } : { port: args.metroPort ?? 8081, status: "not-measured", targetCount: 0, devMode: buildMode === "development" ? true : null },
+    coldStart: null,
+    samples: 1
+  };
+}
+function normalizePerfBuildKind(value) {
+  const buildKind = requireOptionalString9(value) ?? "development";
+  if (buildKind === "production") return "production";
+  if (["development", "dev-build", "preview", "release-export", "unknown"].includes(buildKind)) return buildKind;
+  throw new Error(`Unknown performance build kind: ${buildKind}`);
+}
+function perfMetric({ name, value, unit, source, confidence }) {
+  return { name, value, unit, source, confidence };
+}
+function perfOverallConfidence(metrics) {
+  if (!metrics.length) return "low";
+  if (metrics.some((metric) => metric.confidence === "high")) return "high";
+  if (metrics.some((metric) => metric.confidence === "medium")) return "medium";
+  return "low";
+}
+function perfDevelopmentLimitations(extra = []) {
+  return [
+    ...extra.map(String),
+    "Development-mode measurements include Metro, dev runtime, and instrumentation overhead and must not be generalized to release performance."
+  ];
+}
+function targetSummary9(target) {
+  if (!target) return null;
+  return {
+    id: target.id ?? null,
+    title: target.title ?? null,
+    description: target.description ?? null,
+    appId: target.appId ?? null,
+    deviceName: target.deviceName ?? null,
+    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
+    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
+    reactNative: target.reactNative ?? null,
+    capabilities: target.capabilities ?? {
+      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
+      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
+      reactNative: Boolean(target.reactNative)
+    }
+  };
+}
+
+// src/commands/perf-evidence/src/main/validation.ts
+function perfValidation(payload, action) {
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  const hasNetwork = metrics.some((metric) => /network/i.test(String(metric.name)) && Number(metric.value) > 0) || Array.isArray(payload.requests) && payload.requests.length > 0 || Array.isArray(payload.runtime?.network?.requests) && payload.runtime.network.requests.length > 0;
+  const hasRender = metrics.some((metric) => /commit|render/i.test(String(metric.name)) && Number(metric.value) > 0) || Array.isArray(payload.renders?.commits) && payload.renders.commits.length > 0 || Array.isArray(payload.runtime?.renders?.commits) && payload.runtime.renders.commits.length > 0;
+  const hasFrames = metrics.some((metric) => /frame/i.test(String(metric.name)) && Number(metric.value) > 0 && !/available/.test(String(metric.name))) || Array.isArray(payload.frames?.samples) && payload.frames.samples.length > 0 || Array.isArray(payload.runtime?.frames?.samples) && payload.runtime.frames.samples.length > 0;
+  const hasNativeArtifact = Boolean(payload.nativeSummary?.available);
+  const hasNative = hasNativeArtifact && Boolean(payload.pid && payload.seconds);
+  const releaseLike = payload.context?.build?.releaseLike === true;
+  const placeholderMetric = metrics.some((metric) => /available$|bridge\.available|interaction\.duration/.test(String(metric.name)) && Number(metric.value) <= 1);
+  const missingEvidence = [
+    ...!hasNetwork && ["interaction", "report"].includes(action) ? [{
+      signal: "network-interaction-correlation",
+      reason: "No interaction-scoped network request evidence was returned.",
+      recommendedFix: "Run network requests after a real interaction or mount the metadata network bridge."
+    }] : [],
+    ...!hasRender && ["interaction", "report", "action"].includes(action) ? [{
+      signal: "react-profiler-commits",
+      reason: "No React Profiler commit duration records were returned.",
+      recommendedFix: "Mount the dev-only Profiler wrapper or run rn renders start/read/stop with bridge commit records."
+    }] : [],
+    ...!hasFrames && ["frames", "interaction", "report"].includes(action) ? [{
+      signal: "frame-samples",
+      reason: "No requestAnimationFrame delta samples were returned.",
+      recommendedFix: "Start frame sampling before exercising the interaction and rerun perf frames/report."
+    }] : [],
+    ...!hasNative && ["ettrace", "report"].includes(action) ? [{
+      signal: "native-sample-summary",
+      reason: hasNativeArtifact ? "Native sample artifact was parsed, but PID and sample duration were not attached to this evidence." : "No parseable native sample artifact was available.",
+      recommendedFix: "Run profiler start with --pid, --seconds, and --native-artifact, then pass that artifact to perf report."
+    }] : [],
+    ...!releaseLike ? [{
+      signal: "release-like-build",
+      reason: "This evidence was collected in development mode.",
+      recommendedFix: "Repeat the profile against a preview or production build before making release performance claims."
+    }] : []
+  ];
+  const validated = payload.available !== false && !placeholderMetric && (action === "summary" || action === "startup" || action === "memory" || action === "bundle" || action === "compare" || action === "budget" || action === "ettrace" && hasNative || action === "frames" && hasFrames || action === "report" && (hasNetwork || hasRender || hasFrames || hasNativeArtifact) || action === "interaction" && (hasNetwork || hasRender || hasFrames));
+  return realValidation({
+    state: payload.available === false ? "unvalidated" : validated ? "validated" : "partial",
+    claimsAllowed: {
+      networkLatency: hasNetwork,
+      networkWaterfall: hasNetwork,
+      renderCost: hasRender,
+      frameJank: hasFrames,
+      nativeCpu: hasNative,
+      releasePerformance: releaseLike && (hasNetwork || hasRender || hasFrames || hasNative)
+    },
+    evidence: [{
+      source: perfEvidenceSource(payload),
+      artifactPath: Array.isArray(payload.artifacts) ? payload.artifacts[0] : null,
+      command: `perf.${action}`,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      buildKind: payload.context?.build?.mode ?? payload.mode ?? "development",
+      confidence: payload.confidence ?? perfOverallConfidence(metrics)
+    }],
+    missingEvidence
+  });
+}
+
+// src/commands/perf-evidence/src/main/types.ts
+var EXPO_IOS_BRIDGE_VERSION5 = "1.0.0";
+var PERF_ACTIONS = ["summary", "startup", "action", "bundle", "mark", "measure", "compare", "budget", "js-thread", "frames", "memory", "ettrace", "memgraph", "interaction", "report"];
+
+// src/commands/perf-evidence/src/main/runtime-bridge.ts
+async function collectRuntimeBridgeEvidence(args, deps, expression) {
+  const metroPort = clampNumber23(args.metroPort ?? 8081, 1, 65535);
+  const targets = await listMetroTargets(metroPort, deps);
+  const target = targets[0] ?? null;
+  const projectRoot = await projectCwd(args.cwd, deps);
+  const metro = target ? { available: true, metroPort, status: "available", statusText: null, targetCount: targets.length, targets: targets.map(targetSummary9) } : await metroStatus2({ metroPort }, deps);
+  let bridgePayload = null;
+  let diagnostics = null;
+  if (target?.webSocketDebuggerUrl) {
+    const result = await evaluateHermes(String(target.webSocketDebuggerUrl), perfExpression(expression), deps);
+    bridgePayload = result?.result?.result?.value ?? null;
+    diagnostics = result?.diagnostics ?? null;
+  }
+  return { metroPort, targets, target, projectRoot, metro, bridgePayload, diagnostics };
+}
+async function writeRuntimePerfArtifact(args, deps, options) {
+  const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: options.bridgeAction, label: options.label });
+  const basePayload = evidence.bridgePayload && typeof evidence.bridgePayload === "object" ? normalizePerfBridgePayload(redactPerfValue(evidence.bridgePayload), options.normalizeAction) : {
+    available: false,
+    sources: ["runtime", "app-instrumentation"],
+    metrics: [],
+    code: evidence.target ? "malformed-payload" : "no-runtime-target",
+    reason: evidence.target ? options.unavailableReason ?? "Performance bridge did not return a value." : "No Metro inspector target."
+  };
+  const payload = {
+    ...basePayload,
+    action: options.artifactAction,
+    ...options.extraFields?.(basePayload, evidence) ?? {},
+    mode: "development",
+    context: await perfContext({ args, projectRoot: evidence.projectRoot, metro: evidence.metro, target: evidence.target }),
+    transport: perfTransport(evidence.metroPort, evidence.target, evidence.diagnostics),
+    evidenceSource: perfEvidenceSource(basePayload),
+    confidence: perfOverallConfidence(basePayload.metrics ?? []),
+    limitations: perfDevelopmentLimitations(basePayload.limitations)
+  };
+  return writePerfArtifact(args, options.artifactAction, { ...payload, realValidation: perfValidation(payload, options.artifactAction) }, deps);
+}
+function perfBridgeAction(action, subaction) {
+  if (action === "mark") return `mark-${subaction ?? "list"}`;
+  if (action === "measure") return `measure-${subaction ?? "start"}`;
+  if (action === "interaction") return `interaction-${subaction ?? "read"}`;
+  return action;
+}
 function perfExpression({ action, label }) {
+  return runtimeProgram([
+    perfRuntimeInputs(action, label),
+    perfPluginBridgeSection(),
+    perfExpoDevtoolsSection(),
+    perfInstrumentationSetupSection(),
+    perfInteractionSection(),
+    perfActionDispatchSection()
+  ]);
+}
+function runtimeProgram(sections) {
   return `(() => {
-    const action = ${JSON.stringify(action)};
+${sections.join("\n")}
+  })()`;
+}
+function perfRuntimeInputs(action, label) {
+  return `    const action = ${JSON.stringify(action)};
     const label = ${JSON.stringify(label ?? null)};
-    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION5)};
-    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
+    const expectedBridgeVersion = ${JSON.stringify(EXPO_IOS_BRIDGE_VERSION5)};`;
+}
+function perfPluginBridgeSection() {
+  return `    const pluginBridge = globalThis.__EXPO_IOS_DEVTOOLS_BRIDGE__ ||
       globalThis.__EXPO_IOS_PLUGIN_BRIDGE__ ||
       globalThis.__ROZENITE_AGENT_BRIDGE__;
     const pluginMetadata = pluginBridge?.metadata || pluginBridge?.expoIosDevtoolsBridgeMetadata || pluginBridge?.bridgeMetadata || {};
@@ -13518,15 +13148,19 @@ function perfExpression({ action, label }) {
       if (action === 'action') return callPerf('action', { label }) || { available: true, source: 'plugin-bridge-performance', sources: ['plugin-bridge', 'rozenite-performance'], actionName: label, metrics: pluginPerf?.actionMetrics || [] };
     } else if (pluginBridge) {
       return { available: false, source: 'plugin-bridge-performance', sources: ['plugin-bridge'], code: 'missing-domain', reason: 'Performance bridge domain is not registered.', metrics: [] };
-    }
-    const expoDevtoolsPerf = globalThis.__EXPO_DEVTOOLS_PERFORMANCE__ || globalThis.__REACT_NATIVE_DEVTOOLS_PERFORMANCE__;
+    }`;
+}
+function perfExpoDevtoolsSection() {
+  return `    const expoDevtoolsPerf = globalThis.__EXPO_DEVTOOLS_PERFORMANCE__ || globalThis.__REACT_NATIVE_DEVTOOLS_PERFORMANCE__;
     if (expoDevtoolsPerf && typeof expoDevtoolsPerf === 'object') {
       const call = (command, payload = {}) => typeof expoDevtoolsPerf[command] === 'function' ? expoDevtoolsPerf[command](payload) : null;
       if (action === 'startup') return call('startup', { label }) || { available: true, source: 'expo-devtools-performance', sources: ['expo-devtools'], metrics: expoDevtoolsPerf.startupMetrics || [] };
       if (action === 'action') return call('action', { label }) || { available: true, source: 'expo-devtools-performance', sources: ['expo-devtools'], actionName: label, metrics: expoDevtoolsPerf.actionMetrics || [] };
       if (action === 'mark-list') return call('marks', { label }) || { available: true, source: 'expo-devtools-performance', sources: ['expo-devtools'], marks: expoDevtoolsPerf.marks || [], metrics: [] };
-    }
-    const bridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
+    }`;
+}
+function perfInstrumentationSetupSection() {
+  return `    const bridge = globalThis.__EXPO_IOS_PERF_BRIDGE__ ||
       (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.performance);
     const networkBridge = globalThis.__EXPO_IOS_NETWORK_BRIDGE__ ||
       (globalThis.__EXPO_IOS_INSTRUMENTATION__ && globalThis.__EXPO_IOS_INSTRUMENTATION__.network);
@@ -13606,8 +13240,10 @@ function perfExpression({ action, label }) {
         return Number.isFinite(start) ? Math.max(max, start + duration) : max;
       }, 0);
       return { requests, renders, frames, networkDurationMs, worstCommitMs, lastRequestEnd, name };
-    };
-    if (action === 'interaction-start') {
+    };`;
+}
+function perfInteractionSection() {
+  return `    if (action === 'interaction-start') {
       const name = label || 'interaction';
       const id = 'interaction-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       startRenders();
@@ -13662,7 +13298,7 @@ function perfExpression({ action, label }) {
           { name: 'interaction.commitCount', value: interactionCommits.length, unit: 'count', source: 'react-profiler', confidence: interactionCommits.length ? 'medium' : 'low' },
           { name: 'interaction.worstCommit', value: worstCommitMs, unit: 'ms', source: 'react-profiler', confidence: interactionCommits.length ? 'medium' : 'low' },
           { name: 'interaction.worstFrame', value: worstFrameMs, unit: 'ms', source: 'frame-sampler', confidence: interactionFrames.length ? 'medium' : 'low' },
-          { name: 'interaction.settledAfterResponse', value: lastRequestEnd && interaction ? Math.max(0, Date.now() - lastRequestEnd) : 0, unit: 'ms', source: 'correlation', confidence: lastRequestEnd ? 'low' : 'low' }
+          { name: 'interaction.settledAfterResponse', value: lastRequestEnd && interaction ? Math.max(0, Date.now() - lastRequestEnd) : 0, unit: 'ms', source: 'correlation', confidence: 'low' }
         ]
       };
     }
@@ -13682,8 +13318,10 @@ function perfExpression({ action, label }) {
         interactions: perfState.interactions,
         metrics: []
       };
-    }
-    if (!bridge) return { available: false, source: 'app-instrumentation', sources: ['runtime', 'app-instrumentation'], code: 'unavailable-bridge', reason: 'Performance bridge is not installed.', metrics: [] };
+    }`;
+}
+function perfActionDispatchSection() {
+  return `    if (!bridge) return { available: false, source: 'app-instrumentation', sources: ['runtime', 'app-instrumentation'], code: 'unavailable-bridge', reason: 'Performance bridge is not installed.', metrics: [] };
     if (action === 'mark-list') return bridge.marks ? bridge.marks() : { available: true, sources: ['runtime', 'app-instrumentation'], marks: performance.getEntriesByType ? performance.getEntriesByType('mark') : [], metrics: [] };
     if (action === 'mark-clear') return bridge.clearMarks ? bridge.clearMarks() : { available: true, sources: ['runtime', 'app-instrumentation'], cleared: true, metrics: [] };
     if (action === 'measure-start') return bridge.measureStart ? bridge.measureStart(label) : { available: true, sources: ['runtime', 'app-instrumentation'], measure: { name: label, status: 'started' }, metrics: [] };
@@ -13692,252 +13330,312 @@ function perfExpression({ action, label }) {
     if (action === 'frames') return bridge.frames ? bridge.frames() : { available: false, sources: ['runtime', 'app-instrumentation'], reason: 'Frame evidence is not exposed by the performance bridge.', metrics: [] };
     if (action === 'startup') return bridge.startup ? bridge.startup() : { available: true, sources: ['runtime', 'app-instrumentation'], metrics: bridge.startupMetrics || [] };
     if (action === 'action') return bridge.action ? bridge.action(label) : { available: false, sources: ['runtime', 'app-instrumentation'], actionName: label, code: 'missing-interaction-measurement', reason: 'Performance action requires interaction start/stop evidence.', metrics: bridge.actionMetrics || [] };
-    return { available: false, sources: ['runtime', 'app-instrumentation'], reason: 'Unsupported performance action.', metrics: [] };
-  })()`;
-}
-async function perfContext({ args, projectRoot, metro, target = null }) {
-  const buildMode = normalizePerfBuildKind(args.buildKind);
-  return {
-    projectRoot,
-    build: { mode: buildMode, releaseLike: ["preview", "release-export", "production"].includes(buildMode) },
-    platform: args.platform ?? "ios",
-    device: target?.deviceName ?? null,
-    metro: metro ? { port: metro.metroPort ?? args.metroPort ?? 8081, status: metro.available ? "available" : "unavailable", targetCount: metro.targetCount ?? 0, devMode: buildMode === "development" ? true : null } : { port: args.metroPort ?? 8081, status: "not-measured", targetCount: 0, devMode: buildMode === "development" ? true : null },
-    coldStart: null,
-    samples: 1
-  };
-}
-function normalizePerfBuildKind(value) {
-  const buildKind = requireOptionalString9(value) ?? "development";
-  if (buildKind === "production") return "production";
-  if (["development", "dev-build", "preview", "release-export", "unknown"].includes(buildKind)) return buildKind;
-  throw new Error(`Unknown performance build kind: ${buildKind}`);
-}
-function perfMetric({ name, value, unit, source: source2, confidence }) {
-  return { name, value, unit, source: source2, confidence };
-}
-function perfOverallConfidence(metrics) {
-  if (!metrics.length) return "low";
-  if (metrics.some((metric) => metric.confidence === "high")) return "high";
-  if (metrics.some((metric) => metric.confidence === "medium")) return "medium";
-  return "low";
-}
-function perfDevelopmentLimitations(extra = []) {
-  return [
-    ...extra.map(String),
-    "Development-mode measurements include Metro, dev runtime, and instrumentation overhead and must not be generalized to release performance."
-  ];
-}
-async function writePerfArtifact(args, action, payload, deps = {}) {
-  const timestamp = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  const artifactPath = resolve10(args.outputPath ?? join15(resolveExpoStateRoot10(args), "artifacts", "perf", `${action}-${timestamp}.json`));
-  await (deps.mkdir ?? fsMkdir2)(dirname7(artifactPath), { recursive: true });
-  const withArtifact = { ...payload, artifacts: [...payload.artifacts ?? [], artifactPath] };
-  await writeJsonFile7(artifactPath, withArtifact, deps);
-  return withArtifact;
-}
-function targetSummary9(target) {
-  if (!target) return null;
-  return {
-    id: target.id ?? null,
-    title: target.title ?? null,
-    description: target.description ?? null,
-    appId: target.appId ?? null,
-    deviceName: target.deviceName ?? null,
-    devtoolsFrontendUrl: target.devtoolsFrontendUrl ?? null,
-    webSocketDebuggerUrl: target.webSocketDebuggerUrl ?? null,
-    reactNative: target.reactNative ?? null,
-    capabilities: target.capabilities ?? {
-      hermesRuntime: typeof target.webSocketDebuggerUrl === "string" && target.webSocketDebuggerUrl.startsWith("ws"),
-      devtoolsFrontend: typeof target.devtoolsFrontendUrl === "string" && target.devtoolsFrontendUrl.length > 0,
-      reactNative: Boolean(target.reactNative)
-    }
-  };
-}
-function perfValidation(payload, action) {
-  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
-  const hasNetwork = metrics.some((metric) => /network/i.test(String(metric.name)) && Number(metric.value) > 0) || Array.isArray(payload.requests) && payload.requests.length > 0 || Array.isArray(payload.runtime?.network?.requests) && payload.runtime.network.requests.length > 0;
-  const hasRender = metrics.some((metric) => /commit|render/i.test(String(metric.name)) && Number(metric.value) > 0) || Array.isArray(payload.renders?.commits) && payload.renders.commits.length > 0 || Array.isArray(payload.runtime?.renders?.commits) && payload.runtime.renders.commits.length > 0;
-  const hasFrames = metrics.some((metric) => /frame/i.test(String(metric.name)) && Number(metric.value) > 0 && !/available/.test(String(metric.name))) || Array.isArray(payload.frames?.samples) && payload.frames.samples.length > 0 || Array.isArray(payload.runtime?.frames?.samples) && payload.runtime.frames.samples.length > 0;
-  const hasNativeArtifact = Boolean(payload.nativeSummary?.available);
-  const hasNative = hasNativeArtifact && Boolean(payload.pid && payload.seconds);
-  const releaseLike = payload.context?.build?.releaseLike === true;
-  const placeholderMetric = metrics.some((metric) => /available$|bridge\.available|interaction\.duration/.test(String(metric.name)) && Number(metric.value) <= 1);
-  const missingEvidence = [
-    ...!hasNetwork && ["interaction", "report"].includes(action) ? [{
-      signal: "network-interaction-correlation",
-      reason: "No interaction-scoped network request evidence was returned.",
-      recommendedFix: "Run network requests after a real interaction or mount the metadata network bridge."
-    }] : [],
-    ...!hasRender && ["interaction", "report", "action"].includes(action) ? [{
-      signal: "react-profiler-commits",
-      reason: "No React Profiler commit duration records were returned.",
-      recommendedFix: "Mount the dev-only Profiler wrapper or run rn renders start/read/stop with bridge commit records."
-    }] : [],
-    ...!hasFrames && ["frames", "interaction", "report"].includes(action) ? [{
-      signal: "frame-samples",
-      reason: "No requestAnimationFrame delta samples were returned.",
-      recommendedFix: "Start frame sampling before exercising the interaction and rerun perf frames/report."
-    }] : [],
-    ...!hasNative && ["ettrace", "report"].includes(action) ? [{
-      signal: "native-sample-summary",
-      reason: hasNativeArtifact ? "Native sample artifact was parsed, but PID and sample duration were not attached to this evidence." : "No parseable native sample artifact was available.",
-      recommendedFix: "Run profiler start with --pid, --seconds, and --native-artifact, then pass that artifact to perf report."
-    }] : [],
-    ...!releaseLike ? [{
-      signal: "release-like-build",
-      reason: "This evidence was collected in development mode.",
-      recommendedFix: "Repeat the profile against a preview or production build before making release performance claims."
-    }] : []
-  ];
-  const validated = payload.available !== false && !placeholderMetric && (action === "summary" || action === "startup" || action === "memory" || action === "bundle" || action === "compare" || action === "budget" || action === "ettrace" && hasNative || action === "frames" && hasFrames || action === "report" && (hasNetwork || hasRender || hasFrames || hasNativeArtifact) || action === "interaction" && (hasNetwork || hasRender || hasFrames));
-  return realValidation({
-    state: payload.available === false ? "unvalidated" : validated ? "validated" : "partial",
-    claimsAllowed: {
-      networkLatency: hasNetwork,
-      networkWaterfall: hasNetwork,
-      renderCost: hasRender,
-      frameJank: hasFrames,
-      nativeCpu: hasNative,
-      releasePerformance: releaseLike && (hasNetwork || hasRender || hasFrames || hasNative)
-    },
-    evidence: [{
-      source: perfEvidenceSource(payload),
-      artifactPath: Array.isArray(payload.artifacts) ? payload.artifacts[0] : null,
-      command: `perf.${action}`,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-      buildKind: payload.context?.build?.mode ?? payload.mode ?? "development",
-      confidence: payload.confidence ?? perfOverallConfidence(metrics)
-    }],
-    missingEvidence
-  });
-}
-async function parseNativeSampleArtifact(file, deps = {}) {
-  const text = await readFile19(file, "utf8").catch(() => null);
-  if (!text) return { available: false, artifact: file, reason: "Native sample artifact was not found or unreadable." };
-  const physicalFootprintMb = numberFromMatch(text, /Physical footprint:\s+([0-9.]+)M/);
-  const peakFootprintMb = numberFromMatch(text, /Physical footprint \(peak\):\s+([0-9.]+)M/);
-  const mainThreadSamples = numberFromMatch(text, /Call graph:\s*\n\s+(\d+)\s+Thread_[^:\n]+:\s+Main Thread/s);
-  const idleSamples = countSampleBucket(text, [/mach_msg/i, /CFRunLoopServiceMachPort/i]);
-  const buckets = {
-    hermes: countSampleBucket(text, [/hermes/i]),
-    yoga: countSampleBucket(text, [/yoga/i]),
-    mounting: countSampleBucket(text, [/RCTMountingManager/i, /RCTPerformMountInstructions/i]),
-    coreAnimation: countSampleBucket(text, [/QuartzCore/i, /CA::Layer/i, /CoreAnimation/i]),
-    uiKit: countSampleBucket(text, [/UIKitCore/i])
-  };
-  const topSymbols = [...text.matchAll(/^\s*([0-9]+)\s+(.+?)\s+\(in\s+(.+?)\)/gm)].slice(0, 30).map((match) => ({ samples: Number(match[1]), symbol: match[2].trim(), library: match[3].trim() }));
-  return {
-    available: Boolean(physicalFootprintMb || peakFootprintMb || topSymbols.length),
-    artifact: file,
-    bytes: Buffer.byteLength(text),
-    physicalFootprintMb,
-    peakFootprintMb,
-    mainThreadSamples,
-    estimatedMainThreadIdleSamples: idleSamples,
-    estimatedMainThreadBusySamples: mainThreadSamples == null ? null : Math.max(0, mainThreadSamples - idleSamples),
-    buckets,
-    topSymbols
-  };
-}
-function numberFromMatch(text, pattern) {
-  const match = pattern.exec(text);
-  return match ? Number(match[1]) : null;
-}
-function countSampleBucket(text, patterns) {
-  let count = 0;
-  for (const line of text.split(/\r?\n/)) {
-    if (!patterns.some((pattern) => pattern.test(line))) continue;
-    const match = /^\s*[+!:| ]*\s*(\d+)\s+/.exec(line);
-    count += match ? Number(match[1]) : 1;
-  }
-  return count;
-}
-function resolveExpoStateRoot10(args = {}) {
-  if (args.stateDir) {
-    const resolved = resolve10(args.stateDir);
-    return basename10(resolved) === "runs" ? resolve10(join15(resolved, "..")) : resolved;
-  }
-  const root = resolve10(args.root ?? args.cwd ?? process.cwd());
-  return join15(root, ".scratch", "expo-ios");
-}
-function requireString22(value, name) {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${name} must be a non-empty string.`);
-  return value.trim();
-}
-function requireOptionalString9(value) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-function clampNumber22(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
-  return Math.min(Math.max(number, min), max);
-}
-async function projectCwd(cwd, deps) {
-  if (deps.normalizeProjectCwd) {
-    return Promise.resolve(deps.normalizeProjectCwd(cwd, { allowMissingPackageJson: true })).catch(() => resolve10(String(cwd ?? process.cwd())));
-  }
-  return resolve10(String(cwd ?? process.cwd()));
-}
-async function projectSummary(cwd, deps) {
-  return deps.expoProjectRuntimeSummary ? deps.expoProjectRuntimeSummary(cwd) : { projectRoot: cwd };
-}
-async function metroStatus2(args, deps) {
-  return deps.metroStatusPayload ? deps.metroStatusPayload(args) : metroStatusPayload(args);
-}
-async function listMetroTargets(metroPort, deps) {
-  return deps.metroTargets ? deps.metroTargets(metroPort) : metroTargets(metroPort);
-}
-async function evaluateHermes(url, expression, deps) {
-  return deps.evaluateHermesExpression ? deps.evaluateHermesExpression(url, expression, { timeoutMs: 5e3 }) : evaluateHermesExpression(url, expression, { timeoutMs: 5e3 });
-}
-async function findUpFile(cwd, name, deps) {
-  return deps.findUp ? deps.findUp(cwd, name) : null;
-}
-async function readJson6(file, deps) {
-  if (deps.readJsonFile) return deps.readJsonFile(file);
-  return JSON.parse(await readFile19(file, "utf8"));
-}
-async function writeJsonFile7(file, value, deps) {
-  await (deps.writeFile ?? fsWriteFile2)(file, `${JSON.stringify(value, null, 2)}
-`, "utf8");
-}
-async function exists(path12, deps) {
-  return deps.pathExists ? deps.pathExists(path12) : fsStat(path12).then(() => true, () => false);
-}
-async function fileStat(path12, deps) {
-  return deps.stat ? deps.stat(path12) : fsStat(path12).catch(() => null);
-}
-function execFile9(file, argv, options) {
-  return new Promise((resolveExec) => {
-    nodeExecFile11(file, argv, { timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolveExec({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: error ? { message: error.message, code: error.code, signal: error.signal } : null
-      });
-    });
-  });
-}
-function redactValue8(value) {
-  if (Array.isArray(value)) return value.map(redactValue8);
-  if (!value || typeof value !== "object") return value;
-  const result = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (/body|postData/i.test(key)) continue;
-    result[key] = /token|authorization|cookie|password|secret|apikey/i.test(key) ? "[redacted]" : redactValue8(item);
-  }
-  return result;
-}
-function firstPositional2(args) {
-  return Array.isArray(args._) ? args._[0] : void 0;
+    return { available: false, sources: ['runtime', 'app-instrumentation'], reason: 'Unsupported performance action.', metrics: [] };`;
 }
 
-// src/modules/dashboard-observability/src/main/index.ts
-import { mkdir as mkdir14, readdir as readdir13, readFile as readFile20, writeFile as writeFile9 } from "node:fs/promises";
-import { basename as basename11, dirname as dirname8, join as join16, resolve as resolve11 } from "node:path";
+// src/commands/perf-evidence/src/main/actions.ts
+async function perfSummaryPayload(args = {}, deps = {}) {
+  const cwd = await projectCwd(args.cwd, deps);
+  const summary = await projectSummary(cwd, deps);
+  const metroPort = clampNumber23(args.metroPort ?? 8081, 1, 65535);
+  const metro = await metroStatus2({ metroPort }, deps);
+  const metrics = [];
+  const unavailableSources = [];
+  const packageJsonPath = await findUpFile(summary.projectRoot, "package.json", deps);
+  if (packageJsonPath) {
+    const packageJson = await readJson6(packageJsonPath, deps);
+    metrics.push(perfMetric({
+      name: "project.dependencies",
+      value: Object.keys({ ...packageJson.dependencies ?? {}, ...packageJson.devDependencies ?? {} }).length,
+      unit: "count",
+      source: "project",
+      confidence: "low"
+    }));
+  } else {
+    unavailableSources.push({ source: "project", reason: "No package.json found." });
+  }
+  if (metro.available) {
+    metrics.push(perfMetric({
+      name: "metro.targets",
+      value: metro.targetCount,
+      unit: "count",
+      source: "metro",
+      confidence: "medium"
+    }));
+  } else {
+    unavailableSources.push({ source: "metro", reason: metro.reason });
+  }
+  const capabilities = [
+    { source: "plugin-bridge-performance", available: metro.targets?.some((target) => target.capabilities?.hermesRuntime) === true, type: "upstream-plugin", confidence: "medium" },
+    { source: "expo-devtools-performance", available: metro.available === true, type: "upstream-devtools", confidence: "low" },
+    { source: "native-profiler", available: true, type: "native-fallback", confidence: "high" },
+    { source: "bundle-artifact", available: false, type: "static-fallback", confidence: "high" }
+  ];
+  unavailableSources.push({ source: "plugin-bridge-performance", reason: "Run perf startup/action/mark against an app with the performance bridge domain registered." });
+  unavailableSources.push({ source: "expo-devtools-performance", reason: "No machine-readable Expo DevTools performance domain was confirmed." });
+  unavailableSources.push({ source: "bundle-artifact", reason: "Pass an existing bundle artifact to perf bundle for byte evidence." });
+  const payload = {
+    available: true,
+    action: "summary",
+    mode: "development",
+    sources: ["project", "metro"],
+    capabilities,
+    confidence: perfOverallConfidence(metrics),
+    context: await perfContext({ args, projectRoot: summary.projectRoot, metro }),
+    metrics,
+    unavailableSources,
+    limitations: perfDevelopmentLimitations(["Summary reports evidence availability and lightweight signals; it is not a performance score."])
+  };
+  return {
+    ...payload,
+    realValidation: perfValidation(payload, "summary")
+  };
+}
+async function perfRuntimePayload(args = {}, action, deps = {}) {
+  return writeRuntimePerfArtifact(args, deps, {
+    artifactAction: action,
+    bridgeAction: action,
+    normalizeAction: action,
+    label: args.label,
+    extraFields: () => action === "action" ? { actionName: requireString22(args.label, "label") } : {}
+  });
+}
+async function perfInstrumentedPayload(args = {}, action, deps = {}) {
+  const subaction = requireOptionalString9(args.subaction);
+  const label = requireOptionalString9(args.label);
+  const bridgeAction = perfBridgeAction(action, subaction);
+  return writeRuntimePerfArtifact(args, deps, {
+    artifactAction: action,
+    bridgeAction,
+    normalizeAction: action,
+    label,
+    extraFields: () => ({ subaction, bridgeAction })
+  });
+}
+async function perfInteractionPayload(args = {}, deps = {}) {
+  const subaction = requireString22(args.subaction ?? "read", "subaction");
+  if (!["start", "stop", "read"].includes(subaction)) throw new Error(`Unknown performance interaction action: ${subaction}`);
+  const label = requireOptionalString9(args.label ?? args.interaction);
+  return writeRuntimePerfArtifact(args, deps, {
+    artifactAction: "interaction",
+    bridgeAction: `interaction-${subaction}`,
+    normalizeAction: "interaction",
+    label,
+    unavailableReason: "Performance interaction bridge did not return a value.",
+    extraFields: () => ({ subaction, interaction: label })
+  });
+}
+async function perfReportPayload(args = {}, deps = {}) {
+  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
+  const evidence = await collectRuntimeBridgeEvidence(args, deps, { action: "report", label: args.interaction ?? args.label });
+  const nativeSummary = nativeArtifact ? await parseNativeSampleArtifact(resolve13(nativeArtifact), deps) : null;
+  const report = normalizePerfReport(evidence.bridgePayload, nativeSummary);
+  const payload = {
+    available: report.available,
+    action: "report",
+    interaction: args.interaction ?? args.label ?? null,
+    mode: "development",
+    sources: report.sources,
+    findings: report.findings,
+    metrics: report.metrics,
+    runtime: report.runtime,
+    nativeSummary,
+    context: await perfContext({ args, projectRoot: evidence.projectRoot, metro: evidence.metro, target: evidence.target }),
+    transport: perfTransport(evidence.metroPort, evidence.target, evidence.diagnostics),
+    confidence: report.confidence,
+    limitations: perfDevelopmentLimitations(report.limitations)
+  };
+  return writePerfArtifact(args, "report", { ...payload, realValidation: perfValidation(payload, "report") }, deps);
+}
+async function perfComparePayload(args = {}, deps = {}) {
+  const baselinePath = resolve13(requireString22(args.baseline, "baseline"));
+  const candidatePath = resolve13(requireString22(args.candidate, "candidate"));
+  const baseline = await readJson6(baselinePath, deps);
+  const candidate = await readJson6(candidatePath, deps);
+  const candidateMetrics = metricMap(candidate.metrics ?? []);
+  const deltas = [];
+  for (const metric of baseline.metrics ?? []) {
+    const next = candidateMetrics.get(metric.name);
+    if (!next || typeof metric.value !== "number" || typeof next.value !== "number") continue;
+    deltas.push({
+      metric: metric.name,
+      baseline: metric.value,
+      candidate: next.value,
+      delta: next.value - metric.value,
+      unit: next.unit ?? metric.unit,
+      improved: next.value <= metric.value,
+      confidence: lowerConfidence(metric.confidence, next.confidence)
+    });
+  }
+  return writePerfArtifact(args, "compare", {
+    available: true,
+    action: "compare",
+    sources: ["artifact"],
+    baseline: baselinePath,
+    candidate: candidatePath,
+    deltas,
+    confidence: perfOverallConfidence(deltas.map((delta) => ({ confidence: delta.confidence }))),
+    limitations: ["Comparison uses only matching metric names and does not infer user impact without workflow context."]
+  }, deps);
+}
+async function perfBudgetPayload(args = {}, deps = {}) {
+  const subaction = requireString22(args.subaction ?? "check", "subaction");
+  if (subaction !== "check") throw new Error(`Unknown performance budget action: ${subaction}`);
+  const budgetPath = resolve13(requireString22(args.file, "file"));
+  const candidatePath = resolve13(requireString22(args.candidate, "candidate"));
+  const budget = await readJson6(budgetPath, deps);
+  const candidate = await readJson6(candidatePath, deps);
+  const metrics = metricMap(candidate.metrics ?? []);
+  const checks = (budget.budgets ?? []).map((rule) => {
+    const metric = metrics.get(rule.metric);
+    const value = metric?.value ?? null;
+    const passed = typeof value === "number" && (typeof rule.max !== "number" || value <= rule.max) && (typeof rule.min !== "number" || value >= rule.min);
+    return { metric: rule.metric, value, min: rule.min ?? null, max: rule.max ?? null, passed, unit: metric?.unit ?? null };
+  });
+  return writePerfArtifact(args, "budget", {
+    available: true,
+    action: "budget",
+    subaction,
+    sources: ["artifact"],
+    file: budgetPath,
+    candidate: candidatePath,
+    passed: checks.every((check) => check.passed),
+    checks,
+    limitations: ["Budget checks compare numeric metrics only; choose budgets that match build mode and device context."]
+  }, deps);
+}
+async function perfMemoryPayload(args = {}, deps = {}) {
+  const samples = clampNumber23(args.samples ?? 1, 1, 100);
+  const nativeArtifact = requireOptionalString9(args.nativeArtifact);
+  const projectRoot = await projectCwd(args.cwd, deps);
+  const metrics = [perfMetric({
+    name: "memory.samples",
+    value: samples,
+    unit: "count",
+    source: nativeArtifact ? "memgraph" : "simulator",
+    confidence: samples >= 2 || nativeArtifact ? "medium" : "low"
+  })];
+  const leakAllowed = samples >= 2 || Boolean(nativeArtifact);
+  const payload = {
+    available: true,
+    action: "memory",
+    mode: "development",
+    sources: nativeArtifact ? ["native-profiler", "memgraph"] : ["simulator"],
+    metrics,
+    context: await perfContext({ args, projectRoot, metro: null }),
+    leakClaim: {
+      allowed: leakAllowed,
+      reason: leakAllowed ? "Repeated measurements or native artifacts are present." : "Repeated measurements or a native memgraph artifact are required before making a memory-leak claim."
+    },
+    nativeArtifact: nativeArtifact ? resolve13(nativeArtifact) : null,
+    confidence: perfOverallConfidence(metrics),
+    limitations: perfDevelopmentLimitations(["A single memory sample is only a hint, not leak evidence."])
+  };
+  return writePerfArtifact(args, "memory", { ...payload, realValidation: perfValidation(payload, "memory") }, deps);
+}
+async function perfNativeProfilerPayload(args = {}, profiler, deps = {}) {
+  const subaction = requireString22(args.subaction ?? (profiler === "memgraph" ? "capture" : "stop"), "subaction");
+  const allowed = profiler === "ettrace" ? ["start", "stop"] : ["capture"];
+  if (!allowed.includes(subaction)) throw new Error(`Unknown ${profiler} action: ${subaction}`);
+  const defaultName = profiler === "ettrace" ? "capture.trace" : "heap.memgraph";
+  const nativeArtifact = resolve13(args.nativeArtifact ?? join17(resolveExpoStateRoot10(args), "artifacts", "perf", defaultName));
+  await (deps.mkdir ?? fsMkdir3)(dirname8(nativeArtifact), { recursive: true });
+  let sampleResult = null;
+  let samplePid = null;
+  let sampleSeconds = null;
+  if (profiler === "ettrace" && subaction === "start" && args.pid !== void 0) {
+    const pid = requirePid(args.pid);
+    samplePid = pid;
+    const seconds = String(clampNumber23(args.seconds ?? 1, 1, 30));
+    sampleSeconds = Number(seconds);
+    sampleResult = await execFile9("sample", [String(pid), seconds, "-file", nativeArtifact], { timeout: (Number(seconds) + 20) * 1e3 });
+  } else if (subaction !== "start" && !await exists(nativeArtifact, deps)) {
+    await (deps.writeFile ?? fsWriteFile3)(nativeArtifact, `${profiler} placeholder
+`, "utf8");
+  }
+  const projectRoot = await projectCwd(args.cwd, deps);
+  const nativeSummary = await parseNativeSampleArtifact(nativeArtifact, deps);
+  const payload = {
+    available: true,
+    action: profiler,
+    subaction,
+    profiler,
+    mode: "development",
+    sources: ["native-profiler"],
+    nativeArtifact,
+    pid: samplePid,
+    seconds: sampleSeconds,
+    sample: sampleResult,
+    nativeSummary,
+    metrics: [],
+    context: await perfContext({ args, projectRoot, metro: null }),
+    confidence: subaction === "start" ? "low" : "high",
+    limitations: [
+      `${profiler} metadata records native profiler evidence boundaries; collect and symbolicate native profiler artifacts before making native CPU or memory claims.`,
+      "Native profiler workflows are heavier than routine runtime evidence and may require platform tooling outside this CLI."
+    ]
+  };
+  return writePerfArtifact(args, profiler, { ...payload, realValidation: perfValidation(payload, profiler) }, deps);
+}
+function requirePid(value) {
+  const pid = Number(value);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error(`pid must be a positive integer, got ${String(value)}.`);
+  return pid;
+}
+async function perfBundlePayload(args = {}, deps = {}) {
+  const cwd = await projectCwd(args.cwd, deps);
+  const bundleArtifact = requireOptionalString9(args.bundleArtifact);
+  const metrics = [];
+  const unavailableSources = [];
+  let available = false;
+  let bundlePath = null;
+  if (bundleArtifact) {
+    bundlePath = resolve13(bundleArtifact);
+    const stat8 = await fileStat(bundlePath, deps);
+    if (stat8?.isFile()) {
+      available = true;
+      metrics.push(perfMetric({ name: "bundle.bytes", value: stat8.size, unit: "bytes", source: "metro", confidence: "high" }));
+    } else {
+      unavailableSources.push({ source: "bundle-artifact", reason: "Bundle artifact was not found.", path: bundlePath });
+    }
+  } else {
+    unavailableSources.push({ source: "bundle-artifact", reason: "Pass an existing Metro/Expo bundle artifact path." });
+  }
+  return writePerfArtifact(args, "bundle", {
+    available,
+    action: "bundle",
+    mode: "development",
+    sources: available ? ["project", "metro"] : ["project"],
+    bundleArtifact: bundlePath,
+    metrics,
+    unavailableSources,
+    context: await perfContext({ args, projectRoot: cwd, metro: null }),
+    confidence: perfOverallConfidence(metrics),
+    limitations: perfDevelopmentLimitations(["Bundle byte evidence depends on the supplied artifact and does not imply release performance unless the artifact is release-like."])
+  }, deps);
+}
+
+// src/commands/perf-evidence/src/main/index.ts
+async function perfCommand(args = {}, deps = {}) {
+  const action = requireString22(args.action ?? firstPositional2(args) ?? "summary", "action");
+  if (!PERF_ACTIONS.includes(action)) throw new Error(`Unknown performance action: ${action}`);
+  if (action === "summary") return toolJson(await perfSummaryPayload(args, deps));
+  if (action === "bundle") return toolJson(await perfBundlePayload(args, deps));
+  if (action === "compare") return toolJson(await perfComparePayload(args, deps));
+  if (action === "budget") return toolJson(await perfBudgetPayload(args, deps));
+  if (action === "memory") return toolJson(await perfMemoryPayload(args, deps));
+  if (action === "ettrace" || action === "memgraph") return toolJson(await perfNativeProfilerPayload(args, action, deps));
+  if (action === "interaction") return toolJson(await perfInteractionPayload(args, deps));
+  if (action === "report") return toolJson(await perfReportPayload(args, deps));
+  if (["mark", "measure", "js-thread", "frames"].includes(action)) return toolJson(await perfInstrumentedPayload(args, action, deps));
+  return toolJson(await perfRuntimePayload(args, action, deps));
+}
+
+// src/commands/dashboard-observability/src/main/index.ts
+import { mkdir as mkdir14, readdir as readdir13, readFile as readFile21, writeFile as writeFile9 } from "node:fs/promises";
+import { basename as basename11, dirname as dirname9, join as join18, resolve as resolve14 } from "node:path";
 var DASHBOARD_LIMITATION = "The dashboard command records a local static observability view; it does not expose network access unless a future server adapter is added.";
-function toolJson30(value) {
+function toolJson27(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -13946,8 +13644,8 @@ async function dashboardCommand(args = {}) {
   const action = requireString23(args.action ?? positionals[0] ?? "status", "action");
   if (!["start", "status", "stop"].includes(action)) throw new Error(`Unknown dashboard action: ${action}`);
   const stateRoot = resolveExpoStateRoot11(args);
-  const dashboardDir = join16(stateRoot, "dashboard");
-  const statePath = join16(dashboardDir, "dashboard-state.json");
+  const dashboardDir = join18(stateRoot, "dashboard");
+  const statePath = join18(dashboardDir, "dashboard-state.json");
   await mkdir14(dashboardDir, { recursive: true });
   const previous = asRecord19(await readJsonFile12(statePath).catch(() => null));
   const previousArtifacts = asRecord19(previous?.artifacts);
@@ -13956,26 +13654,26 @@ async function dashboardCommand(args = {}) {
     available: true,
     action,
     status,
-    port: clampNumber23(args.port ?? previous?.port ?? 0, 0, 65535),
+    port: clampNumber24(args.port ?? previous?.port ?? 0, 0, 65535),
     stateRoot,
     sessions: await dashboardSessions(stateRoot),
     artifacts: {
-      json: resolve11(String(args.outputPath ?? previousArtifacts?.json ?? join16(dashboardDir, "dashboard.json"))),
-      html: String(previousArtifacts?.html ?? join16(dashboardDir, "index.html"))
+      json: resolve14(String(args.outputPath ?? previousArtifacts?.json ?? join18(dashboardDir, "dashboard.json"))),
+      html: String(previousArtifacts?.html ?? join18(dashboardDir, "index.html"))
     },
     limitations: [DASHBOARD_LIMITATION]
   };
   await writeDashboardHtml(payload.artifacts.html, payload);
   await writeJsonFile8(payload.artifacts.json, payload);
   await writeJsonFile8(statePath, payload);
-  return toolJson30(payload);
+  return toolJson27(payload);
 }
 async function dashboardSessions(stateRoot) {
-  const sessionsDir = join16(stateRoot, "sessions");
+  const sessionsDir = join18(stateRoot, "sessions");
   const names = await readdir13(sessionsDir).catch(() => []);
   const sessions = [];
   for (const name of names.sort()) {
-    const sessionPath = join16(sessionsDir, name, "session.json");
+    const sessionPath = join18(sessionsDir, name, "session.json");
     const session = asRecord19(await readJsonFile12(sessionPath).catch(() => null));
     if (session) {
       sessions.push({
@@ -13991,12 +13689,12 @@ async function dashboardSessions(stateRoot) {
   return sessions;
 }
 async function writeDashboardHtml(file, payload) {
-  await mkdir14(dirname8(file), { recursive: true });
+  await mkdir14(dirname9(file), { recursive: true });
   await writeFile9(file, `<!doctype html>
 <html>
-<head><meta charset="utf-8"><title>expo-ios dashboard</title></head>
+<head><meta charset="utf-8"><title>expo98 dashboard</title></head>
 <body>
-<h1>expo-ios dashboard</h1>
+<h1>expo98 dashboard</h1>
 <p>Status: ${escapeHtml3(payload.status)}</p>
 <p>Sessions: ${payload.sessions.length}</p>
 <pre>${escapeHtml3(JSON.stringify(payload.sessions, null, 2))}</pre>
@@ -14006,24 +13704,24 @@ async function writeDashboardHtml(file, payload) {
 }
 function resolveExpoStateRoot11(args = {}) {
   if (args.stateDir) {
-    const resolved = resolve11(args.stateDir);
-    return basename11(resolved) === "runs" ? resolve11(join16(resolved, "..")) : resolved;
+    const resolved = resolve14(args.stateDir);
+    return basename11(resolved) === "runs" ? resolve14(join18(resolved, "..")) : resolved;
   }
-  const root = resolve11(args.root ?? args.cwd ?? process.cwd());
-  return join16(root, ".scratch", "expo-ios");
+  const root = resolve14(args.root ?? args.cwd ?? process.cwd());
+  return join18(root, ".scratch", "expo98");
 }
 async function readJsonFile12(file) {
-  return JSON.parse(await readFile20(file, "utf8"));
+  return JSON.parse(await readFile21(file, "utf8"));
 }
 async function writeJsonFile8(file, value) {
-  await mkdir14(dirname8(file), { recursive: true });
+  await mkdir14(dirname9(file), { recursive: true });
   await writeFile9(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function escapeHtml3(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function clampNumber23(value, min, max) {
+function clampNumber24(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`Expected a finite number, got ${String(value)}.`);
   return Math.min(Math.max(number, min), max);
@@ -14036,148 +13734,10 @@ function asRecord19(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/modules/policy-redaction/src/main/command-boundary.ts
-import { mkdir as mkdir15, readFile as readFile21, writeFile as writeFile10 } from "node:fs/promises";
-import { dirname as dirname9, resolve as resolve12 } from "node:path";
-
-// src/modules/policy-redaction/src/main/domain.ts
-var REDACTED5 = "[redacted]";
-var POLICY_REASONS = Object.freeze({
-  READ_ALLOWED: "Read action does not require policy approval.",
-  MISSING_POLICY: "No action policy allowed this state-changing operation.",
-  ACTION_ALLOWED: "Action allowed by policy.",
-  ACTION_DENIED: "Action policy did not allow this operation."
-});
-var BRIDGE_CONFIRMATIONS = Object.freeze({
-  install: "bridge-install",
-  remove: "bridge-remove"
-});
-function checkedPolicyDecision({
-  action,
-  sideEffect,
-  allowed,
-  source: source2 = null,
-  reason
-}) {
-  return {
-    checked: true,
-    action,
-    sideEffect,
-    allowed,
-    source: source2,
-    reason
-  };
-}
-
-// src/modules/policy-redaction/src/main/policy-service.ts
-function decideActionPolicy({
-  action,
-  sideEffect,
-  policy = null,
-  source: source2 = null,
-  allowRuntimeEval = false
-}) {
-  if (action === "wait.fn" && allowRuntimeEval === true) {
-    return checkedPolicyDecision({
-      action,
-      sideEffect: "runtime-eval",
-      allowed: true,
-      source: "--allow-runtime-eval",
-      reason: "Runtime eval allowed by global flag."
-    });
-  }
-  if (sideEffect === "read") {
-    return checkedPolicyDecision({
-      action,
-      sideEffect,
-      allowed: true,
-      source: null,
-      reason: POLICY_REASONS.READ_ALLOWED
-    });
-  }
-  if (!policy) {
-    return checkedPolicyDecision({
-      action,
-      sideEffect,
-      allowed: false,
-      source: null,
-      reason: POLICY_REASONS.MISSING_POLICY
-    });
-  }
-  const allowed = policyAllowsAction2(policy, action);
-  return checkedPolicyDecision({
-    action,
-    sideEffect,
-    allowed,
-    source: source2,
-    reason: allowed ? POLICY_REASONS.ACTION_ALLOWED : POLICY_REASONS.ACTION_DENIED
-  });
-}
-function policyAllowsAction2(policy, action) {
-  if (Array.isArray(policy?.allow) && policy.allow.includes(action)) {
-    return true;
-  }
-  if (policy?.actions?.[action] === "allow" || policy?.actions?.[action] === true) {
-    return true;
-  }
-  return false;
-}
-function defaultPolicySummary() {
-  return {
-    allow: [],
-    defaults: {
-      read: "allow",
-      write: "deny",
-      device: "deny",
-      runtimeEval: "deny unless --allow-runtime-eval true or an action policy allows the command"
-    }
-  };
-}
-function actionSideEffect(action) {
-  if (/^(doctor|project-info|routes|devices|target\.list|target\.current|snapshot|refs|get|find|wait|console|errors|logs|metro\.status|policy|redact|review)/.test(action)) {
-    return "read";
-  }
-  if (/^(storage\.set|storage\.clear|state\.load|state\.clear|install-app|uninstall-app|set\.|wait\.fn)/.test(action)) {
-    return "device";
-  }
-  return "device";
-}
-
-// src/modules/policy-redaction/src/main/redactor.ts
-var SECRET_KEY_PATTERN3 = /token|authorization|cookie|password|secret|apikey|apiKey/i;
-var URL_QUERY_SECRET_PATTERN3 = /([?&](cookie|token|authorization|password|secret)=)[^&]+/gi;
-function redactJson(value, key = "") {
-  if (typeof value === "string") {
-    if (isSecretKey4(key)) {
-      return REDACTED5;
-    }
-    return redactText(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactJson(item, key));
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([childKey, childValue]) => [
-      childKey,
-      isSecretKey4(childKey) ? REDACTED5 : redactJson(childValue, childKey)
-    ])
-  );
-}
-function redactText(value) {
-  return String(value ?? "").replace(
-    URL_QUERY_SECRET_PATTERN3,
-    `$1${REDACTED5}`
-  );
-}
-function isSecretKey4(key) {
-  return SECRET_KEY_PATTERN3.test(key);
-}
-
-// src/modules/policy-redaction/src/main/command-boundary.ts
-function toolJson31(value) {
+// src/core/policy-redaction/src/main/command-boundary.ts
+import { mkdir as mkdir15, readFile as readFile22, writeFile as writeFile10 } from "node:fs/promises";
+import { dirname as dirname10, resolve as resolve15 } from "node:path";
+function toolJson28(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }], isError: false };
 }
@@ -14187,10 +13747,10 @@ async function policyCommand(args = {}) {
     throw new Error(`Unknown policy action: ${action}`);
   }
   const policyPath = requireOptionalString10(args.actionPolicy);
-  const resolvedPolicyPath = policyPath ? resolve12(policyPath) : null;
+  const resolvedPolicyPath = policyPath ? resolve15(policyPath) : null;
   const policy = resolvedPolicyPath ? await readJsonFile13(resolvedPolicyPath) : null;
   if (action === "show") {
-    return toolJson31({
+    return toolJson28({
       available: true,
       action,
       source: resolvedPolicyPath,
@@ -14218,7 +13778,7 @@ async function policyCommand(args = {}) {
     source: resolvedPolicyPath,
     allowRuntimeEval: args.allowRuntimeEval === true
   });
-  return toolJson31({
+  return toolJson28({
     available: true,
     action: "check",
     subject,
@@ -14228,8 +13788,8 @@ async function policyCommand(args = {}) {
   });
 }
 async function redactCommand(args = {}) {
-  const file = resolve12(requireString24(args.file, "file"));
-  const raw = await readFile21(file, "utf8");
+  const file = resolve15(requireString24(args.file, "file"));
+  const raw = await readFile22(file, "utf8");
   let payload;
   try {
     payload = redactJson(JSON.parse(raw));
@@ -14237,14 +13797,14 @@ async function redactCommand(args = {}) {
     payload = redactText(raw);
   }
   const outputPath = requireOptionalString10(args.outputPath);
-  const resolvedOutputPath = outputPath ? resolve12(outputPath) : null;
+  const resolvedOutputPath = outputPath ? resolve15(outputPath) : null;
   if (resolvedOutputPath) {
-    await mkdir15(dirname9(resolvedOutputPath), { recursive: true });
+    await mkdir15(dirname10(resolvedOutputPath), { recursive: true });
     const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
     await writeFile10(resolvedOutputPath, `${text}
 `, "utf8");
   }
-  return toolJson31({
+  return toolJson28({
     available: true,
     action: "redact",
     inputPath: file,
@@ -14253,7 +13813,7 @@ async function redactCommand(args = {}) {
   });
 }
 async function readJsonFile13(file) {
-  return JSON.parse(await readFile21(file, "utf8"));
+  return JSON.parse(await readFile22(file, "utf8"));
 }
 function requireString24(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -14265,15 +13825,15 @@ function requireOptionalString10(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// src/modules/plugin-self-management/src/main/index.ts
+// src/commands/plugin-self-management/src/main/index.ts
 import { execFile as nodeExecFile12 } from "node:child_process";
 import { existsSync } from "node:fs";
-import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile22, writeFile as writeFile11 } from "node:fs/promises";
+import { access as access6, mkdir as mkdir16, mkdtemp, readdir as readdir14, readFile as readFile23, writeFile as writeFile11 } from "node:fs/promises";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname10, join as join17, resolve as resolve13 } from "node:path";
-var CLI_NAME5 = "expo-ios";
-var CLI_VERSION6 = "0.1.0";
-function toolJson32(value) {
+import { dirname as dirname11, join as join19, resolve as resolve16 } from "node:path";
+var CLI_NAME5 = CURRENT_CLI_NAME;
+var CLI_VERSION4 = "0.1.0";
+function toolJson29(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
@@ -14283,26 +13843,26 @@ async function skillsCommand(args = {}, deps = {}) {
   if (!["list", "get"].includes(action)) throw new Error(`Unknown skills action: ${action}`);
   const skills = await listBundledSkills(deps);
   if (action === "list") {
-    return toolJson32({
+    return toolJson29({
       available: true,
       action,
-      pluginVersion: CLI_VERSION6,
+      pluginVersion: CLI_VERSION4,
       skills: skills.map(({ content: _content, ...skill2 }) => skill2)
     });
   }
   const name = requireString25(args.name ?? positionals[1], "name");
   const skill = skills.find((item) => item.name === name);
-  if (!skill) return toolJson32({ available: false, action, name, reason: "Skill not found.", pluginVersion: CLI_VERSION6 });
-  return toolJson32({ available: true, action, pluginVersion: CLI_VERSION6, ...skill });
+  if (!skill) return toolJson29({ available: false, action, name, reason: "Skill not found.", pluginVersion: CLI_VERSION4 });
+  return toolJson29({ available: true, action, pluginVersion: CLI_VERSION4, ...skill });
 }
 async function listBundledSkills(deps = {}) {
-  const skillsRoot = join17(pluginRoot(deps), "skills");
+  const skillsRoot = join19(pluginRoot(deps), "skills");
   const entries = await readdir14(skillsRoot, { withFileTypes: true }).catch(() => []);
   const skills = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const file = join17(skillsRoot, entry.name, "SKILL.md");
-    const content = await readFile22(file, "utf8").catch(() => null);
+    const file = join19(skillsRoot, entry.name, "SKILL.md");
+    const content = await readFile23(file, "utf8").catch(() => null);
     if (!content) continue;
     const metadata = parseSkillFrontmatter(content);
     skills.push({
@@ -14328,9 +13888,9 @@ async function installCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown install action: ${action}`);
-  const prefix = resolve13(optionalString8(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
-  const binPath = join17(prefix, "bin", CLI_NAME5);
-  return toolJson32({
+  const prefix = resolve16(optionalString8(args.prefix) ?? join19(deps.homeDir ?? homedir2(), ".local"));
+  const binPath = join19(prefix, "bin", CLI_NAME5);
+  return toolJson29({
     available: true,
     action,
     prefix,
@@ -14338,20 +13898,20 @@ async function installCommand(args = {}, deps = {}) {
     installed: await pathExists6(binPath),
     installCommand: `make -C ${pluginRoot(deps)} install-local PREFIX=${prefix}`,
     cliPath: cliWrapperPath(deps),
-    version: CLI_VERSION6
+    version: CLI_VERSION4
   });
 }
 async function upgradeCommand(args = {}, deps = {}) {
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown upgrade action: ${action}`);
-  const prefix = resolve13(optionalString8(args.prefix) ?? join17(deps.homeDir ?? homedir2(), ".local"));
-  return toolJson32({
+  const prefix = resolve16(optionalString8(args.prefix) ?? join19(deps.homeDir ?? homedir2(), ".local"));
+  return toolJson29({
     available: true,
     action,
     prefix,
-    currentVersion: CLI_VERSION6,
-    latestVersion: CLI_VERSION6,
+    currentVersion: CLI_VERSION4,
+    latestVersion: CLI_VERSION4,
     upgradeAvailable: false,
     reason: "No packaged remote upgrade source is configured; local plugin version is authoritative."
   });
@@ -14360,23 +13920,23 @@ async function releaseCommand(args = {}, deps = defaultPluginSelfManagementDepen
   const positionals = Array.isArray(args._) ? args._ : [];
   const action = requireString25(args.action ?? positionals[0] ?? "check", "action");
   if (action !== "check") throw new Error(`Unknown release action: ${action}`);
-  const outsideCwd = resolve13(String(args.cwd ?? await mkdtemp(join17(deps.tmpDir ?? tmpdir2(), "expo-ios-release-"))));
+  const outsideCwd = resolve16(String(args.cwd ?? await mkdtemp(join19(deps.tmpDir ?? tmpdir2(), "expo98-release-"))));
   await mkdir16(outsideCwd, { recursive: true });
-  const fixture = join17(outsideCwd, "routes-fixture");
-  await mkdir16(join17(fixture, "app"), { recursive: true });
-  await writeJsonFile9(join17(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
-  await writeFile11(join17(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
+  const fixture = join19(outsideCwd, "routes-fixture");
+  await mkdir16(join19(fixture, "app"), { recursive: true });
+  await writeJsonFile9(join19(fixture, "package.json"), { dependencies: { expo: "^54.0.0", "expo-router": "^6.0.0" } });
+  await writeFile11(join19(fixture, "app", "index.tsx"), "export default function Index() { return null; }\n", "utf8");
   const checks = [
-    await releaseCheck("version", ["--version"], outsideCwd, (result) => result.stdout.trim() === CLI_VERSION6, deps),
+    await releaseCheck("version", ["--version"], outsideCwd, (result) => result.stdout.trim() === CLI_VERSION4, deps),
     await releaseCheck("help", ["--help"], outsideCwd, (result) => result.stdout.includes("perf") && result.stdout.includes("dashboard"), deps),
     await releaseCheck("doctor-json", ["--json", "doctor"], outsideCwd, (result) => JSON.parse(result.stdout).ok === true, deps),
     await releaseCheck("routes-fixture-json", ["--json", "routes", "--cwd", fixture], outsideCwd, (result) => JSON.parse(result.stdout).data.routeCount >= 1, deps)
   ];
-  return toolJson32({
+  return toolJson29({
     available: checks.every((check) => check.ok),
     action,
     cwd: outsideCwd,
-    version: CLI_VERSION6,
+    version: CLI_VERSION4,
     checks,
     limitations: ["Release checks verify local CLI packaging behavior; they do not publish or mutate git state."]
   });
@@ -14397,25 +13957,25 @@ async function releaseCheck(name, argv, cwd, predicate, deps = defaultPluginSelf
       name,
       ok,
       exitCode: ok ? 0 : 1,
-      stdout: truncate17(result.stdout, 1e3),
-      stderr: truncate17(result.stderr, 1e3)
+      stdout: truncate16(result.stdout, 1e3),
+      stderr: truncate16(result.stderr, 1e3)
     };
   } catch (error) {
-    return { name, ok: false, exitCode: 1, error: formatError15(error) };
+    return { name, ok: false, exitCode: 1, error: formatError13(error) };
   }
 }
 function cliWrapperPath(deps = {}) {
-  return join17(pluginRoot(deps), "cli", "expo98.mjs");
+  return join19(pluginRoot(deps), "cli", "expo98.mjs");
 }
 function pluginRoot(deps = {}) {
-  return resolve13(deps.pluginRoot ?? findPackageRoot(dirname10(new URL(import.meta.url).pathname)));
+  return resolve16(deps.pluginRoot ?? findPackageRoot(dirname11(new URL(import.meta.url).pathname)));
 }
 function findPackageRoot(start) {
-  let current = resolve13(start);
+  let current = resolve16(start);
   while (true) {
-    if (existsSync(join17(current, "package.json")) && existsSync(join17(current, "cli"))) return current;
-    const parent = dirname10(current);
-    if (parent === current) return resolve13(start);
+    if (existsSync(join19(current, "package.json")) && existsSync(join19(current, "cli"))) return current;
+    const parent = dirname11(current);
+    if (parent === current) return resolve16(start);
     current = parent;
   }
 }
@@ -14428,7 +13988,7 @@ async function pathExists6(file) {
   }
 }
 async function writeJsonFile9(file, value) {
-  await mkdir16(dirname10(file), { recursive: true });
+  await mkdir16(dirname11(file), { recursive: true });
   await writeFile11(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
@@ -14439,151 +13999,38 @@ function requireString25(value, name) {
 function optionalString8(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-function truncate17(value, max = 4e4) {
+function truncate16(value, max = 4e4) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...[truncated ${text.length - max} chars]`;
 }
-function formatError15(error) {
+function formatError13(error) {
   const record = error && typeof error === "object" ? error : null;
   return record?.message == null ? String(error) : String(record.message);
 }
 function execFile10(file, argv, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile12(file, argv, { cwd: options.cwd, timeout: options.timeout, maxBuffer: 4 * 1024 * 1024 }, (_error, stdout, stderr) => {
-      resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      resolve18({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   });
 }
 
-// src/modules/live-backlog/src/main/index.ts
+// src/commands/live-backlog/src/main/index.ts
 import { execFile as nodeExecFile13 } from "node:child_process";
-import { mkdir as fsMkdir3, readdir as fsReaddir, writeFile as fsWriteFile3 } from "node:fs/promises";
-import { join as join18, resolve as resolve14 } from "node:path";
+import { mkdir as fsMkdir4, readdir as fsReaddir, writeFile as fsWriteFile4 } from "node:fs/promises";
+import { join as join20, resolve as resolve17 } from "node:path";
 var EXIT_SUCCESS2 = 0;
 var EXIT_INVALID_USAGE5 = 2;
-var COMMAND_ALIASES = {
-  "doctor": "doctor",
-  "project-info": "project_info",
-  "routes": "expo_router_sitemap",
-  "devices": "list_devices",
-  "session": "session",
-  "target": "target",
-  "snapshot": "snapshot",
-  "refs": "refs",
-  "get": "get_ref",
-  "find": "find",
-  "wait": "wait",
-  "batch": "batch",
-  "boot-simulator": "boot_simulator",
-  "open-url": "open_url",
-  "launch-app": "launch_app",
-  "terminate-app": "terminate_app",
-  "reload-app": "reload_app",
-  "open-dev-menu": "runtime_inspector",
-  "install-app": "install_app",
-  "uninstall-app": "uninstall_app",
-  "long-press": "ref_action",
-  "dbltap": "ref_action",
-  "fill": "ref_action",
-  "type": "keyboard",
-  "press": "keyboard",
-  "focus": "ref_action",
-  "blur": "ref_action",
-  "select": "ref_action",
-  "check": "ref_action",
-  "uncheck": "ref_action",
-  "drag": "ref_action",
-  "scroll": "ref_action",
-  "scroll-into-view": "ref_action",
-  "clipboard": "clipboard",
-  "keyboard": "keyboard",
-  "set": "set_environment",
-  "logs": "collect_app_logs",
-  "screenshot": "automation_take_screenshot",
-  "tap": "automation_tap",
-  "gesture": "automation_gesture",
-  "open-route": "open_expo_route",
-  "ux-context": "capture_ux_context",
-  "annotate-screen": "annotate_screen",
-  "inspector": "runtime_inspector",
-  "review-overlay": "review_overlay",
-  "review-overlay-server": "review_overlay",
-  "review-next": "review_next_step",
-  "annotation-server": "annotation_server",
-  "devtools": "devtools",
-  "console": "console",
-  "errors": "errors",
-  "metro": "metro",
-  "profiler": "perf",
-  "navigation": "navigation",
-  "network": "network",
-  "storage": "storage",
-  "state": "state",
-  "controls": "controls",
-  "bridge": "bridge",
-  "accessibility": "accessibility",
-  "dialog": "dialog",
-  "sheet": "sheet",
-  "record": "record",
-  "diff": "diff",
-  "inspect": "debug_inspect",
-  "highlight": "highlight",
-  "expo": "expo",
-  "rn": "rn",
-  "perf": "perf",
-  "dashboard": "dashboard",
-  "review": "review",
-  "policy": "policy",
-  "redact": "redact",
-  "skills": "skills",
-  "install": "install",
-  "upgrade": "upgrade",
-  "release": "release",
-  "live-backlog": "live_backlog",
-  "trace": "trace_interaction"
-};
-var LIVE_BACKLOG_MANIPULATING_COMMANDS = [
-  "boot-simulator",
-  "open-url",
-  "launch-app",
-  "terminate-app",
-  "reload-app",
-  "open-dev-menu",
-  "install-app",
-  "uninstall-app",
-  "tap",
-  "gesture",
-  "long-press",
-  "dbltap",
-  "fill",
-  "type",
-  "press",
-  "focus",
-  "blur",
-  "select",
-  "check",
-  "uncheck",
-  "drag",
-  "scroll",
-  "scroll-into-view",
-  "clipboard",
-  "keyboard",
-  "set",
-  "navigation",
-  "storage",
-  "state",
-  "controls",
-  "dialog",
-  "sheet"
-];
+var COMMAND_ALIASES2 = commandAliases();
+var LIVE_BACKLOG_MANIPULATING_COMMANDS = manipulatingCommandNames();
 var ADAPTER_SELF_CHECK_FINDINGS = [
   {
     command: "snapshot",
     domain: "semantic",
     status: "wired",
     reason: "Semantic snapshot capture evaluates app instrumentation through the shared Hermes CDP transport and falls back to native accessibility only when bridge data is unavailable.",
-    sourceFile: "src/modules/snapshot-evidence/src/main/snapshot-command.ts",
+    sourceFile: "src/commands/snapshot-evidence/src/main/snapshot-command.ts",
     recommendedFix: null
   },
   {
@@ -14591,7 +14038,7 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     domain: "react-native",
     status: "wired",
     reason: "React Native introspection delegates to bridge-domain Runtime.evaluate using __EXPO_IOS_RN_BRIDGE__ and instrumentation fallbacks.",
-    sourceFile: "src/modules/rn-introspection/src/main/index.ts",
+    sourceFile: "src/commands/rn-introspection/src/main/index.ts",
     recommendedFix: null
   },
   {
@@ -14599,7 +14046,7 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     domain: "diagnostics",
     status: "wired",
     reason: "Runtime diagnostics use the shared Hermes CDP evaluator by default.",
-    sourceFile: "src/modules/devtools-diagnostics/src/main/index.ts",
+    sourceFile: "src/commands/devtools-diagnostics/src/main/index.ts",
     recommendedFix: null
   },
   {
@@ -14607,7 +14054,7 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     domain: "runtime",
     status: "wired",
     reason: "Runtime.evaluate-backed commands share the Hermes CDP transport with loopback URL normalization and Metro Origin headers.",
-    sourceFile: "src/modules/hermes-cdp-client/src/main/index.ts",
+    sourceFile: "src/platform/hermes-cdp-client/src/main/index.ts",
     recommendedFix: null
   },
   {
@@ -14615,7 +14062,7 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     domain: "validation",
     status: "runtime-dependent",
     reason: "Waterfall output is wired, but phase-level timing is only validated when the app bridge emits startedAt/endedAt and metadata-only request rows.",
-    sourceFile: "src/modules/network-evidence/src/main/index.ts",
+    sourceFile: "src/commands/network-evidence/src/main/index.ts",
     recommendedFix: "Mount the upgraded dev-only network bridge before making network waterfall claims."
   },
   {
@@ -14623,7 +14070,7 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     domain: "performance-validation",
     status: "runtime-dependent",
     reason: "Performance outputs now include realValidation and mark placeholder action/frame metrics partial until interaction, render, frame, or native sample evidence is present.",
-    sourceFile: "src/modules/perf-evidence/src/main/index.ts",
+    sourceFile: "src/commands/perf-evidence/src/main/index.ts",
     recommendedFix: "Use perf interaction start/stop and perf report for bottleneck claims."
   },
   {
@@ -14631,32 +14078,32 @@ var ADAPTER_SELF_CHECK_FINDINGS = [
     domain: "render-validation",
     status: "runtime-dependent",
     reason: "Render cost claims require React Profiler commit durations; empty commit arrays are reported as partial evidence.",
-    sourceFile: "src/modules/rn-introspection/src/main/index.ts",
+    sourceFile: "src/commands/rn-introspection/src/main/index.ts",
     recommendedFix: "Mount the dev-only Profiler wrapper and rerun rn renders start/read/stop."
   }
 ];
-function toolJson33(value) {
+function toolJson30(value) {
   return { content: [{ type: "text", text: `${JSON.stringify(value, null, 2)}
 ` }] };
 }
 async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependencies) {
   const action = requireString26(args.action ?? firstPositional3(args) ?? "matrix", "action");
   if (!["matrix", "self-check", "run"].includes(action)) throw new Error(`Unknown live-backlog action: ${action}`);
-  const cwd = resolve14(args.cwd ?? process.cwd());
+  const cwd = resolve17(args.cwd ?? process.cwd());
   const scope = args.scope ?? "smoke";
   const matrix = buildLiveBacklogMatrix({ ...args, cwd, scope });
   const selfCheck = liveBacklogSelfCheck(matrix);
   if (action === "self-check") {
-    return toolJson33({ available: selfCheck.ok, action, cwd, scope, selfCheck, source: matrix.source, rowCount: matrix.rows.length });
+    return toolJson30({ available: selfCheck.ok, action, cwd, scope, selfCheck, source: matrix.source, rowCount: matrix.rows.length });
   }
   if (action === "matrix") {
-    return toolJson33({ available: true, action, cwd, scope, source: matrix.source, selfCheck, rowCount: matrix.rows.length, rows: matrix.rows });
+    return toolJson30({ available: true, action, cwd, scope, source: matrix.source, selfCheck, rowCount: matrix.rows.length, rows: matrix.rows });
   }
   if (!selfCheck.ok) {
-    return toolJson33({ available: false, action, cwd, scope, source: matrix.source, selfCheck, reason: "Live backlog self-check failed before executing rows." });
+    return toolJson30({ available: false, action, cwd, scope, source: matrix.source, selfCheck, reason: "Live backlog self-check failed before executing rows." });
   }
-  const outputDir = resolve14(args.outputDir ?? join18(cwd, ".scratch", "expo-ios", "live-backlog", isoStamp3(deps)));
-  await (deps.mkdir ?? fsMkdir3)(outputDir, { recursive: true });
+  const outputDir = resolve17(args.outputDir ?? join20(cwd, ".scratch", "expo98", "live-backlog", isoStamp3(deps)));
+  await (deps.mkdir ?? fsMkdir4)(outputDir, { recursive: true });
   const rows = [];
   for (const row of matrix.rows) {
     rows.push(await runLiveBacklogRow(row, { ...args, cwd, outputDir }, deps));
@@ -14679,15 +14126,15 @@ async function liveBacklogCommand(args = {}, deps = defaultLiveBacklogDependenci
       "Runtime rows can be classified environment-blocked when Metro/Hermes target evidence is absent; those rows are not live passes."
     ]
   };
-  const reportPath = join18(outputDir, "live-backlog-report.json");
+  const reportPath = join20(outputDir, "live-backlog-report.json");
   await writeJsonFile10(reportPath, report, deps);
-  return toolJson33({ ...report, reportPath });
+  return toolJson30({ ...report, reportPath });
 }
 var defaultLiveBacklogDependencies = {
   execFile: execFile11
 };
 function buildLiveBacklogMatrix(args = {}) {
-  const dispatcherCommands = Object.keys(COMMAND_ALIASES).sort();
+  const dispatcherCommands = Object.keys(COMMAND_ALIASES2).sort();
   const helpCommands = parseHelpCommandNames(cliHelpText2()).sort();
   const allRows = orderLiveBacklogRows(dispatcherCommands.map((command) => liveBacklogRowForCommand(command, args)));
   const smokeCommands = /* @__PURE__ */ new Set(["doctor", "project-info", "routes", "devices", "metro", "devtools", "console", "errors", "expo", "bridge", "policy", "skills", "install", "upgrade", "live-backlog"]);
@@ -14707,7 +14154,7 @@ function buildLiveBacklogMatrix(args = {}) {
       rowSubsetCount: rows.length,
       rowSubset: rows.map((row) => row.command),
       unrepresentedDispatcherCommands: dispatcherCommands.filter((command) => !representedCommands.has(command)),
-      unrepresentedHelpCommands: helpCommands.filter((command) => COMMAND_ALIASES[command] && !representedCommands.has(command))
+      unrepresentedHelpCommands: helpCommands.filter((command) => COMMAND_ALIASES2[command] && !representedCommands.has(command))
     },
     rows
   };
@@ -14725,7 +14172,7 @@ function liveBacklogRowForCommand(command, args = {}) {
   return {
     id: template.id ?? command.replace(/[^a-z0-9]+/g, "-"),
     command,
-    exactCommand: ["expo-ios", "--json", ...template.argv],
+    exactCommand: ["expo98", "--json", ...template.argv],
     argv: template.argv,
     scope: template.scope ?? "full",
     expectedClass: template.expectedClass ?? (requirements.length ? "live-pass" : "static-pass"),
@@ -14825,7 +14272,7 @@ function liveBacklogTemplate(command, _args = {}) {
     case "gesture":
       return { argv: ["gesture", "tap", "--x", "1", "--y", "1", "--dry-run", "true"], requirements: ["simulator"], scope: "full" };
     case "open-route":
-      return { argv: ["open-route", "/", ...cwdArg], requirements: ["project-scheme", "simulator"], scope: "full" };
+      return { argv: ["open-route", "/", ...cwdArg, ...policyArg], requirements: ["project-scheme", "simulator", "action-policy"], scope: "full" };
     case "ux-context":
       return { argv: ["ux-context", ...cwdArg, ...metroArg], requirements: ["simulator", "metro"] };
     case "annotate-screen":
@@ -14938,7 +14385,7 @@ function liveBacklogSelfCheck(matrix) {
     }
   }
   for (const command of LIVE_BACKLOG_MANIPULATING_COMMANDS) {
-    if (COMMAND_ALIASES[command] && !matrix.source.dispatcherCommands.includes(command)) issues.push({ type: "missing-live-action-dispatcher", command });
+    if (COMMAND_ALIASES2[command] && !matrix.source.dispatcherCommands.includes(command)) issues.push({ type: "missing-live-action-dispatcher", command });
   }
   for (const row of matrix.rows) {
     if (!Array.isArray(row.argv) || row.argv.length === 0) issues.push({ type: "missing-command-argv", rowId: row.id });
@@ -14960,23 +14407,23 @@ function liveBacklogSelfCheck(matrix) {
   };
 }
 async function runLiveBacklogRow(row, args, deps = defaultLiveBacklogDependencies) {
-  const rowDir = join18(args.outputDir, row.id);
-  await (deps.mkdir ?? fsMkdir3)(rowDir, { recursive: true });
+  const rowDir = join20(args.outputDir, row.id);
+  await (deps.mkdir ?? fsMkdir4)(rowDir, { recursive: true });
   for (const file of liveBacklogTemplate(row.command, args).setupFiles ?? []) {
-    await (deps.writeFile ?? fsWriteFile3)(join18(rowDir, file.path), file.content, "utf8");
+    await (deps.writeFile ?? fsWriteFile4)(join20(rowDir, file.path), file.content, "utf8");
   }
   if (row.argv.includes("__ACTION_POLICY__")) {
-    await writeJsonFile10(join18(rowDir, "action-policy.json"), {
+    await writeJsonFile10(join20(rowDir, "action-policy.json"), {
       allow: ["set.appearance", "install-app", "uninstall-app", "storage.set", "storage.clear", "state.load", "state.clear", "controls.press", "navigation.back", "navigation.tab"]
     }, deps);
   }
   if (row.argv.includes("__APP_PATH__")) {
-    await (deps.mkdir ?? fsMkdir3)(join18(rowDir, "missing.app"), { recursive: true });
+    await (deps.mkdir ?? fsMkdir4)(join20(rowDir, "missing.app"), { recursive: true });
   }
-  const stateDir = join18(rowDir, "runs");
+  const stateDir = join20(rowDir, "runs");
   const argv = ["--json", "--state-dir", stateDir, ...materializeLiveBacklogArgv(row.argv, args, rowDir)];
   const executable2 = deps.processExecPath ?? process.execPath;
-  const cli = deps.cliWrapperPath ?? join18(resolve14("."), "cli", "expo-ios.mjs");
+  const cli = deps.cliWrapperPath ?? join20(resolve17("."), "cli", "expo98.mjs");
   const exactCommand = [executable2, cli, ...argv];
   const startedAt = (deps.now?.() ?? /* @__PURE__ */ new Date()).toISOString();
   if (!deps.execFile) throw new Error("No subprocess adapter is configured.");
@@ -14987,12 +14434,12 @@ async function runLiveBacklogRow(row, args, deps = defaultLiveBacklogDependencie
     rejectOnError: false
   });
   const exitCode = result.error?.code ?? 0;
-  const stdoutPath = join18(rowDir, "stdout.json");
-  const stderrPath = join18(rowDir, "stderr.log");
-  const exitCodePath = join18(rowDir, "exit-code.txt");
-  await (deps.writeFile ?? fsWriteFile3)(stdoutPath, result.stdout, "utf8");
-  await (deps.writeFile ?? fsWriteFile3)(stderrPath, result.stderr, "utf8");
-  await (deps.writeFile ?? fsWriteFile3)(exitCodePath, `${exitCode}
+  const stdoutPath = join20(rowDir, "stdout.json");
+  const stderrPath = join20(rowDir, "stderr.log");
+  const exitCodePath = join20(rowDir, "exit-code.txt");
+  await (deps.writeFile ?? fsWriteFile4)(stdoutPath, result.stdout, "utf8");
+  await (deps.writeFile ?? fsWriteFile4)(stderrPath, result.stderr, "utf8");
+  await (deps.writeFile ?? fsWriteFile4)(exitCodePath, `${exitCode}
 `, "utf8");
   const parsed = parseBacklogJson(result.stdout);
   const classification = classifyLiveBacklogRow(row, exitCode, parsed);
@@ -15022,10 +14469,10 @@ function materializeLiveBacklogArgv(argv, args, rowDir) {
     "__BUNDLE_ID__": args.bundleId ?? "com.maddie.console",
     "__DEVICE__": args.device ?? "booted",
     "__DEV_CLIENT_URL__": args.devClientUrl ?? "exp+maddie://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081",
-    "__ACTION_POLICY__": args.actionPolicy ?? join18(rowDir, "action-policy.json"),
+    "__ACTION_POLICY__": args.actionPolicy ?? join20(rowDir, "action-policy.json"),
     "__OUTPUT_DIR__": args.outputDir,
     "__ROW_DIR__": rowDir,
-    "__APP_PATH__": join18(rowDir, "missing.app")
+    "__APP_PATH__": join20(rowDir, "missing.app")
   };
   return argv.map((part) => {
     let materialized = part;
@@ -15089,7 +14536,7 @@ function summarizeBacklogPayload(parsed) {
 }
 async function listJsonFiles(dir, deps = {}) {
   const entries = await Promise.resolve((deps.readdir ?? fsReaddir)(dir)).catch(() => []);
-  return entries.filter((entry) => entry.endsWith(".json")).sort().map((entry) => join18(dir, entry));
+  return entries.filter((entry) => entry.endsWith(".json")).sort().map((entry) => join20(dir, entry));
 }
 function summarizeLiveBacklogRows(rows) {
   const classifications = {};
@@ -15105,11 +14552,11 @@ function summarizeLiveBacklogRows(rows) {
   };
 }
 function cliHelpText2() {
-  const commands = Object.keys(COMMAND_ALIASES).sort();
+  const commands = Object.keys(COMMAND_ALIASES2).sort();
   return `Discovery:
 ${commands.map((command) => `  ${command}`).join("\n")}
 Examples:
-  expo-ios doctor
+  expo98 doctor
 `;
 }
 function requireString26(value, name) {
@@ -15117,7 +14564,7 @@ function requireString26(value, name) {
   return value.trim();
 }
 async function writeJsonFile10(file, value, deps = {}) {
-  await (deps.writeFile ?? fsWriteFile3)(file, `${JSON.stringify(value, null, 2)}
+  await (deps.writeFile ?? fsWriteFile4)(file, `${JSON.stringify(value, null, 2)}
 `, "utf8");
 }
 function isoStamp3(deps = {}) {
@@ -15127,13 +14574,13 @@ function firstPositional3(args) {
   return Array.isArray(args._) ? args._[0] : void 0;
 }
 function execFile11(file, argv, options) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve18) => {
     nodeExecFile13(file, argv, {
       cwd: options.cwd,
       timeout: options.timeout,
       maxBuffer: options.maxBuffer
     }, (error, stdout, stderr) => {
-      resolve15({
+      resolve18({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
         error: error && typeof error === "object" && "code" in error ? { code: Number(error.code) } : error ? { code: 1 } : null
@@ -15143,7 +14590,7 @@ function execFile11(file, argv, options) {
 }
 
 // src/bundled-cli.ts
-var CLI_VERSION7 = "0.1.0";
+var CLI_VERSION5 = "0.1.0";
 var handlerImplementations = {
   doctor: expo98Doctor,
   projectInfo,
@@ -15178,7 +14625,7 @@ var handlerImplementations = {
   runtimeInspector,
   reviewOverlay,
   reviewNextStep,
-  annotationServer,
+  removedAnnotationServerCommand,
   devtoolsCommand,
   consoleCommand,
   errorsCommand,
@@ -15227,8 +14674,8 @@ var runtime = createCliRuntime({
   startRunRecord,
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
-  printHelp: () => cliHelpText(CLI_VERSION7).replaceAll("expo-ios", "expo98"),
-  cliVersion: CLI_VERSION7
+  printHelp: () => cliHelpText(CLI_VERSION5),
+  cliVersion: CLI_VERSION5
 });
 var executable = createCliExecutable({
   argv: () => process.argv,
@@ -15245,7 +14692,7 @@ void executable.run();
 async function expo98Doctor(args = {}) {
   const result = await doctor(args);
   const payload = unwrapToolJson(result);
-  const cli = typeof payload.cli === "object" && payload.cli !== null ? { ...payload.cli, name: "expo98", bin: "expo98" } : { name: "expo98", version: CLI_VERSION7, bin: "expo98" };
+  const cli = typeof payload.cli === "object" && payload.cli !== null ? { ...payload.cli, name: "expo98", bin: "expo98" } : { name: "expo98", version: CLI_VERSION5, bin: "expo98" };
   return toolJson({
     ...payload,
     cli,
@@ -15258,7 +14705,7 @@ async function expo98Doctor(args = {}) {
       name: "expo98",
       entrypoint: "cli/expo98.mjs",
       bundledExecutable: true,
-      compatibilityBin: "expo-ios"
+      compatibilityBin: COMPATIBILITY_CLI_NAME
     }
   });
 }

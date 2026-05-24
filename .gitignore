@@ -4,6 +4,7 @@ node_modules/
 .cache/
 .scratch/
 .clawpatch/
+.desloppify/
 coverage/
 dist/
 *.tgz
