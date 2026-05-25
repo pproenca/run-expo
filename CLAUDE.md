@@ -57,7 +57,7 @@ The mechanism, implemented in `@expo98/core` `dispatch.ts` + `capabilities.ts`:
 
 This is why the legacy `trace`/`inspector` ungated-runtime-eval bug (AC-010/011) is
 _impossible to reintroduce_: it's proven at the type level in
-`core/test/capability-injection.type-test.ts` (the `@ts-expect-error` lines).
+`core/test/capability-injection.test.ts` (the `@ts-expect-error` lines).
 **When you build handler packages: never let a handler import a protocol's eval/device
 surface directly — receive it from the dispatcher via `R`.** Do not classify by
 action-name string.

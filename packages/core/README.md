@@ -46,7 +46,7 @@ The pure spine imports nothing platform-specific (no `@effect/platform-node`).
 
 ### The crux — capability injection (compile-time proof)
 
-`test/capability-injection.type-test.ts` uses `@ts-expect-error` to prove a
+`test/capability-injection.test.ts` uses `@ts-expect-error` to prove a
 `read`-classed handler **cannot** reference the runtime-eval/device/source-write
 capability, and that a `runtime-eval`/`device` handler can require **only** its
 matching capability. These directives make `tsc --noEmit` pass _because_ the
@@ -63,8 +63,8 @@ mechanism each depends on is proven in `core`. Tracked as `it.skip` in
 - **AC-005** device/app lifecycle mutations gated → `packages/handlers-lifecycle`
 - **AC-006** bridge storage/state/controls gated + bounded → `packages/handlers-bridge`
 - **AC-007** navigation mutations gated (state ungated) → `packages/handlers-devtools`
-- **AC-010** `trace` gated as runtime-eval → `packages/handlers-devtools` (mechanism proven by `capability-injection.type-test`)
-- **AC-011** `inspector` mutations gated, reads classified read → `packages/handlers-devtools` (mechanism proven by `capability-injection.type-test`)
+- **AC-010** `trace` gated as runtime-eval → `packages/handlers-devtools` (mechanism proven by `capability-injection.test`)
+- **AC-011** `inspector` mutations gated, reads classified read → `packages/handlers-devtools` (mechanism proven by `capability-injection.test`)
 
 ## How AC-010/AC-011 become a compile-time guarantee
 
