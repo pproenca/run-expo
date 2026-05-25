@@ -95,6 +95,25 @@ describe("Final integration — full command surface", () => {
     }
   })
 
+  it.effect("keeps mixed-family registration metadata aligned with built command classes", () =>
+    Effect.gen(function* () {
+      const fs = yield* makeMemoryFs()
+      const cases = [
+        ["inspector probe", "read"],
+        ["inspector toggle", "runtime-eval"],
+        ["inspector open-dev-menu", "device"],
+        ["navigation state", "read"],
+        ["navigation back", "device"],
+      ] as const
+      for (const [path, sideEffect] of cases) {
+        const reg = registry.get(path)
+        expect(reg, `missing wired path: ${path}`).toBeDefined()
+        expect(reg!.sideEffect).toBe(sideEffect)
+        expect(reg!.build({ positionals: [], policy: {}, fs }).descriptor.sideEffect).toBe(sideEffect)
+      }
+    }),
+  )
+
   it.effect("read command (doctor) → ok envelope, exit 0 through the assembled path", () =>
     Effect.gen(function* () {
       const fs = yield* makeMemoryFs()

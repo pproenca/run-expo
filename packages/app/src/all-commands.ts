@@ -37,9 +37,11 @@ import {
 } from "@expo98/handlers-artifacts"
 import {
   inspectorCommand,
+  inspectorSideEffect,
   type InspectorVerb,
   logsCommand,
   navigationCommand,
+  navigationSideEffect,
   type NavigationVerb,
   traceCommand,
   type TraceVerb,
@@ -113,7 +115,7 @@ const inspectorRegs = INSPECTOR_VERBS.map((verb) =>
   eraseRegistration({
     path: `inspector ${verb}`,
     summary: `In-app inspector: ${verb}.`,
-    sideEffect: "read",
+    sideEffect: inspectorSideEffect(verb),
     build: () => inspectorCommand(verb),
   } as CommandRegistration),
 )
@@ -123,7 +125,7 @@ const navigationRegs = NAVIGATION_VERBS.map((verb) =>
   eraseRegistration({
     path: `navigation ${verb}`,
     summary: `Navigation: ${verb} (mutations gated as device).`,
-    sideEffect: "read",
+    sideEffect: navigationSideEffect(verb),
     build: (ctx: CommandContext) => navigationCommand(verb, { target: ctx.positionals[0] }),
   } as CommandRegistration),
 )

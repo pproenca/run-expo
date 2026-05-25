@@ -79,6 +79,12 @@ export type Expo98BridgeRegistration = {
   readonly domains: ReadonlyArray<string>
 }
 
+type Expo98Global = typeof globalThis & { readonly __DEV__?: boolean }
+
+declare global {
+  var __EXPO98_DEVTOOLS_BRIDGE__: Expo98BridgeRegistration | undefined
+}
+
 /**
  * The ONLY registration path (AC-009). Refuses outside development:
  *   - typeof __DEV__ === "undefined" → "development-mode-required"
@@ -88,8 +94,7 @@ export type Expo98BridgeRegistration = {
 export function registerExpo98DevtoolsBridge():
   | { ok: true; registration: Expo98BridgeRegistration }
   | { ok: false; reason: "development-mode-required" | "production-build" } {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dev = (globalThis as any).__DEV__
+  const dev = (globalThis as Expo98Global).__DEV__
   if (typeof dev === "undefined") {
     return { ok: false, reason: "development-mode-required" }
   }
@@ -101,8 +106,7 @@ export function registerExpo98DevtoolsBridge():
     schemaVersion: ${BRIDGE_SCHEMA_VERSION},
     domains: ${JSON.stringify(BRIDGE_DOMAINS)}
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(globalThis as any).__EXPO98_DEVTOOLS_BRIDGE__ = registration
+  globalThis.__EXPO98_DEVTOOLS_BRIDGE__ = registration
   return { ok: true, registration }
 }
 `
