@@ -23,7 +23,7 @@ import { Fs } from "@expo98/domain"
  * CDP, package-controlled read-only expression). `// SEAM (Expo SDK)`: a live
  * probe needs a running Metro/Hermes target; tests inject a fake `HermesEvidence`.
  */
-import { type CdpEvaluateResult, HermesEvidence } from "@expo98/protocols"
+import { type CdpEvaluateResult, HermesEvidence, HermesReadOnlyExpression } from "@expo98/protocols"
 import { Effect } from "effect"
 import { BRIDGE_DOMAINS, BRIDGE_SCHEMA_VERSION, EXPO98_BRIDGE_VERSION } from "./bridge-files.js"
 import { type InstallStateResult, readInstallState } from "./install-state.js"
@@ -108,18 +108,8 @@ const unavailable = (step: HealthStep, code: HealthUnavailableCode, reason: stri
   reason,
 })
 
-/** Package-controlled read-only probe expression (the legitimate `read` use). */
-export const REGISTRATION_PROBE_EXPRESSION = `(function () {
-  var b = globalThis.__EXPO98_DEVTOOLS_BRIDGE__;
-  var dev = typeof __DEV__ === "undefined" ? "undefined" : (__DEV__ === false ? "false" : "true");
-  return {
-    bridgePresent: typeof b !== "undefined" && b !== null,
-    registered: !!(b && b.version),
-    devMode: dev,
-    version: b && b.version,
-    schemaVersion: b && b.schemaVersion
-  };
-})()`
+/** Package-controlled read-only probe id (the legitimate `read` use). */
+export const REGISTRATION_PROBE_EXPRESSION = HermesReadOnlyExpression.BridgeRegistrationProbe
 
 const parseProbe = (value: unknown): RegistrationProbe => {
   if (typeof value !== "object" || value === null) {

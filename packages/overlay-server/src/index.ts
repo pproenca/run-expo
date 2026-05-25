@@ -86,4 +86,12 @@ export {
 } from "./sidecar.js"
 
 // Real-server seam (the `server` action) — live bind is it.skip'd
-export { findAvailablePort, overlayHttpApp, overlayServerLayer, type ServerOptions } from "./server.js"
+export {
+  type CappedBodyRead,
+  findAvailablePort,
+  launchOverlayServerLayer,
+  overlayHttpApp,
+  overlayServerLayer,
+  readCappedText,
+  type ServerOptions,
+} from "./server.js"

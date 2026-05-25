@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import { describe, expect, it } from "@effect/vitest"
 /**
  * AC-014 — Review-overlay local server is hardened (the FIX).
@@ -21,12 +22,15 @@ import { Effect, Layer } from "effect"
 import {
   checkOrigin,
   EventsStoreTag,
+  findAvailablePort,
   handleRequest,
   type HandlerConfig,
+  launchOverlayServerLayer,
   isLoopbackHost,
   makeHandlerConfig,
   memoryEventsStoreLayer,
   type OverlayRequest,
+  readCappedText,
   TOKEN_HEADER,
   tokensMatch,
   validateEndpointPath,
@@ -84,6 +88,50 @@ describe("AC-014 PURE hardening primitives", () => {
     expect(tokensMatch(TOKEN, undefined)).toBe(false)
     expect(tokensMatch("", "")).toBe(false) // empty expected is never a match
   })
+
+  it.effect("findAvailablePort skips busy ports through the injected probe", () =>
+    Effect.gen(function* () {
+      const seen: Array<number> = []
+      const port = yield* findAvailablePort(17655, (candidate) =>
+        Effect.sync(() => {
+          seen.push(candidate)
+          return candidate === 17657
+        }),
+      )
+      expect(port).toBe(17657)
+      expect(seen).toEqual([17655, 17656, 17657])
+    }),
+  )
+
+  it.effect("launchOverlayServerLayer resolves the free port before building the layer", () =>
+    Effect.gen(function* () {
+      const seen: Array<number> = []
+      const layer = yield* launchOverlayServerLayer(
+        { token: TOKEN, eventsPath: "/events.json", port: 17655 },
+        (candidate) =>
+          Effect.sync(() => {
+            seen.push(candidate)
+            return candidate === 17656
+          }),
+      )
+      expect(layer).toBeDefined()
+      expect(seen).toEqual([17655, 17656])
+    }),
+  )
+
+  it.effect("readCappedText returns text while total chunks stay within the cap", () =>
+    Effect.gen(function* () {
+      const read = yield* readCappedText(Readable.from([Buffer.from("hello"), Buffer.from(" world")]), 16)
+      expect(read).toEqual({ _tag: "Body", body: "hello world" })
+    }),
+  )
+
+  it.effect("readCappedText stops accumulating once the cap is crossed", () =>
+    Effect.gen(function* () {
+      const read = yield* readCappedText(Readable.from([Buffer.from("hello"), Buffer.from(" world")]), 8)
+      expect(read).toEqual({ _tag: "TooLarge", limitBytes: 8, actualBytes: 11 })
+    }),
+  )
 })
 
 // ---------------------------------------------------------------------------

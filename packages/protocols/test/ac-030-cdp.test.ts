@@ -23,6 +23,7 @@ import {
   checkLoopbackUrl,
   HermesEvidence,
   HermesEvidenceLayer,
+  HermesReadOnlyExpression,
   HermesRuntimeEval,
   HermesRuntimeEvalLayer,
   isLoopbackHost,
@@ -140,7 +141,7 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
     const layer = fakeFactory(rec, (method) => (method === "Runtime.evaluate" ? { result: { value: 42 } } : {}))
     return Effect.gen(function* () {
       const evidence = yield* HermesEvidence
-      const res = yield* evidence.evaluateReadOnly("globalThis.x", {
+      const res = yield* evidence.evaluateReadOnly(HermesReadOnlyExpression.BridgeRegistrationProbe, {
         attemptedUrls: [
           "ws://evil.com:8081/debug", // must be SKIPPED, never connected
           "ws://127.0.0.1:8081/inspector/debug?page=1", // loopback, used
@@ -164,6 +165,7 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
       const ids = rec.sent.map((f) => JSON.parse(f) as { id: number; method: string })
       expect(ids[0]).toMatchObject({ id: 1, method: "Runtime.enable" })
       expect(ids[1]).toMatchObject({ id: 2, method: "Runtime.evaluate" })
+      expect(rec.sent[1]).toContain("__EXPO98_DEVTOOLS_BRIDGE__")
     }).pipe(Effect.provide(HermesEvidenceLayer.pipe(Layer.provide(layer))))
   })
 
@@ -173,7 +175,10 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
     return Effect.gen(function* () {
       const evidence = yield* HermesEvidence
       const attemptedUrls = ["ws://evil.com/debug", "ws://10.0.0.1/debug"]
-      const res = yield* evidence.evaluateReadOnly("x", { attemptedUrls, metroPort: 8081 })
+      const res = yield* evidence.evaluateReadOnly(HermesReadOnlyExpression.BridgeRegistrationProbe, {
+        attemptedUrls,
+        metroPort: 8081,
+      })
       expect(res.available).toBe(false)
       if (!res.available) {
         expect(res.diagnostics.attemptedUrls).toEqual(attemptedUrls)
@@ -219,7 +224,7 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
     })
     return Effect.gen(function* () {
       const evidence = yield* HermesEvidence
-      const res = yield* evidence.evaluateReadOnly("x", {
+      const res = yield* evidence.evaluateReadOnly(HermesReadOnlyExpression.BridgeRegistrationProbe, {
         attemptedUrls: ["ws://127.0.0.1:8081/debug"],
         metroPort: 8081,
       })

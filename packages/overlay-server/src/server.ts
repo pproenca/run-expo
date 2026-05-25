@@ -1,7 +1,8 @@
 import { createServer } from "node:http"
 import { createConnection } from "node:net"
+import type { Readable } from "node:stream"
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@effect/platform"
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
 import { Id, IdDefault } from "@expo98/core"
 import { Fs } from "@expo98/domain"
 import { Effect, Layer } from "effect"
@@ -61,6 +62,64 @@ export const findAvailablePort = (
 // Request adaptation
 // ===========================================================================
 
+export type CappedBodyRead =
+  | {
+      readonly _tag: "Body"
+      readonly body: string
+    }
+  | {
+      readonly _tag: "TooLarge"
+      readonly limitBytes: number
+      readonly actualBytes: number
+    }
+
+const chunkBuffer = (chunk: unknown): Buffer | null => {
+  if (Buffer.isBuffer(chunk)) return chunk
+  if (chunk instanceof Uint8Array) return Buffer.from(chunk)
+  if (typeof chunk === "string") return Buffer.from(chunk, "utf8")
+  return null
+}
+
+export const readCappedText = (source: Readable, limit: number): Effect.Effect<CappedBodyRead, Error> =>
+  Effect.async<CappedBodyRead, Error>((resume) => {
+    let settled = false
+    let total = 0
+    const chunks: Array<Buffer> = []
+    const cleanup = () => {
+      source.off("data", data)
+      source.off("end", end)
+      source.off("error", error)
+    }
+    const done = (effect: Effect.Effect<CappedBodyRead, Error>) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resume(effect)
+    }
+    const data = (chunk: unknown) => {
+      const buffer = chunkBuffer(chunk)
+      if (buffer === null) {
+        source.pause()
+        done(Effect.fail(new Error("Unsupported request body chunk.")))
+        return
+      }
+      total += buffer.length
+      if (total > limit) {
+        source.pause()
+        done(Effect.succeed({ _tag: "TooLarge", limitBytes: limit, actualBytes: total }))
+        return
+      }
+      chunks.push(buffer)
+    }
+    const end = () => done(Effect.succeed({ _tag: "Body", body: Buffer.concat(chunks).toString("utf8") }))
+    const error = (cause: unknown) =>
+      done(Effect.fail(cause instanceof Error ? cause : new Error("Failed to read request body.")))
+    source.on("data", data)
+    source.once("end", end)
+    source.once("error", error)
+    return Effect.sync(cleanup)
+  })
+
 /** Lower-case every header name so the handler's lookups are case-insensitive. */
 const toOverlayRequest = (req: HttpServerRequest.HttpServerRequest, body: string): OverlayRequest => {
   const headers: Record<string, string> = {}
@@ -83,10 +142,20 @@ const toOverlayRequest = (req: HttpServerRequest.HttpServerRequest, body: string
 export const overlayHttpApp = (config: HandlerConfig) =>
   Effect.gen(function* () {
     const req = yield* HttpServerRequest.HttpServerRequest
-    // Buffer the body as text. (The hard byte-cap is re-checked inside the
-    // handler; a streaming pre-cap can be layered here when wired to the app.)
-    const body = yield* req.text.pipe(Effect.orElseSucceed(() => ""))
-    const overlayReq = toOverlayRequest(req, body)
+    const read = yield* readCappedText(NodeHttpServerRequest.toIncomingMessage(req), config.maxBodyBytes).pipe(
+      Effect.orElseSucceed((): CappedBodyRead => ({ _tag: "Body", body: "" })),
+    )
+    if (read._tag === "TooLarge") {
+      return HttpServerResponse.unsafeJson(
+        {
+          ok: false,
+          error: "request body too large",
+          limitBytes: read.limitBytes,
+        },
+        { status: 413 },
+      )
+    }
+    const overlayReq = toOverlayRequest(req, read.body)
     const response = yield* handleRequest(overlayReq, config)
     return HttpServerResponse.unsafeJson(response.body, { status: response.status })
   })
@@ -111,7 +180,7 @@ export interface ServerOptions {
  * hardened app forever. Returns the bound layer; the live bind itself is
  * `it.skip`'d (needs a real socket + a running event loop).
  */
-export const overlayServerLayer = (options: ServerOptions): Layer.Layer<HttpServer.HttpServer, never, Fs> => {
+export const overlayServerLayer = (options: ServerOptions) => {
   const config = makeHandlerConfig(options.token, { endpointPath: options.endpointPath })
   const port = resolvePort(options.port ?? DEFAULT_PORT)
   const router = HttpRouter.empty.pipe(HttpRouter.all("*", overlayHttpApp(config)))
@@ -119,10 +188,14 @@ export const overlayServerLayer = (options: ServerOptions): Layer.Layer<HttpServ
     Layer.provide(fsEventsStoreLayer(options.eventsPath)),
     Layer.provide(IdDefault),
   )
-  return appLayer.pipe(
-    Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { host: BIND_HOST, port })),
-  ) as unknown as Layer.Layer<HttpServer.HttpServer, never, Fs>
+  return appLayer.pipe(Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { host: BIND_HOST, port })))
 }
+
+export const launchOverlayServerLayer = (
+  options: ServerOptions,
+  probe: (port: number) => Effect.Effect<boolean> = probePortFree,
+) =>
+  Effect.map(findAvailablePort(options.port ?? DEFAULT_PORT, probe), (port) => overlayServerLayer({ ...options, port }))
 
 // Re-export the Id default so the app's composition root can provide it.
 export { Id, IdDefault }

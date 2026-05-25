@@ -36,10 +36,10 @@ S9 service (cdp.ts)  ──talks to──▶  CdpSocketFactory  ◀──impleme
 The CDP eval surface is **split into two capabilities** so the dispatcher can withhold the dangerous
 one (architecture finding C1):
 
-| Capability tag      | Surface                                                                                                                     | Who may depend on it                                            |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `HermesEvidence`    | `evaluateReadOnly(expr, opts)` — evidence harvest via a **fixed, package-controlled** read-only expression (e.g. `network`) | `read`-classed handlers (legitimate, see legacy `network`)      |
-| `HermesRuntimeEval` | `evaluate(expr, opts)` — **arbitrary caller-supplied JS** (the `wait --fn` / `trace` / `inspector` mutation class)          | only `runtime-eval`-classed handlers, **after the gate passes** |
+| Capability tag      | Surface                                                                                                            | Who may depend on it                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `HermesEvidence`    | `evaluateReadOnly(id, opts)` — evidence harvest via a **typed, package-controlled** read-only expression registry  | `read`-classed handlers (legitimate, see legacy `network`)      |
+| `HermesRuntimeEval` | `evaluate(expr, opts)` — **arbitrary caller-supplied JS** (the `wait --fn` / `trace` / `inspector` mutation class) | only `runtime-eval`-classed handlers, **after the gate passes** |
 
 In the real system, `@expo98/core`'s Dispatch Runtime (S6) constructs `HermesRuntimeEval` and provides
 it into a handler's Effect `R` **only after** the fail-closed policy gate passes for a
@@ -58,8 +58,9 @@ from `@expo98/core`.
 - Errors: `LoopbackViolation`, `HttpTransportError`, `CdpSocketError`, `CdpMalformedFrame`,
   `CdpProtocolError`.
 - S8: `MetroProbe` (tag) + `MetroProbeLayer`; the injected `MetroHttpClient` port; result DTOs.
-- S9: `HermesEvidence` / `HermesRuntimeEval` (split tags) + their layers; `CdpSocketFactory` port;
-  `WsCdpSocketFactoryLayer` (the `ws` adapter); `assertLoopbackUrl`, `boundedOpenMs`, `originForPort`.
+- S9: `HermesEvidence` / `HermesRuntimeEval` (split tags) + their layers;
+  `HermesReadOnlyExpression`; `CdpSocketFactory` port; `WsCdpSocketFactoryLayer` (the `ws` adapter);
+  `assertLoopbackUrl`, `boundedOpenMs`, `originForPort`.
 - Network: `validateNetworkEvidence`, `resolveLimit`.
 
 ### Injected ports (the test seams)

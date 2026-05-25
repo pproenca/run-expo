@@ -16,8 +16,8 @@
  * --------------------------------------------------------------------------------------------
  * The interface is split into TWO capabilities so the dispatcher can withhold the dangerous one:
  *
- *   - `HermesEvidence` (READ-EVAL surface): harvests evidence by evaluating a FIXED, in-package
- *     read-only expression set (e.g. `network` request collection). This is the surface a
+ *   - `HermesEvidence` (READ-EVAL surface): harvests evidence by evaluating a typed, in-package
+ *     read-only expression registry (e.g. bridge registration probe). This is the surface a
  *     `read`-classed handler legitimately uses (the legacy `network` command is `read` yet
  *     evaluates JS — architecture finding C1).
  *
@@ -85,6 +85,26 @@ export type CdpEvaluateResult = { readonly available: true; readonly result: Cdp
 // Split capability surfaces (the dispatcher-withholds seam)
 // ----------------------------------------------------------------------------------------------
 
+export const HermesReadOnlyExpression = {
+  BridgeRegistrationProbe: "bridge.registrationProbe",
+} as const
+
+export type HermesReadOnlyExpression = (typeof HermesReadOnlyExpression)[keyof typeof HermesReadOnlyExpression]
+
+const readOnlyExpressions: Record<HermesReadOnlyExpression, string> = {
+  [HermesReadOnlyExpression.BridgeRegistrationProbe]: `(function () {
+  var b = globalThis.__EXPO98_DEVTOOLS_BRIDGE__;
+  var dev = typeof __DEV__ === "undefined" ? "undefined" : (__DEV__ === false ? "false" : "true");
+  return {
+    bridgePresent: typeof b !== "undefined" && b !== null,
+    registered: !!(b && b.version),
+    devMode: dev,
+    version: b && b.version,
+    schemaVersion: b && b.schemaVersion
+  };
+})()`,
+}
+
 /** Shared options for any CDP evaluation. */
 export interface CdpEvaluateOptions {
   /** Candidate `webSocketDebuggerUrl`s (from Metro /json/list). Tried in order. */
@@ -96,12 +116,15 @@ export interface CdpEvaluateOptions {
 }
 
 /**
- * READ-EVAL surface — evidence harvesting via a FIXED read-only expression. A `read`-classed
- * handler legitimately depends on this (e.g. `network`). It still goes over loopback CDP, but the
- * expression is package-controlled, not caller-supplied.
+ * READ-EVAL surface — evidence harvesting via a fixed read-only expression id. A `read`-classed
+ * handler legitimately depends on this. It still goes over loopback CDP, but the expression source
+ * is package-controlled, not caller-supplied.
  */
 export interface HermesEvidence {
-  readonly evaluateReadOnly: (expression: string, options: CdpEvaluateOptions) => Effect.Effect<CdpEvaluateResult>
+  readonly evaluateReadOnly: (
+    expression: HermesReadOnlyExpression,
+    options: CdpEvaluateOptions,
+  ) => Effect.Effect<CdpEvaluateResult>
 }
 
 export const HermesEvidence = Context.GenericTag<HermesEvidence>("@expo98/protocols/HermesEvidence")
@@ -273,7 +296,8 @@ const evaluateOverCandidates = (
 const makeEvidence = Effect.gen(function* () {
   const factory = yield* CdpSocketFactory
   return {
-    evaluateReadOnly: (expression, options) => evaluateOverCandidates(factory, expression, options),
+    evaluateReadOnly: (expression, options) =>
+      evaluateOverCandidates(factory, readOnlyExpressions[expression], options),
   } satisfies HermesEvidence
 })
 

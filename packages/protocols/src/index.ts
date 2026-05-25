@@ -45,6 +45,7 @@ export {
 export {
   HermesEvidence,
   HermesEvidenceLayer,
+  HermesReadOnlyExpression,
   HermesRuntimeEval,
   HermesRuntimeEvalLayer,
   assertLoopbackUrl,
