@@ -1,3 +1,8 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
+import { randomBytes } from "node:crypto"
+import { constants as fsConstants } from "node:fs"
+import { lstat, open as openFile, unlink } from "node:fs/promises"
+import { dirname } from "node:path"
 import { FileSystem } from "@effect/platform"
 import { NodeContext } from "@effect/platform-node"
 import {
@@ -31,8 +36,6 @@ import {
   WsCdpSocketFactoryLayer,
 } from "@expo98/protocols"
 import { Effect, Layer } from "effect"
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { dirname } from "node:path"
 
 /**
  * The node-backed Layer stack — the COMPOSITION ROOT (S12).
@@ -67,7 +70,7 @@ const makeNodeFs = Effect.gen(function* () {
       const slash = p.lastIndexOf("/")
       const dir = slash <= 0 ? "/" : p.slice(0, slash)
       const leaf = slash < 0 ? p : p.slice(slash + 1)
-      const tmp = `${dir}/.${leaf}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+      const tmp = `${dir}/.${leaf}.${Date.now()}.${randomBytes(8).toString("hex")}.tmp`
       return fs.writeFileString(tmp, contents).pipe(
         Effect.flatMap(() => fs.rename(tmp, p)),
         Effect.catchAll((cause) =>
@@ -305,11 +308,40 @@ const SourceWriteCapabilityLayer = Layer.effect(
             : Effect.die(new PathEscape({ root: lexical, candidate: path, resolved: real }))
         }),
       )
+    const rejectFinalParentSwap = (path: string): Effect.Effect<string> =>
+      rejectSymlinkAncestor(dirname(path)).pipe(Effect.as(path))
+    const writeFileNoFollow = (path: string, contents: string): Effect.Effect<void> =>
+      Effect.promise(async () => {
+        const handle = await openFile(
+          path,
+          fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
+          0o666,
+        )
+        try {
+          await handle.writeFile(contents, "utf8")
+        } finally {
+          await handle.close()
+        }
+      })
+    const deleteFileNoFollow = (path: string): Effect.Effect<void> =>
+      Effect.promise(async () => {
+        const stat = await lstat(path)
+        if (stat.isDirectory()) {
+          throw new Error("source-write deleteFile refuses to delete directories")
+        }
+        await unlink(path)
+      })
     const service: SourceWriteCapabilityService = {
       writeFile: (path, contents) =>
-        rejectSymlinkAncestor(path).pipe(Effect.flatMap((confined) => fs.writeFileString(confined, contents)), Effect.orDie),
+        rejectFinalParentSwap(path).pipe(
+          Effect.flatMap((confined) => writeFileNoFollow(confined, contents)),
+          Effect.orDie,
+        ),
       deleteFile: (path) =>
-        rejectSymlinkAncestor(path).pipe(Effect.flatMap((confined) => fs.remove(confined, { recursive: true })), Effect.orDie),
+        rejectFinalParentSwap(path).pipe(
+          Effect.flatMap((confined) => deleteFileNoFollow(confined)),
+          Effect.orDie,
+        ),
     }
     return service
   }),

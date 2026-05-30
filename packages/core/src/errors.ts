@@ -26,6 +26,11 @@ export class PathEscape extends Data.TaggedError("PathEscape")<{
   readonly resolved: string
 }> {}
 
+declare const ConfinedPathBrand: unique symbol
+
+/** A filesystem path proven to be resolved under an approved root. */
+export type ConfinedPath = string & { readonly [ConfinedPathBrand]: true }
+
 /** An external binary was not found on PATH (AC-053 / S1 Subprocess). */
 export class ToolNotFound extends Data.TaggedError("ToolNotFound")<{
   readonly tool: string

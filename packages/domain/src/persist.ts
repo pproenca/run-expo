@@ -1,5 +1,14 @@
 import { Context, Effect, Layer, Schema } from "effect"
-import { RefCache, RunRecord, SCHEMA_VERSION, SessionRecord, SnapshotResult, TargetRecord } from "./entities.js"
+import {
+  FinishedRunRecord,
+  RefCache,
+  RunRecord,
+  RunningRunRecord,
+  SCHEMA_VERSION,
+  SessionRecord,
+  SnapshotResult,
+  TargetRecord,
+} from "./entities.js"
 import { CorruptRecord, InvariantViolation, NotFound, StorageFailure } from "./errors.js"
 import { Fs } from "./fs-port.js"
 import type { FsPort } from "./fs-port.js"
@@ -111,9 +120,9 @@ export interface Persistence {
   ) => Effect.Effect<void, NotFound | CorruptRecord | StorageFailure | InvariantViolation>
 
   // -- RunRecord (AC-025) -------------------------------------------------
-  readonly runStart: (stateDir: string, record: RunRecord) => Effect.Effect<void, StorageFailure>
+  readonly runStart: (stateDir: string, record: RunningRunRecord) => Effect.Effect<void, StorageFailure>
 
-  readonly runFinish: (stateDir: string, record: RunRecord) => Effect.Effect<void, StorageFailure>
+  readonly runFinish: (stateDir: string, record: FinishedRunRecord) => Effect.Effect<void, StorageFailure>
 
   readonly runShow: (
     stateDir: string,
@@ -131,8 +140,10 @@ const encodeSession = Schema.encode(SessionRecord)
 const encodeTarget = Schema.encode(TargetRecord)
 const encodeSnapshot = Schema.encode(SnapshotResult)
 const encodeRefCache = Schema.encode(RefCache)
-const encodeRun = Schema.encode(RunRecord)
+const encodeRunningRun = Schema.encode(RunningRunRecord)
+const encodeFinishedRun = Schema.encode(FinishedRunRecord)
 const decodeRun = Schema.decodeUnknown(RunRecord)
+const decodeJson = Schema.decodeUnknown(Schema.parseJson())
 
 const writeJson =
   (fs: FsPort) =>
@@ -142,14 +153,13 @@ const writeJson =
 const readJson =
   (fs: FsPort) =>
   (path: string): Effect.Effect<unknown, StorageFailure | CorruptRecord> =>
-    fs.readFile(path).pipe(
-      Effect.flatMap((raw) =>
-        Effect.try({
-          try: () => JSON.parse(raw) as unknown,
-          catch: (e) => new CorruptRecord({ path, reason: `JSON.parse: ${String(e)}` }),
-        }),
-      ),
-    )
+    fs
+      .readFile(path)
+      .pipe(
+        Effect.flatMap((raw) =>
+          decodeJson(raw).pipe(Effect.mapError((e) => new CorruptRecord({ path, reason: `json parse: ${e.message}` }))),
+        ),
+      )
 
 /**
  * Build the Persistence implementation against an injected `Fs` port + clock.
@@ -330,21 +340,22 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       const cutoff = Date.parse(clock.nowIso()) - olderThanMs
       const deleted: Array<string> = []
       for (const id of ids) {
-        const loaded = yield* loadSession(layout, id).pipe(
-          Effect.map((r): SessionRecord | null => r),
-          Effect.catchTags({
-            NotFound: () => Effect.succeed(null),
-            CorruptRecord: () => Effect.succeed(null),
-          }),
-        )
-        // Corrupt/unreadable → not deleted. Missing createdAt → not deleted.
-        if (loaded === null) continue
-        const created = Date.parse(loaded.createdAt)
-        if (!Number.isFinite(created)) continue
-        if (created < cutoff) {
+        const removed = yield* Effect.gen(function* () {
+          const loaded = yield* loadSession(layout, id).pipe(
+            Effect.map((r): SessionRecord | null => r),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(null),
+              CorruptRecord: () => Effect.succeed(null),
+            }),
+          )
+          // Corrupt/unreadable → not deleted. Missing createdAt → not deleted.
+          if (loaded === null) return false
+          const created = Date.parse(loaded.createdAt)
+          if (!Number.isFinite(created) || created >= cutoff) return false
           yield* fs.remove(P.sessionDir(layout, id))
-          deleted.push(id)
-        }
+          return true
+        }).pipe(withSessionLock(input.stateRoot, id))
+        if (removed) deleted.push(id)
       }
       return deleted
     })
@@ -445,13 +456,13 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
 
   // -- RunRecord (observational; AC-025 enforced by the caller/dispatch) ---
   const runStart: Persistence["runStart"] = (stateDir, record) =>
-    encodeRun(record).pipe(
+    encodeRunningRun(record).pipe(
       Effect.orDie,
       Effect.flatMap((encoded) => write(P.runRecordFile(stateDir, record.runId), encoded)),
     )
 
   const runFinish: Persistence["runFinish"] = (stateDir, record) =>
-    encodeRun(record).pipe(
+    encodeFinishedRun(record).pipe(
       Effect.orDie,
       Effect.flatMap((encoded) => write(P.runRecordFile(stateDir, record.runId), encoded)),
     )

@@ -1,5 +1,5 @@
 import { Context, Effect } from "effect"
-import { SubprocessFailed, SubprocessTimeout, ToolNotFound } from "./errors.js"
+import { SubprocessFailed, SubprocessTimeout, ToolNotFound, type ConfinedPath } from "./errors.js"
 
 /**
  * The three DANGEROUS capabilities. Each is a `Context.Tag`.
@@ -40,8 +40,8 @@ export class DeviceCapability extends Context.Tag("@expo98/core/DeviceCapability
 
 /** source-write capability — writes/deletes project source files. AC-008. */
 export interface SourceWriteCapabilityService {
-  readonly writeFile: (path: string, contents: string) => Effect.Effect<void>
-  readonly deleteFile: (path: string) => Effect.Effect<void>
+  readonly writeFile: (path: ConfinedPath, contents: string) => Effect.Effect<void>
+  readonly deleteFile: (path: ConfinedPath) => Effect.Effect<void>
 }
 
 export class SourceWriteCapability extends Context.Tag("@expo98/core/SourceWriteCapability")<

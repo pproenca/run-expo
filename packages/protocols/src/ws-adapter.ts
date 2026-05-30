@@ -13,20 +13,46 @@
  * NOTE: this is platform-coupled (`ws`), so it lives in `protocols` but is wired by the deferred
  * `packages/app` composition root, never by the pure spine. Tests use a fake factory instead.
  */
-import { Effect, Layer, Queue } from "effect"
+import { Effect, Layer } from "effect"
 import WebSocket from "ws"
 import { CdpSocketFactory, type CdpSocket } from "./cdp-socket.js"
 import { CdpSocketError } from "./errors.js"
 
+export const MAX_INBOUND_FRAMES = 1_000 as const
+export const MAX_FRAME_BYTES = 1_048_576 as const
+
 const connect: CdpSocketFactory["connect"] = (options) =>
   Effect.async<CdpSocket, CdpSocketError>((resume) => {
     let settled = false
+    let closed = false
     // Connect-time Origin header (AC-030) — the reason we use `ws` over @effect/platform Socket.
-    const ws = new WebSocket(options.url, { headers: { Origin: options.origin } })
+    const ws = new WebSocket(options.url, { headers: { Origin: options.origin }, maxPayload: MAX_FRAME_BYTES })
 
-    // Buffer inbound frames so a `receive` that runs after a frame arrived still gets it.
-    // The Queue is created synchronously via runSync so the message handler can offer into it.
-    const inbound = Effect.runSync(Queue.unbounded<string | null | CdpSocketError>())
+    // Buffer inbound frames with explicit containment. A noisy local peer cannot
+    // grow memory without bound while the CDP layer waits for a correlated id.
+    const inbox: Array<string | null | CdpSocketError> = []
+    let waiting: ((effect: Effect.Effect<string | null | CdpSocketError>) => void) | undefined
+
+    const deliver = (item: string | null | CdpSocketError): void => {
+      const resumeReceive = waiting
+      if (resumeReceive !== undefined) {
+        waiting = undefined
+        resumeReceive(Effect.succeed(item))
+        return
+      }
+      inbox.push(item)
+    }
+
+    const failRead = (cause: string): void => {
+      if (closed) return
+      closed = true
+      try {
+        ws.terminate()
+      } catch {
+        /* ignore */
+      }
+      deliver(new CdpSocketError({ url: options.url, reason: "Read", cause }))
+    }
 
     const openTimer = setTimeout(() => {
       if (settled) return
@@ -47,12 +73,38 @@ const connect: CdpSocketFactory["connect"] = (options) =>
       )
     }, options.openTimeoutMs)
 
+    const rawDataByteLength = (data: WebSocket.RawData): number => {
+      if (Array.isArray(data)) {
+        return data.reduce((total, chunk) => total + chunk.byteLength, 0)
+      }
+      return data.byteLength
+    }
+
+    const rawDataToString = (data: WebSocket.RawData): string =>
+      Array.isArray(data)
+        ? Buffer.concat(data).toString("utf8")
+        : Buffer.isBuffer(data)
+          ? data.toString("utf8")
+          : Buffer.from(new Uint8Array(data)).toString("utf8")
+
     ws.on("message", (data: WebSocket.RawData) => {
-      Effect.runSync(Queue.offer(inbound, data.toString()))
+      if (rawDataByteLength(data) > MAX_FRAME_BYTES) {
+        failRead(`frame exceeded ${MAX_FRAME_BYTES} bytes`)
+        return
+      }
+      const text = rawDataToString(data)
+      if (inbox.length >= MAX_INBOUND_FRAMES) {
+        failRead(`inbound frame queue exceeded ${MAX_INBOUND_FRAMES}`)
+        return
+      }
+      deliver(text)
     })
     ws.on("close", () => {
       // Signal end-of-stream so a pending `receive` resolves to null.
-      Effect.runSync(Queue.offer(inbound, null))
+      if (!closed) {
+        closed = true
+        deliver(null)
+      }
     })
     ws.on("error", (err: Error) => {
       if (settled) return
@@ -76,9 +128,24 @@ const connect: CdpSocketFactory["connect"] = (options) =>
               }
             })
           }),
-        receive: Queue.take(inbound).pipe(
-          Effect.flatMap((frame) => (frame instanceof CdpSocketError ? Effect.fail(frame) : Effect.succeed(frame))),
-        ),
+        receive: Effect.async<string | null, CdpSocketError>((res) => {
+          const next = inbox.shift()
+          if (next !== undefined) {
+            res(next instanceof CdpSocketError ? Effect.fail(next) : Effect.succeed(next))
+            return
+          }
+          waiting = (effect) =>
+            res(
+              effect.pipe(
+                Effect.flatMap((frame) =>
+                  frame instanceof CdpSocketError ? Effect.fail(frame) : Effect.succeed(frame),
+                ),
+              ),
+            )
+          return Effect.sync(() => {
+            waiting = undefined
+          })
+        }),
         close: Effect.sync(() => {
           try {
             ws.close()
@@ -88,9 +155,7 @@ const connect: CdpSocketFactory["connect"] = (options) =>
         }),
       }
       ws.on("error", (err: Error) => {
-        Effect.runSync(
-          Queue.offer(inbound, new CdpSocketError({ url: options.url, reason: "Read", cause: err })),
-        )
+        failRead(String(err))
       })
       resume(Effect.succeed(socket))
     })

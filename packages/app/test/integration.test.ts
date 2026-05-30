@@ -78,6 +78,7 @@ describe("Final integration — full command surface", () => {
       "launch-app",
       "tap",
       "wait",
+      "wait fn",
       "snapshot",
       "accessibility tree",
       "rn tree",
@@ -104,6 +105,8 @@ describe("Final integration — full command surface", () => {
         ["inspector open-dev-menu", "device"],
         ["navigation state", "read"],
         ["navigation back", "device"],
+        ["wait", "read"],
+        ["wait fn", "runtime-eval"],
       ] as const
       for (const [path, sideEffect] of cases) {
         const reg = registry.get(path)
@@ -163,6 +166,25 @@ describe("Final integration — full command surface", () => {
       expect(reg.sideEffect).toBe("runtime-eval")
       const result = yield* runRegistered(reg, {
         positionals: [],
+        policy: {},
+        fs,
+      }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
+      expect(result.exitCode).toBe(EXIT_SUCCESS)
+      const payload = result.payload as { code?: string }
+      expect(payload.code).toBe("policy-denied")
+      expect(yield* Ref.get(evalCalls)).toBe(0)
+    }),
+  )
+
+  it.effect("gated runtime-eval command (wait fn) WITHOUT policy → denied, eval invoked 0×", () =>
+    Effect.gen(function* () {
+      const fs = yield* makeMemoryFs()
+      const deviceCalls = yield* Ref.make(0)
+      const evalCalls = yield* Ref.make(0)
+      const reg = registry.get("wait fn")!
+      expect(reg.sideEffect).toBe("runtime-eval")
+      const result = yield* runRegistered(reg, {
+        positionals: ["true"],
         policy: {},
         fs,
       }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))

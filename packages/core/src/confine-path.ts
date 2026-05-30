@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { PathEscape } from "./errors.js"
+import { PathEscape, type ConfinedPath } from "./errors.js"
 
 /**
  * S2 — Path confinement. AC-013 (FIX).
@@ -15,7 +15,7 @@ import { PathEscape } from "./errors.js"
  * dependency) to keep the pure spine platform-free; it mirrors POSIX
  * `path.resolve`/`normalize` semantics.
  */
-export const confinePath = (root: string, candidate: string): Effect.Effect<string, PathEscape> =>
+export const confinePath = (root: string, candidate: string): Effect.Effect<ConfinedPath, PathEscape> =>
   Effect.suspend(() => {
     const resolvedRoot = normalizeAbsolute(root)
     // An absolute candidate is resolved on its own; a relative one is resolved
@@ -25,7 +25,7 @@ export const confinePath = (root: string, candidate: string): Effect.Effect<stri
       : normalizeAbsolute(join(resolvedRoot, candidate))
 
     return isContained(resolvedRoot, resolved)
-      ? Effect.succeed(resolved)
+      ? Effect.succeed(resolved as ConfinedPath)
       : Effect.fail(new PathEscape({ root: resolvedRoot, candidate, resolved }))
   })
 

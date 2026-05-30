@@ -76,7 +76,7 @@ export {
 } from "./domain-actions.js"
 
 // Size-bounding (AC-006)
-export { boundBridgeValue, MAX_ARRAY_ITEMS, MAX_OUTPUT } from "./bound.js"
+export { boundBridgeValue, MAX_ARRAY_ITEMS, MAX_DEPTH, MAX_OBJECT_KEYS, MAX_OUTPUT, MAX_STRING_CHARS } from "./bound.js"
 
 // Expo↔RN compatibility classification (AC-020)
 export {

@@ -1,6 +1,6 @@
 import { type PolicyDocument } from "@expo98/core"
 import { Fs } from "@expo98/domain"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { type CliGlobals } from "./globals.js"
 
 /**
@@ -41,29 +41,19 @@ const loadPolicyFile = (path: Option.Option<string>): Effect.Effect<PolicyDocume
       }),
   })
 
-/** Parse policy JSON into the narrow allow/actions shape; tolerate junk. */
-const parsePolicy = (raw: string): PolicyDocument => {
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch {
-    return {}
-  }
-  if (typeof value !== "object" || value === null) {
-    return {}
-  }
-  const obj = value as Record<string, unknown>
-  const allow = Array.isArray(obj["allow"])
-    ? (obj["allow"].filter((x) => typeof x === "string") as ReadonlyArray<string>)
-    : undefined
-  const actions =
-    typeof obj["actions"] === "object" && obj["actions"] !== null
-      ? (obj["actions"] as PolicyDocument["actions"])
-      : undefined
-  const allowRuntimeEval = typeof obj["allowRuntimeEval"] === "boolean" ? obj["allowRuntimeEval"] : undefined
-  return {
-    ...(allow !== undefined ? { allow } : {}),
-    ...(actions !== undefined ? { actions } : {}),
-    ...(allowRuntimeEval !== undefined ? { allowRuntimeEval } : {}),
-  }
-}
+const PolicyFile = Schema.Struct({
+  allow: Schema.optional(Schema.Array(Schema.String)),
+  actions: Schema.optional(
+    Schema.Record({
+      key: Schema.String,
+      value: Schema.Union(Schema.Literal("allow"), Schema.Literal("deny"), Schema.Boolean),
+    }),
+  ),
+  allowRuntimeEval: Schema.optional(Schema.Boolean),
+})
+
+const decodePolicyFile = Schema.decodeUnknownOption(Schema.parseJson(PolicyFile))
+
+/** Parse policy JSON into the narrow allow/actions shape; tolerate junk by failing closed. */
+const parsePolicy = (raw: string): PolicyDocument =>
+  Option.getOrElse(decodePolicyFile(raw), () => ({}) satisfies PolicyDocument)

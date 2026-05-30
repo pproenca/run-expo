@@ -22,7 +22,7 @@
  * depend on `@effect/platform`'s HttpClient, to keep the seam small and test-trivial — the Node
  * layer (deferred `packages/app`) supplies the real `@effect/platform` HttpClient-backed impl.
  */
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { HttpTransportError } from "./errors.js"
 import { loopbackMetroBaseUrl, resolveMetroPort } from "./loopback.js"
 
@@ -44,6 +44,8 @@ export interface MetroHttpRequest {
   readonly body?: string
   /** Per-fetch timeout in ms (the service applies its own AbortController upstream of this port). */
   readonly timeoutMs: number
+  /** Maximum response bytes the transport may materialize. */
+  readonly maxResponseBytes: number
 }
 
 /**
@@ -137,9 +139,16 @@ export const MetroProbe = Context.GenericTag<MetroProbe>("@expo98/protocols/Metr
 
 /** Per-fetch timeout the probe asks the transport to honor (AC-053 ballpark). */
 const METRO_FETCH_TIMEOUT_MS = 3_000
+export const MAX_METRO_RESPONSE_BYTES = 1_048_576 as const
 
 const UNREACHABLE_REASON = "Metro is not reachable on the requested port."
 const NON_ARRAY_LIST_REASON = "Metro target list was not an array."
+const RESPONSE_TOO_LARGE_REASON = "Metro response exceeded the maximum response size."
+
+const decodeJson = Schema.decodeUnknown(Schema.parseJson())
+const decodeTargetList = Schema.decodeUnknown(Schema.parseJson(Schema.Array(Schema.Unknown)))
+
+const responseTooLarge = (text: string): boolean => Buffer.byteLength(text, "utf8") > MAX_METRO_RESPONSE_BYTES
 
 /** Pull a non-empty string field from an object, else null. */
 const str = (obj: Record<string, unknown>, key: string): string | null => {
@@ -186,6 +195,7 @@ const make = Effect.gen(function* () {
       method: "GET",
       url: `${loopbackMetroBaseUrl(port)}${path}`,
       timeoutMs: METRO_FETCH_TIMEOUT_MS,
+      maxResponseBytes: MAX_METRO_RESPONSE_BYTES,
     })
 
   const status: MetroProbe["status"] = (options) =>
@@ -206,6 +216,14 @@ const make = Effect.gen(function* () {
           metroPort,
           status: "unavailable",
           reason: UNREACHABLE_REASON,
+        } satisfies MetroStatusResult
+      }
+      if (responseTooLarge(res.right.text)) {
+        return {
+          available: false,
+          metroPort,
+          status: "unavailable",
+          reason: RESPONSE_TOO_LARGE_REASON,
         } satisfies MetroStatusResult
       }
       return {
@@ -239,21 +257,20 @@ const make = Effect.gen(function* () {
           malformedTargets: [],
         } satisfies MetroTargetsResult
       }
-
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(res.right.text)
-      } catch {
-        // A non-JSON body is treated as a non-array list (malformed shape), not unreachable.
+      if (responseTooLarge(res.right.text)) {
         return {
           available: false,
           metroPort,
+          status: "unavailable",
+          reason: RESPONSE_TOO_LARGE_REASON,
           targets: [],
-          malformedTargets: [{ index: null, reason: NON_ARRAY_LIST_REASON }],
+          malformedTargets: [],
         } satisfies MetroTargetsResult
       }
 
-      if (!Array.isArray(parsed)) {
+      const parsed = yield* decodeTargetList(res.right.text).pipe(Effect.either)
+      if (parsed._tag === "Left") {
+        // A non-JSON body is treated as a non-array list (malformed shape), not unreachable.
         return {
           available: false,
           metroPort,
@@ -264,7 +281,7 @@ const make = Effect.gen(function* () {
 
       const targets: MetroTarget[] = []
       const malformedTargets: MalformedTarget[] = []
-      parsed.forEach((row, index) => {
+      parsed.right.forEach((row, index) => {
         const result = normalizeRow(row, index)
         if ("target" in result) targets.push(result.target)
         else malformedTargets.push(result.malformed)
@@ -290,12 +307,15 @@ const make = Effect.gen(function* () {
           reason: UNREACHABLE_REASON,
         } satisfies MetroVersionResult
       }
-      let payload: unknown
-      try {
-        payload = JSON.parse(res.right.text)
-      } catch {
-        payload = res.right.text
+      if (responseTooLarge(res.right.text)) {
+        return {
+          available: false,
+          metroPort,
+          status: "unavailable",
+          reason: RESPONSE_TOO_LARGE_REASON,
+        } satisfies MetroVersionResult
       }
+      const payload = yield* decodeJson(res.right.text).pipe(Effect.orElseSucceed(() => res.right.text))
       return { available: true, metroPort, version: payload } satisfies MetroVersionResult
     })
 
@@ -308,6 +328,7 @@ const make = Effect.gen(function* () {
           url: `${loopbackMetroBaseUrl(metroPort)}/symbolicate`,
           body: JSON.stringify(options.stack),
           timeoutMs: METRO_FETCH_TIMEOUT_MS,
+          maxResponseBytes: MAX_METRO_RESPONSE_BYTES,
         })
         .pipe(Effect.either)
       if (res._tag === "Left" || res.right.status < 200 || res.right.status >= 400) {
@@ -318,12 +339,15 @@ const make = Effect.gen(function* () {
           reason: UNREACHABLE_REASON,
         } satisfies MetroSymbolicateResult
       }
-      let payload: unknown
-      try {
-        payload = JSON.parse(res.right.text)
-      } catch {
-        payload = res.right.text
+      if (responseTooLarge(res.right.text)) {
+        return {
+          available: false,
+          metroPort,
+          status: "unavailable",
+          reason: RESPONSE_TOO_LARGE_REASON,
+        } satisfies MetroSymbolicateResult
       }
+      const payload = yield* decodeJson(res.right.text).pipe(Effect.orElseSucceed(() => res.right.text))
       return { available: true, metroPort, payload } satisfies MetroSymbolicateResult
     })
 

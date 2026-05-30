@@ -67,7 +67,7 @@ export type OverlayMethod = "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTION
  * byte length defensively).
  */
 export interface OverlayRequest {
-  readonly method: OverlayMethod
+  readonly method: OverlayMethod | (string & {})
   /** Full request target, e.g. `/events?token=abc` (path + optional query). */
   readonly url: string
   /** Lower-cased header name → value. */

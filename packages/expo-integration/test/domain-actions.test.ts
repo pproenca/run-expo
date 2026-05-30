@@ -11,6 +11,9 @@ import {
   type DomainActionEvidence,
   domainActionSideEffect,
   MAX_ARRAY_ITEMS,
+  MAX_DEPTH,
+  MAX_OBJECT_KEYS,
+  MAX_STRING_CHARS,
   runDomainAction,
 } from "@expo98/expo-integration"
 import { Effect, Layer, Ref } from "effect"
@@ -127,6 +130,41 @@ describe("AC-006 bridge storage/state/controls gating", () => {
       expect(bounded.kept).toBe(MAX_ARRAY_ITEMS)
       expect(bounded.dropped).toBe(50)
       expect(bounded.total).toBe(MAX_ARRAY_ITEMS + 50)
+    }),
+  )
+
+  it.effect("AC-006 allowed value is traversal-bounded for large bridge objects", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      const huge: Record<string, unknown> = {}
+      for (let i = 0; i < MAX_OBJECT_KEYS + 10; i += 1) huge[`k${i}`] = i
+      const result = yield* runDomainAction({
+        domain: "storage",
+        action: "list",
+        policy: {},
+      }).pipe(Effect.provide(makeBridge(calls, huge)))
+      const ev = result as DomainActionEvidence
+      const bounded = ev.value as Record<string, unknown>
+      expect(bounded["_bounded"]).toBe("object")
+      expect(bounded["_kept"]).toBe(MAX_OBJECT_KEYS)
+      expect(bounded["_dropped"]).toBe(10)
+    }),
+  )
+
+  it.effect("AC-006 allowed value caps deep and long string bridge payloads before stringify", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      let deep: Record<string, unknown> = { secret: "x".repeat(MAX_STRING_CHARS + 10) }
+      for (let i = 0; i < MAX_DEPTH + 2; i += 1) {
+        deep = { child: deep }
+      }
+      const result = yield* runDomainAction({
+        domain: "storage",
+        action: "list",
+        policy: {},
+      }).pipe(Effect.provide(makeBridge(calls, deep)))
+      const ev = result as DomainActionEvidence
+      expect(JSON.stringify(ev.value)).toContain('"_bounded":"depth"')
     }),
   )
 

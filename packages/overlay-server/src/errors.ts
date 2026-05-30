@@ -47,8 +47,15 @@ export class CorruptEventsFile extends Data.TaggedError("CorruptEventsFile")<{
   readonly reason: string
 }> {}
 
+/** Appending an event would exceed the bounded events-file aggregate. */
+export class EventsStoreLimitExceeded extends Data.TaggedError("EventsStoreLimitExceeded")<{
+  readonly reason: string
+  readonly limit: number
+  readonly actual: number
+}> {}
+
 /** The union of every typed failure the events-store / lifecycle can surface. */
-export type EventsStoreError = EventsStoreFailure | CorruptEventsFile
+export type EventsStoreError = EventsStoreFailure | CorruptEventsFile | EventsStoreLimitExceeded
 
 /**
  * The union of every rejection the request handler distinguishes. The handler

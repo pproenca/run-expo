@@ -17,7 +17,7 @@
  * install-state decision and swappable for the SDK probe later.
  */
 import { Fs } from "@expo98/domain"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { BRIDGE_SCHEMA_VERSION, bridgeFilePaths, EXPO98_BRIDGE_VERSION } from "./bridge-files.js"
 
 export type InstallStatus = "absent" | "present" | "stale" | "incompatible"
@@ -50,17 +50,13 @@ const EMPTY_META: RawMetadata = {
   developmentOnly: null,
 }
 
+const decodeJson = Schema.decodeUnknownOption(Schema.parseJson())
+
 /** Read a file's JSON, returning `undefined` on any read/parse failure. */
 const readJson = (path: string): Effect.Effect<unknown, never, Fs> =>
   Fs.pipe(
     Effect.flatMap((fs) => fs.readFile(path)),
-    Effect.map((text): unknown => {
-      try {
-        return JSON.parse(text) as unknown
-      } catch {
-        return undefined
-      }
-    }),
+    Effect.map((text): unknown => Option.getOrElse(decodeJson(text), () => undefined)),
     Effect.orElseSucceed(() => undefined),
   )
 

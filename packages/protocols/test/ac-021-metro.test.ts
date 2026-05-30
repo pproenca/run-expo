@@ -10,6 +10,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import {
   HttpTransportError,
+  MAX_METRO_RESPONSE_BYTES,
   MetroHttpClient,
   type MetroHttpRequest,
   type MetroHttpResponse,
@@ -43,6 +44,7 @@ describe("AC-021 Metro probes — loopback-only, never auto-start, skip malforme
       yield* probe.status({ metroPort: 8081 })
       expect(log.length).toBe(1)
       expect(log[0]!.url).toBe("http://127.0.0.1:8081/status")
+      expect(log[0]!.maxResponseBytes).toBe(MAX_METRO_RESPONSE_BYTES)
       // Never a non-loopback host — the base URL is constructed, not caller-controlled.
       for (const r of log) expect(r.url.startsWith("http://127.0.0.1:")).toBe(true)
     }).pipe(Effect.provide(MetroProbeLayer.pipe(Layer.provide(layer))))
@@ -118,6 +120,19 @@ describe("AC-021 Metro probes — loopback-only, never auto-start, skip malforme
       if (!res.available) {
         expect(res.status).toBe("unavailable")
         expect(res.reason).toBe("Metro is not reachable on the requested port.")
+      }
+    }).pipe(Effect.provide(MetroProbeLayer.pipe(Layer.provide(layer))))
+  })
+
+  it.effect("oversized /json/list response is bounded before JSON parse", () => {
+    const { layer } = fakeHttp(() => okText("[" + " ".repeat(MAX_METRO_RESPONSE_BYTES + 1) + "]"))
+    return Effect.gen(function* () {
+      const probe = yield* MetroProbe
+      const res = yield* probe.listTargets({ metroPort: 8081 })
+      expect(res.available).toBe(false)
+      if (!res.available) {
+        expect(res.status).toBe("unavailable")
+        expect(res.reason).toContain("maximum response size")
       }
     }).pipe(Effect.provide(MetroProbeLayer.pipe(Layer.provide(layer))))
   })

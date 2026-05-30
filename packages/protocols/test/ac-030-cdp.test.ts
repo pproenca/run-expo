@@ -28,6 +28,8 @@ import {
   HermesRuntimeEval,
   HermesRuntimeEvalLayer,
   isLoopbackHost,
+  MAX_FRAME_BYTES,
+  MAX_INBOUND_FRAMES,
   originForPort,
   WsCdpSocketFactoryLayer,
 } from "../src/index.js"
@@ -236,27 +238,48 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
     }).pipe(Effect.provide(HermesEvidenceLayer.pipe(Layer.provide(layer))))
   })
 
+  it.effect("valid JSON with a non-frame shape is rejected as malformed, not a defect", () => {
+    const layer = Layer.succeed(CdpSocketFactory, {
+      connect: () =>
+        Effect.succeed({
+          send: () => Effect.void,
+          receive: Effect.succeed("null"),
+          close: Effect.void,
+        } satisfies CdpSocket),
+    })
+    return Effect.gen(function* () {
+      const evidence = yield* HermesEvidence
+      const res = yield* evidence.evaluateReadOnly(HermesReadOnlyExpression.BridgeRegistrationProbe, {
+        attemptedUrls: ["ws://127.0.0.1:8081/debug"],
+        metroPort: 8081,
+      })
+      expect(res.available).toBe(false)
+    }).pipe(Effect.provide(HermesEvidenceLayer.pipe(Layer.provide(layer))))
+  })
+
   it.effect("AC-030 real ws adapter sends Origin and receives frames without a live Hermes target", () =>
     Effect.gen(function* () {
       let server: WebSocketServer | null = null
       try {
         const setup = yield* Effect.promise(
           () =>
-            new Promise<{ readonly server: WebSocketServer; readonly port: number; readonly origins: Array<string | null> }>(
-              (resolve) => {
-                const origins: Array<string | null> = []
-                const wsServer = new WebSocketServer({ host: "127.0.0.1", port: 0 })
-                wsServer.on("connection", (socket, request) => {
-                  origins.push(request.headers.origin ?? null)
-                  socket.send("ready")
-                })
-                wsServer.once("listening", () => {
-                  const address = wsServer.address()
-                  if (address === null || typeof address === "string") return
-                  resolve({ server: wsServer, port: address.port, origins })
-                })
-              },
-            ),
+            new Promise<{
+              readonly server: WebSocketServer
+              readonly port: number
+              readonly origins: Array<string | null>
+            }>((resolve) => {
+              const origins: Array<string | null> = []
+              const wsServer = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+              wsServer.on("connection", (socket, request) => {
+                origins.push(request.headers.origin ?? null)
+                socket.send("ready")
+              })
+              wsServer.once("listening", () => {
+                const address = wsServer.address()
+                if (address === null || typeof address === "string") return
+                resolve({ server: wsServer, port: address.port, origins })
+              })
+            }),
         )
         server = setup.server
         const factory = yield* CdpSocketFactory
@@ -268,6 +291,85 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
         expect(yield* socket.receive).toBe("ready")
         expect(setup.origins).toEqual(["http://127.0.0.1:8081"])
         yield* socket.close
+      } finally {
+        server?.close()
+      }
+    }).pipe(Effect.provide(WsCdpSocketFactoryLayer)),
+  )
+
+  it.effect("AC-030 real ws adapter bounds inbound frame size", () =>
+    Effect.gen(function* () {
+      let server: WebSocketServer | null = null
+      try {
+        const setup = yield* Effect.promise(
+          () =>
+            new Promise<{ readonly server: WebSocketServer; readonly port: number }>((resolve) => {
+              const wsServer = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+              wsServer.on("connection", (socket) => {
+                socket.send("x".repeat(MAX_FRAME_BYTES + 1))
+              })
+              wsServer.once("listening", () => {
+                const address = wsServer.address()
+                if (address === null || typeof address === "string") return
+                resolve({ server: wsServer, port: address.port })
+              })
+            }),
+        )
+        server = setup.server
+        const factory = yield* CdpSocketFactory
+        const socket = yield* factory.connect({
+          url: `ws://127.0.0.1:${setup.port}/debug`,
+          origin: "http://127.0.0.1:8081",
+          openTimeoutMs: 500,
+        })
+        const result = yield* Effect.either(socket.receive)
+        expect(result._tag).toBe("Left")
+        if (result._tag === "Left") {
+          expect(result.left.reason).toBe("Read")
+          expect(String(result.left.cause)).toMatch(/frame exceeded|Max payload size exceeded/)
+        }
+      } finally {
+        server?.close()
+      }
+    }).pipe(Effect.provide(WsCdpSocketFactoryLayer)),
+  )
+
+  it.effect("AC-030 real ws adapter bounds queued unsolicited frames", () =>
+    Effect.gen(function* () {
+      let server: WebSocketServer | null = null
+      try {
+        const setup = yield* Effect.promise(
+          () =>
+            new Promise<{ readonly server: WebSocketServer; readonly port: number }>((resolve) => {
+              const wsServer = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+              wsServer.on("connection", (socket) => {
+                for (let i = 0; i <= MAX_INBOUND_FRAMES; i += 1) {
+                  socket.send(String(i))
+                }
+              })
+              wsServer.once("listening", () => {
+                const address = wsServer.address()
+                if (address === null || typeof address === "string") return
+                resolve({ server: wsServer, port: address.port })
+              })
+            }),
+        )
+        server = setup.server
+        const factory = yield* CdpSocketFactory
+        const socket = yield* factory.connect({
+          url: `ws://127.0.0.1:${setup.port}/debug`,
+          origin: "http://127.0.0.1:8081",
+          openTimeoutMs: 500,
+        })
+        let overflow: unknown = null
+        for (let i = 0; i <= MAX_INBOUND_FRAMES; i += 1) {
+          const result = yield* Effect.either(socket.receive)
+          if (result._tag === "Left") {
+            overflow = result.left
+            break
+          }
+        }
+        expect(String(overflow)).toContain("CdpSocketError")
       } finally {
         server?.close()
       }

@@ -13,7 +13,7 @@
  * classifier so the compat result is identical regardless of source.
  */
 import { Fs } from "@expo98/domain"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { classifyCompat, type CompatMap, type CompatResult } from "./compat.js"
 
 export interface DeclaredVersions {
@@ -41,6 +41,8 @@ export const extractDeclaredVersions = (pkg: unknown): DeclaredVersions => {
   return { expo: lookup("expo"), reactNative: lookup("react-native") }
 }
 
+const decodeJson = Schema.decodeUnknownOption(Schema.parseJson())
+
 /**
  * Read the project's declared Expo/RN versions from `package.json` and classify
  * compatibility (AC-020). The `map` defaults to the bundled data file; pass a
@@ -50,12 +52,7 @@ export const classifyProjectCompat = (root: string, map?: CompatMap): Effect.Eff
   Effect.gen(function* () {
     const fs = yield* Fs
     const text = yield* fs.readFile(`${root.replace(/\/+$/, "")}/package.json`).pipe(Effect.orElseSucceed(() => ""))
-    let pkg: unknown
-    try {
-      pkg = text.length > 0 ? (JSON.parse(text) as unknown) : undefined
-    } catch {
-      pkg = undefined
-    }
+    const pkg: unknown = text.length > 0 ? Option.getOrElse(decodeJson(text), () => undefined) : undefined
     const declared = extractDeclaredVersions(pkg)
     return classifyCompat(declared, map)
   })

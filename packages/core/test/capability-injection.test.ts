@@ -11,7 +11,14 @@
  * gate denies an un-allowed runtime-eval at execution time (defense in depth).
  */
 import { describe, expect, it } from "@effect/vitest"
-import { command, DeviceCapability, dispatch, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
+import {
+  command,
+  type ConfinedPath,
+  DeviceCapability,
+  dispatch,
+  RuntimeEvalCapability,
+  SourceWriteCapability,
+} from "@expo98/core"
 import { Effect, Layer } from "effect"
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -23,7 +30,8 @@ import { Effect, Layer } from "effect"
 // Effects that REQUIRE each dangerous capability in their R channel.
 const evalEffect = RuntimeEvalCapability.pipe(Effect.flatMap((e) => e.evaluate("danger()")))
 const deviceEffect = DeviceCapability.pipe(Effect.flatMap((d) => d.invoke("xcrun", ["boot"])))
-const writeEffect = SourceWriteCapability.pipe(Effect.flatMap((w) => w.writeFile("/x", "y")))
+const confined = "/x" as ConfinedPath
+const writeEffect = SourceWriteCapability.pipe(Effect.flatMap((w) => w.writeFile(confined, "y")))
 
 const readHandlerOk = command(
   { action: "doctor", sideEffect: "read" } as const,

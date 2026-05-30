@@ -8,7 +8,7 @@ import { Fs } from "@expo98/domain"
 import { Effect, Layer } from "effect"
 import { fsEventsStoreLayer } from "./events-store.js"
 import { handleRequest, type HandlerConfig, makeHandlerConfig } from "./handler.js"
-import { BIND_HOST, DEFAULT_PORT, type OverlayMethod, type OverlayRequest, MAX_PORT, resolvePort } from "./request.js"
+import { BIND_HOST, DEFAULT_PORT, type OverlayRequest, MAX_PORT, resolvePort } from "./request.js"
 
 /**
  * The REAL `@effect/platform-node` HttpServer seam — the `server` action.
@@ -28,11 +28,18 @@ import { BIND_HOST, DEFAULT_PORT, type OverlayMethod, type OverlayRequest, MAX_P
 // Port search — loopback probe, increment on EADDRINUSE (AC-014)
 // ===========================================================================
 
+export const PROBE_PORT_TIMEOUT_MS = 250 as const
+
 /** Probe whether `port` is free on loopback by attempting a brief connect. */
 const probePortFree = (port: number): Effect.Effect<boolean> =>
   Effect.async<boolean>((resume) => {
+    let settled = false
     const socket = createConnection({ host: BIND_HOST, port })
+    const timeout = setTimeout(() => done(true), PROBE_PORT_TIMEOUT_MS)
     const done = (free: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
       socket.removeAllListeners()
       socket.destroy()
       resume(Effect.succeed(free))
@@ -40,6 +47,13 @@ const probePortFree = (port: number): Effect.Effect<boolean> =>
     // A refused connection means nothing is listening → the port is free.
     socket.once("connect", () => done(false))
     socket.once("error", () => done(true))
+    socket.once("timeout", () => done(true))
+    socket.setTimeout(PROBE_PORT_TIMEOUT_MS)
+    return Effect.sync(() => {
+      clearTimeout(timeout)
+      socket.removeAllListeners()
+      socket.destroy()
+    })
   })
 
 /**
@@ -127,7 +141,7 @@ const toOverlayRequest = (req: HttpServerRequest.HttpServerRequest, body: string
     if (typeof v === "string") headers[k.toLowerCase()] = v
   }
   return {
-    method: req.method as OverlayMethod,
+    method: req.method,
     url: req.url,
     headers,
     body,

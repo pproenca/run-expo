@@ -10,9 +10,20 @@ import {
   EXIT_SUCCESS,
   type ExitCode,
   exitCodeForError,
+  Id,
   redact,
+  type RunRecorder,
 } from "@expo98/core"
-import { Fs } from "@expo98/domain"
+import {
+  Fs,
+  type FinishedRunRecord,
+  makePersistence,
+  type RunningRunRecord,
+  type RunId,
+  type FsPort,
+  defaultClock,
+} from "@expo98/domain"
+import { summarizeRunRecordPayload } from "@expo98/handlers-artifacts"
 import { Cause, Console, Effect, Exit, Layer, Option } from "effect"
 import { handlerCommands } from "./all-commands.js"
 import { CLI_VERSION, coreReadCommands } from "./commands.js"
@@ -203,9 +214,10 @@ const runVerb = (
   reg: CommandRegistration,
   globals: CliGlobals,
   positionals: ReadonlyArray<string>,
-): Effect.Effect<void, ProgramExit, Fs | CapabilityEnv> =>
+): Effect.Effect<void, ProgramExit, Fs | Id | CapabilityEnv> =>
   Effect.gen(function* () {
     const fs = yield* Fs
+    const id = yield* Id
     const policy = yield* resolvePolicy(globals)
     const baseContext = {
       positionals,
@@ -214,15 +226,79 @@ const runVerb = (
       root: Option.getOrElse(globals.root, () => process.cwd()),
       artifactsRoot: Option.getOrElse(globals.stateDir, () => Option.getOrElse(globals.root, () => process.cwd())),
     }
-    const result: DispatchResult<unknown> = yield* runRegistered(reg, {
-      ...baseContext,
-      resolvePolicyDescriptor: (actionOrPath) => resolvePolicyDescriptor(actionOrPath, baseContext),
-    })
+    const recorder = makeRunRecorder(reg, globals, positionals, baseContext, fs, id)
+    const result: DispatchResult<unknown> = yield* runRegistered(
+      reg,
+      {
+        ...baseContext,
+        resolvePolicyDescriptor: (actionOrPath) => resolvePolicyDescriptor(actionOrPath, baseContext),
+      },
+      recorder,
+    )
     yield* emit(result, globals)
     if (result.exitCode !== EXIT_SUCCESS) {
       return yield* Effect.fail(new ProgramExit(result.exitCode))
     }
   })
+
+const makeRunRecorder = (
+  reg: CommandRegistration,
+  globals: CliGlobals,
+  positionals: ReadonlyArray<string>,
+  ctx: {
+    readonly root: string
+    readonly artifactsRoot: string
+  },
+  fs: FsPort,
+  id: { readonly now: Effect.Effect<string>; readonly generateId: (prefix: string) => Effect.Effect<string> },
+): RunRecorder => {
+  if (!globals.record && Option.isNone(globals.stateDir)) {
+    return {
+      start: () => Effect.void,
+      finish: () => Effect.void,
+    }
+  }
+  const persistence = makePersistence(fs, defaultClock)
+  let running: RunningRunRecord | null = null
+  return {
+    start: (descriptor) =>
+      Effect.gen(function* () {
+        const startedAt = yield* id.now
+        const runId = (yield* id.generateId("run")) as RunId
+        const redactedArgs = redact([reg.path, ...positionals])
+        running = {
+          schemaVersion: 1,
+          runId,
+          cli: { name: CLI_NAME, version: CLI_VERSION },
+          command: descriptor.action,
+          args: Array.isArray(redactedArgs) ? redactedArgs : [],
+          root: ctx.root,
+          stateDir: ctx.artifactsRoot,
+          startedAt,
+          finishedAt: null,
+          status: "running",
+          exitCode: null,
+          summary: null,
+          error: null,
+        }
+        yield* persistence.runStart(ctx.artifactsRoot, running)
+      }),
+    finish: (outcome) =>
+      Effect.gen(function* () {
+        if (running === null) return
+        const finishedAt = yield* id.now
+        const finished: FinishedRunRecord = {
+          ...running,
+          finishedAt,
+          status: outcome.status,
+          exitCode: outcome.exitCode,
+          summary: summarizeRunRecordPayload(outcome.summary),
+          error: outcome.status === "failed" ? `exit ${outcome.exitCode}` : null,
+        }
+        yield* persistence.runFinish(ctx.artifactsRoot, finished)
+      }),
+  }
+}
 
 // The registry always carries the 5 core READ proof-commands, so the subcommand
 // tuple is non-empty by construction (asserted at module load). Verb FAMILIES
@@ -268,7 +344,7 @@ const emitUsageError = (message: string, globals: CliGlobals): Effect.Effect<voi
  */
 export const runProgram = (
   argv: ReadonlyArray<string>,
-): Effect.Effect<ExitCode, never, Fs | CapabilityEnv | NodeContext.NodeContext> =>
+): Effect.Effect<ExitCode, never, Fs | Id | CapabilityEnv | NodeContext.NodeContext> =>
   Effect.gen(function* () {
     const userArgs = argv.slice(2)
 

@@ -14,7 +14,16 @@ import { describe, expect, it } from "@effect/vitest"
  */
 import { Fs, MemoryFsLayer } from "@expo98/domain"
 import { Effect, Layer } from "effect"
-import { EventsStoreTag, makeFsEventsStore, memoryEventsStoreLayer, NO_EVENTS_FILE_REASON } from "../src/index.js"
+import {
+  EventsStoreTag,
+  makeEventsStore,
+  makeFsEventsStore,
+  MAX_EVENTS,
+  MAX_EVENTS_FILE_BYTES,
+  memoryEventsStoreLayer,
+  NO_EVENTS_FILE_REASON,
+  type RawEventsBackend,
+} from "../src/index.js"
 
 const event = (id: string) => ({ id, createdAt: "2026-05-24T00:00:00.000Z", kind: "comment", payload: {} })
 
@@ -124,6 +133,70 @@ describe("AC-032 events lifecycle (in-memory store)", () => {
       const r = yield* store.read
       expect(r.available).toBe(false)
     }).pipe(Effect.provide(memoryEventsStoreLayer)),
+  )
+
+  it.effect("append rejects when the event-count cap would be exceeded", () =>
+    Effect.gen(function* () {
+      let cell: string | null = JSON.stringify({
+        version: 1,
+        title: "Bounded",
+        createdAt: "2026-05-24T10:00:00.000Z",
+        events: Array.from({ length: MAX_EVENTS }, (_, i) => event(`evt-${i}`)),
+      })
+      let writes = 0
+      const store = makeEventsStore({
+        exists: Effect.succeed(true),
+        readRaw: Effect.sync(() => cell ?? ""),
+        writeRaw: (contents) =>
+          Effect.sync(() => {
+            writes += 1
+            cell = contents
+          }),
+        removeRaw: Effect.sync(() => {
+          cell = null
+        }),
+      })
+      const failure = yield* store.append(event("evt-overflow"), "2026-05-24T10:06:00.000Z").pipe(Effect.flip)
+      expect(failure._tag).toBe("EventsStoreLimitExceeded")
+      expect(writes).toBe(0)
+    }),
+  )
+
+  it.effect("append rejects when the encoded file-size cap would be exceeded before write", () =>
+    Effect.gen(function* () {
+      let cell: string | null = JSON.stringify({
+        version: 1,
+        title: "Large",
+        createdAt: "2026-05-24T10:00:00.000Z",
+        events: [],
+      })
+      let writes = 0
+      const backend: RawEventsBackend = {
+        exists: Effect.succeed(true),
+        readRaw: Effect.sync(() => cell ?? ""),
+        writeRaw: (contents) =>
+          Effect.sync(() => {
+            writes += 1
+            cell = contents
+          }),
+        removeRaw: Effect.sync(() => {
+          cell = null
+        }),
+      }
+      const store = makeEventsStore(backend)
+      const huge = event("evt-huge")
+      const failure = yield* store
+        .append(
+          {
+            ...huge,
+            payload: { text: "x".repeat(MAX_EVENTS_FILE_BYTES) },
+          },
+          "2026-05-24T10:06:00.000Z",
+        )
+        .pipe(Effect.flip)
+      expect(failure._tag).toBe("EventsStoreLimitExceeded")
+      expect(writes).toBe(0)
+    }),
   )
 })
 

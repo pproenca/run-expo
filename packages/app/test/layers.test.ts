@@ -1,8 +1,8 @@
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "@effect/vitest"
-import { SourceWriteCapability, Subprocess } from "@expo98/core"
+import { confinePath, SourceWriteCapability, Subprocess } from "@expo98/core"
 import { Effect, Layer } from "effect"
 import { AppLayer, NodeSubprocessLayer, PlatformLayer } from "../src/index"
 
@@ -49,13 +49,32 @@ describe("App layers — source-write containment (AC-008)", () => {
       symlinkSync(outside, link, "dir")
       try {
         const cap = yield* SourceWriteCapability
-        const target = join(link, "expo98-devtools-bridge.ts")
+        const target = yield* confinePath(root, join(link, "expo98-devtools-bridge.ts"))
         const exit = yield* Effect.exit(cap.writeFile(target, "secret"))
         expect(exit._tag).toBe("Failure")
         expect(existsSync(join(outside, "expo98-devtools-bridge.ts"))).toBe(false)
       } finally {
         rmSync(root, { recursive: true, force: true })
         rmSync(outside, { recursive: true, force: true })
+      }
+    }).pipe(Effect.provide(AppLayer)),
+  )
+
+  it.effect("AC-008 deleteFile is file-only, not recursive subtree deletion", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "run-expo-root-"))
+      const dir = join(root, "src")
+      const child = join(dir, "keep.txt")
+      mkdirSync(dir)
+      writeFileSync(child, "keep")
+      try {
+        const cap = yield* SourceWriteCapability
+        const confinedDir = yield* confinePath(root, dir)
+        const exit = yield* Effect.exit(cap.deleteFile(confinedDir))
+        expect(exit._tag).toBe("Failure")
+        expect(existsSync(child)).toBe(true)
+      } finally {
+        rmSync(root, { recursive: true, force: true })
       }
     }).pipe(Effect.provide(AppLayer)),
   )

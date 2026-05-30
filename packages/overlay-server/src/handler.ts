@@ -59,6 +59,7 @@ export const OverlayPostBody = Schema.Struct({
   comments: Schema.Array(OverlayComment).pipe(Schema.minItems(1)),
 })
 export type OverlayPostBody = Schema.Schema.Type<typeof OverlayPostBody>
+const decodePostBody = Schema.decodeUnknown(Schema.parseJson(OverlayPostBody))
 
 // ===========================================================================
 // Handler configuration (per-session)
@@ -150,11 +151,7 @@ const hardenPost = (req: OverlayRequest, config: HandlerConfig): Effect.Effect<O
     }
 
     // (d) JSON parse + comments[] schema validation
-    const parsed = yield* Effect.try({
-      try: () => JSON.parse(req.body) as unknown,
-      catch: () => new MalformedBody({ reason: "Request body is not valid JSON." }),
-    })
-    const body = yield* Schema.decodeUnknown(OverlayPostBody)(parsed).pipe(
+    const body = yield* decodePostBody(req.body).pipe(
       Effect.mapError((e) => new MalformedBody({ reason: `comments[] schema validation failed: ${e.message}` })),
     )
     return body
@@ -222,5 +219,17 @@ export const handleRequest = (
     // An events-store I/O fault is a genuine infra failure → surface as a 500
     // value rather than crashing the listener. The dispatcher classifies the
     // overall command's exit code; the listener itself never dies on one request.
-    Effect.catchAll((e) => Effect.succeed(json(500, { ok: false, error: "events store failure", reason: e.reason }))),
+    Effect.catchAll((e) =>
+      e._tag === "EventsStoreLimitExceeded"
+        ? Effect.succeed(
+            json(413, {
+              ok: false,
+              error: "events store limit exceeded",
+              reason: e.reason,
+              limit: e.limit,
+              actual: e.actual,
+            }),
+          )
+        : Effect.succeed(json(500, { ok: false, error: "events store failure", reason: e.reason })),
+    ),
   )

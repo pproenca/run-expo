@@ -31,6 +31,7 @@ export {
   MetroProbe,
   MetroProbeLayer,
   MetroHttpClient,
+  MAX_METRO_RESPONSE_BYTES,
   type MetroHttpRequest,
   type MetroHttpResponse,
   type MetroTarget,
@@ -63,7 +64,7 @@ export {
 
 // S9 — the CDP socket port (the dependency-agnostic seam) + the `ws` adapter (the spike decision).
 export { CdpSocketFactory, type CdpSocket, type CdpConnectOptions } from "./cdp-socket.js"
-export { WsCdpSocketFactoryLayer } from "./ws-adapter.js"
+export { MAX_FRAME_BYTES, MAX_INBOUND_FRAMES, WsCdpSocketFactoryLayer } from "./ws-adapter.js"
 
 // Network evidence shape validation (AC-022) — pure.
 export {

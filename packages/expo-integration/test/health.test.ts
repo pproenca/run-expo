@@ -7,9 +7,10 @@
  * state is supplied directly (so each step is isolated from the Fs read).
  */
 import { describe, expect, it } from "@effect/vitest"
-import { Fs, makeMemoryFs } from "@expo98/domain"
+import { BRIDGE_VERSION, Fs, makeMemoryFs, SCHEMA_VERSION } from "@expo98/domain"
 import {
   bridgeHealth,
+  bridgeSourceContents,
   type HealthReady,
   type HealthUnavailable,
   type InstallStateResult,
@@ -60,9 +61,31 @@ const registered = {
   schemaVersion: 1,
 }
 
+const fsForInstall = (install: InstallStateResult) =>
+  Effect.gen(function* () {
+    const fs = yield* makeMemoryFs()
+    if (install.expoPresent) {
+      yield* fs.writeFile(`${ROOT}/package.json`, JSON.stringify({ dependencies: { expo: "^54.0.0" } }))
+    }
+    if (install.metadataPresent) {
+      const metadata = {
+        schemaVersion: install.schemaVersion ?? SCHEMA_VERSION,
+        bridgeVersion: install.bridgeVersion ?? BRIDGE_VERSION,
+        developmentOnly: install.developmentOnly ?? true,
+        generatedBy: "run-expo",
+        domains: ["navigation", "network", "storage", "controls", "performance", "snapshot"],
+      }
+      yield* fs.writeFile(`${ROOT}/.expo98/bridge.json`, JSON.stringify(metadata))
+    }
+    if (install.sourcePresent) {
+      yield* fs.writeFile(`${ROOT}/src/expo98-devtools-bridge.ts`, bridgeSourceContents())
+    }
+    return fs
+  })
+
 const run = (input: Parameters<typeof bridgeHealth>[0], hermes: CdpEvaluateResult, fs?: Fs["Type"]) =>
   Effect.gen(function* () {
-    const realFs = fs ?? (yield* makeMemoryFs())
+    const realFs = fs ?? (yield* fsForInstall(presentInstall))
     return yield* bridgeHealth(input).pipe(Effect.provide(Layer.merge(hermesLayer(hermes), Layer.succeed(Fs, realFs))))
   })
 
@@ -70,8 +93,9 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
   it.effect("step 1 install-state stale → unavailable(stale-bridge) BEFORE probing", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: installWith({ status: "stale", issue: "partial-install" }), attemptedUrls: ["x"] },
+        { root: ROOT, attemptedUrls: ["x"] },
         ok(registered),
+        yield* fsForInstall(installWith({ status: "stale", issue: "partial-install", sourcePresent: false })),
       )) as HealthUnavailable
       expect(result.available).toBe(false)
       expect(result.step).toBe("install-state")
@@ -84,10 +108,12 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
       const result = (yield* run(
         {
           root: ROOT,
-          installState: installWith({ status: "incompatible", issue: "not-development-only" }),
           attemptedUrls: ["x"],
         },
         ok(registered),
+        yield* fsForInstall(
+          installWith({ status: "incompatible", issue: "not-development-only", developmentOnly: false }),
+        ),
       )) as HealthUnavailable
       expect(result.step).toBe("install-state")
       expect(result.code).toBe("incompatible-project")
@@ -96,10 +122,7 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
 
   it.effect("step 2 transport no Hermes target (no urls) → no-runtime-target", () =>
     Effect.gen(function* () {
-      const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: [] },
-        fail("nothing"),
-      )) as HealthUnavailable
+      const result = (yield* run({ root: ROOT, attemptedUrls: [] }, fail("nothing"))) as HealthUnavailable
       expect(result.step).toBe("transport")
       expect(result.code).toBe("no-runtime-target")
     }),
@@ -108,7 +131,7 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
   it.effect("step 2 transport failure (urls present, eval failed) → transport-failure", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["ws://127.0.0.1:8081/x"] },
+        { root: ROOT, attemptedUrls: ["ws://127.0.0.1:8081/x"] },
         fail("connection reset"),
       )) as HealthUnavailable
       expect(result.step).toBe("transport")
@@ -119,7 +142,7 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
   it.effect("step 3 registration: bridge global absent → missing-bridge", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["x"] },
+        { root: ROOT, attemptedUrls: ["x"] },
         ok({ bridgePresent: false }),
       )) as HealthUnavailable
       expect(result.step).toBe("registration")
@@ -130,7 +153,7 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
   it.effect("step 3 registration: bridge present but registration field absent → missing-registration", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["x"] },
+        { root: ROOT, attemptedUrls: ["x"] },
         ok({ bridgePresent: true, registered: false, devMode: "true" }),
       )) as HealthUnavailable
       expect(result.step).toBe("registration")
@@ -141,7 +164,7 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
   it.effect("step 4 version mismatch → version-mismatch", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["x"] },
+        { root: ROOT, attemptedUrls: ["x"] },
         ok({ bridgePresent: true, registered: true, devMode: "true", version: "0.9.0", schemaVersion: 1 }),
       )) as HealthUnavailable
       expect(result.step).toBe("version")
@@ -151,10 +174,7 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
 
   it.effect("all checks pass → ready: reports read/write domains, redaction boundaries, policy requirements", () =>
     Effect.gen(function* () {
-      const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["x"] },
-        ok(registered),
-      )) as HealthReady
+      const result = (yield* run({ root: ROOT, attemptedUrls: ["x"] }, ok(registered))) as HealthReady
       expect(result.available).toBe(true)
       expect(result.step).toBe("ready")
       expect(result.bridgeVersion).toBe("1.0.0")
@@ -181,10 +201,11 @@ describe("AC-028 bridge runtime-health ordered state machine", () => {
             }).pipe(Effect.as(ok(registered))),
         }),
       )
-      const fs = yield* makeMemoryFs()
+      const fs = yield* fsForInstall(
+        installWith({ status: "stale", issue: "version-mismatch", bridgeVersion: "0.9.0" }),
+      )
       const result = (yield* bridgeHealth({
         root: ROOT,
-        installState: installWith({ status: "stale", issue: "version-mismatch" }),
         attemptedUrls: ["x"],
       }).pipe(Effect.provide(Layer.merge(spyHermes, Layer.succeed(Fs, fs))))) as HealthUnavailable
       expect(result.code).toBe("stale-bridge")
@@ -199,10 +220,12 @@ describe("AC-009 the generated bridge is development-only", () => {
       const result = (yield* run(
         {
           root: ROOT,
-          installState: installWith({ status: "incompatible", issue: "not-development-only" }),
           attemptedUrls: ["x"],
         },
         ok(registered),
+        yield* fsForInstall(
+          installWith({ status: "incompatible", issue: "not-development-only", developmentOnly: false }),
+        ),
       )) as HealthUnavailable
       expect(result.step).toBe("install-state")
       expect(result.code).toBe("incompatible-project")
@@ -212,7 +235,7 @@ describe("AC-009 the generated bridge is development-only", () => {
   it.effect("AC-009 runtime: __DEV__ undefined → development-mode-required (refuses to register)", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["x"] },
+        { root: ROOT, attemptedUrls: ["x"] },
         ok({ bridgePresent: true, registered: false, devMode: "undefined" }),
       )) as HealthUnavailable
       expect(result.step).toBe("registration")
@@ -223,7 +246,7 @@ describe("AC-009 the generated bridge is development-only", () => {
   it.effect("AC-009 runtime: __DEV__ === false → production-build (refuses to register)", () =>
     Effect.gen(function* () {
       const result = (yield* run(
-        { root: ROOT, installState: presentInstall, attemptedUrls: ["x"] },
+        { root: ROOT, attemptedUrls: ["x"] },
         ok({ bridgePresent: true, registered: false, devMode: "false" }),
       )) as HealthUnavailable
       expect(result.step).toBe("registration")

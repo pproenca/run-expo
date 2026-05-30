@@ -32,6 +32,7 @@ export { OUTPUT_BUDGET, overflowMarker, RunningTruncator, truncate } from "./tru
 
 // S2 Path confinement (AC-013)
 export { confinePath } from "./confine-path.js"
+export { type ConfinedPath } from "./errors.js"
 
 // S3 Clock / Id (AC-034)
 export {

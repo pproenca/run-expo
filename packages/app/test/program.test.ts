@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "@effect/vitest"
@@ -131,6 +131,31 @@ describe("Integration — assembled program over synthetic argv", () => {
     expect(envelope.data?.decision).toBe("allow")
   })
 
+  it("policy show resolves wait.fn as runtime-eval", async () => {
+    const result = await runCaptured("--json", "--allow-runtime-eval", "policy", "show", "wait.fn")
+    expect(result.code).toBe(0)
+    const envelope = JSON.parse(result.logs.at(-1) ?? "{}") as {
+      ok: boolean
+      data?: { denied?: boolean; decision?: string; sideEffect?: string }
+    }
+    expect(envelope.ok).toBe(true)
+    expect(envelope.data?.sideEffect).toBe("runtime-eval")
+    expect(envelope.data?.denied).toBe(false)
+    expect(envelope.data?.decision).toBe("allow")
+  })
+
+  it("wait fn is denied without runtime-eval policy", async () => {
+    const result = await runCaptured("--json", "wait", "fn", "true")
+    expect(result.code).toBe(0)
+    const envelope = JSON.parse(result.logs.at(-1) ?? "{}") as {
+      ok: boolean
+      data?: { code?: string; denied?: boolean }
+    }
+    expect(envelope.ok).toBe(true)
+    expect(envelope.data?.code).toBe("policy-denied")
+    expect(envelope.data?.denied).toBe(true)
+  })
+
   it("--root reaches root-sensitive command builders", async () => {
     const result = await runCaptured("--json", "--root", "/tmp/run-expo-fixture", "sitemap")
     expect(result.code).toBe(0)
@@ -140,6 +165,30 @@ describe("Integration — assembled program over synthetic argv", () => {
     }
     expect(envelope.ok).toBe(true)
     expect(envelope.data?.entries?.[0]?.source).toBe("/tmp/run-expo-fixture")
+  })
+
+  it("--record writes a redacted terminal run record", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "run-expo-record-"))
+    try {
+      const result = await runCaptured("--json", "--state-dir", dir, "--record", "doctor")
+      expect(result.code).toBe(0)
+      const files = readdirSync(dir).filter((file) => file.endsWith(".json"))
+      expect(files).toHaveLength(1)
+      const record = JSON.parse(readFileSync(join(dir, files[0]!), "utf8")) as {
+        status?: string
+        command?: string
+        finishedAt?: string | null
+        exitCode?: number | null
+        summary?: { available?: boolean; keys?: ReadonlyArray<string> } | null
+      }
+      expect(record.status).toBe("completed")
+      expect(record.command).toBe("doctor")
+      expect(record.finishedAt).not.toBeNull()
+      expect(record.exitCode).toBe(0)
+      expect(record.summary?.available).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

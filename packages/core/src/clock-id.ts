@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto"
 import { Clock, Context, Effect, Layer } from "effect"
 
 /**
@@ -39,6 +40,8 @@ export interface RandomBytesService {
 export class RandomBytes extends Context.Tag("@expo98/core/RandomBytes")<RandomBytes, RandomBytesService>() {}
 
 const SUFFIX_LEN = 10
+const SUFFIX_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
+const RANDOM_BYTE_REJECTION_LIMIT = 252
 
 /**
  * Filesystem-safe timestamp for ids: the ISO-8601 *basic* form — drop all
@@ -48,9 +51,9 @@ const SUFFIX_LEN = 10
 const fsSafeTimestamp = (iso: string): string => iso.replace(/[:.-]/g, "")
 
 /**
- * Production randomness layer: 10 chars of base36 derived from `Math.random`
- * runs, ALWAYS padded to a fixed length so it can never be shorter than the
- * legacy 6-char floor (AC-034 FIX). Lives behind `RandomBytes` so tests swap it.
+ * Production randomness layer: 10 chars of base36 derived from cryptographic
+ * random bytes. Rejection sampling avoids modulo bias while preserving the
+ * fixed-length suffix contract (AC-034).
  */
 export const RandomBytesLive = Layer.succeed(
   RandomBytes,
@@ -58,7 +61,11 @@ export const RandomBytesLive = Layer.succeed(
     nextSuffix: Effect.sync(() => {
       let s = ""
       while (s.length < SUFFIX_LEN) {
-        s += Math.random().toString(36).slice(2)
+        for (const byte of randomBytes(SUFFIX_LEN)) {
+          if (byte >= RANDOM_BYTE_REJECTION_LIMIT) continue
+          s += SUFFIX_ALPHABET.charAt(byte % SUFFIX_ALPHABET.length)
+          if (s.length === SUFFIX_LEN) break
+        }
       }
       return s.slice(0, SUFFIX_LEN)
     }),

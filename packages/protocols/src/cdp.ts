@@ -34,7 +34,7 @@
  * leaves the withholding to core. We do NOT implement the gate here.
  * ============================================================================================
  */
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { CdpSocketFactory, type CdpSocket } from "./cdp-socket.js"
 import { CdpMalformedFrame, CdpProtocolError, CdpSocketError, LoopbackViolation } from "./errors.js"
 import { checkLoopbackUrl, clamp, resolveMetroPort } from "./loopback.js"
@@ -150,14 +150,26 @@ interface CdpFrame {
   readonly error?: { readonly code?: number; readonly message?: string }
 }
 
+const CdpErrorFrame = Schema.Struct({
+  code: Schema.optional(Schema.Number),
+  message: Schema.optional(Schema.String),
+})
+
+const CdpFrameJson = Schema.Struct({
+  id: Schema.optional(Schema.Number),
+  result: Schema.optional(Schema.Unknown),
+  error: Schema.optional(CdpErrorFrame),
+})
+
+const decodeCdpFrame = Schema.decodeUnknown(Schema.parseJson(CdpFrameJson))
+
 const truncate = (text: string, max: number): string => (text.length <= max ? text : text.slice(0, max))
 
 /** Parse a frame; reject with a truncated raw preview on malformed JSON (AC-030). */
 const parseFrame = (raw: string): Effect.Effect<CdpFrame, CdpMalformedFrame> =>
-  Effect.try({
-    try: () => JSON.parse(raw) as CdpFrame,
-    catch: () => new CdpMalformedFrame({ rawTruncated: truncate(raw, MALFORMED_PREVIEW_CHARS) }),
-  })
+  decodeCdpFrame(raw).pipe(
+    Effect.mapError(() => new CdpMalformedFrame({ rawTruncated: truncate(raw, MALFORMED_PREVIEW_CHARS) })),
+  )
 
 /**
  * Read frames off the socket until one whose `id` matches `wantId` arrives. Frames for other ids

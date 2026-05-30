@@ -1,5 +1,5 @@
 import { CliRuntimeError, command, gate, redact } from "@expo98/core"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { type CommandContext, type CommandRegistration, registration } from "./registry.js"
 
 /**
@@ -147,11 +147,7 @@ export const coreReadCommands: ReadonlyArray<CommandRegistration> = [
   version,
 ]
 
+const decodeJson = Schema.decodeUnknownOption(Schema.parseJson())
+
 /** Best-effort JSON parse; falls back to the raw string for non-JSON files. */
-const tryParseJson = (raw: string): unknown => {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return raw
-  }
-}
+const tryParseJson = (raw: string): unknown => Option.getOrElse(decodeJson(raw), () => raw)

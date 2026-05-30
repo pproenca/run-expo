@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { formatTimestamp, Id, IdLive, RandomBytes } from "@expo98/core"
+import { formatTimestamp, Id, IdLive, RandomBytes, RandomBytesLive } from "@expo98/core"
 import { Effect, Layer, TestClock } from "effect"
 
 // Deterministic randomness so the suffix is fixed under test.
@@ -28,5 +28,13 @@ describe("S3 Clock / Id (AC-034)", () => {
       expect(suffix.length).toBeGreaterThanOrEqual(6)
       expect(suffix.length).toBe(10)
     }).pipe(Effect.provide(TestId)),
+  )
+
+  it.effect("AC-034 live suffix is fixed-length lowercase base36", () =>
+    Effect.gen(function* () {
+      const random = yield* RandomBytes
+      const suffix = yield* random.nextSuffix
+      expect(suffix).toMatch(/^[0-9a-z]{10}$/)
+    }).pipe(Effect.provide(RandomBytesLive)),
   )
 })

@@ -245,12 +245,12 @@ const screenshotReg = eraseRegistration(
     path: "screenshot",
     summary: "Capture a screenshot to a confined artifact path (device, gated).",
     sideEffect: "device",
-    build: (ctx: CommandContext) => screenshotCommand(artifactsRoot(ctx), { outputPath: ctx.positionals[0], full: false }),
+    build: (ctx: CommandContext) =>
+      screenshotCommand(artifactsRoot(ctx), { outputPath: ctx.positionals[0], full: false }),
   }),
 )
 
-// `wait`: read by default, runtime-eval only with `--fn`. The shell maps `--ms`
-// and `--fn` from leading positionals pragmatically.
+// `wait`: read by default; `wait fn <expr>` is runtime-eval and gated.
 const waitReg = eraseRegistration({
   path: "wait",
   summary: "Wait for a duration / predicate (--fn is runtime-eval, gated).",
@@ -259,6 +259,13 @@ const waitReg = eraseRegistration({
     const ms = num(ctx.positionals[0])
     return waitCommand(ms !== undefined ? { ms } : {}, {})
   },
+} as CommandRegistration)
+
+const waitFnReg = eraseRegistration({
+  path: "wait fn",
+  summary: "Wait for a runtime predicate (runtime-eval, gated).",
+  sideEffect: "runtime-eval",
+  build: (ctx: CommandContext) => waitCommand({ fn: ctx.positionals[0] ?? "true" }, { hasRuntimeAdapter: true }),
 } as CommandRegistration)
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -545,6 +552,7 @@ export const handlerCommands: ReadonlyArray<CommandRegistration> = [
   tapReg,
   screenshotReg,
   waitReg,
+  waitFnReg,
   // handlers-snapshot
   snapshotReg,
   ...accessibilityRegs,

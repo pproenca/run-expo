@@ -1,6 +1,6 @@
 import { Fs, type OverlayEvent, OverlayEventsFile } from "@expo98/domain"
 import { Context, Effect, Layer, Schema } from "effect"
-import { CorruptEventsFile, EventsStoreFailure, type EventsStoreError } from "./errors.js"
+import { CorruptEventsFile, EventsStoreFailure, EventsStoreLimitExceeded, type EventsStoreError } from "./errors.js"
 
 /**
  * Events-file store PORT + lifecycle (AC-032).
@@ -27,6 +27,8 @@ import { CorruptEventsFile, EventsStoreFailure, type EventsStoreError } from "./
 
 /** The "no events file" sentinel reason (AC-032, exact string). */
 export const NO_EVENTS_FILE_REASON = "No review overlay events file exists." as const
+export const MAX_EVENTS = 5_000 as const
+export const MAX_EVENTS_FILE_BYTES = 4 * 1024 * 1024
 
 /** Result of `read()` (AC-032). */
 export type EventsReadResult =
@@ -67,14 +69,14 @@ export class EventsStoreTag extends Context.Tag("@expo98/overlay-server/EventsSt
 // ---------------------------------------------------------------------------
 
 const decodeFile = (raw: string): Effect.Effect<OverlayEventsFile, EventsStoreError> =>
-  Effect.try({
-    try: () => JSON.parse(raw) as unknown,
-    catch: () => new CorruptEventsFile({ reason: "events.json is not valid JSON." }),
-  }).pipe(
-    Effect.flatMap((parsed) =>
-      Schema.decodeUnknown(OverlayEventsFile)(parsed).pipe(
-        Effect.mapError((e) => new CorruptEventsFile({ reason: `events.json failed schema decode: ${e.message}` })),
-      ),
+  Schema.decodeUnknown(Schema.parseJson(OverlayEventsFile))(raw).pipe(
+    Effect.mapError(
+      (e) =>
+        new CorruptEventsFile({
+          reason: e.message.includes("JSON")
+            ? "events.json is not valid JSON."
+            : `events.json failed schema decode: ${e.message}`,
+        }),
     ),
   )
 
@@ -145,7 +147,23 @@ export const makeEventsStore = (backend: RawEventsBackend): EventsStore => {
         updatedAt: now,
         events: [...base.events, event],
       }
-      yield* backend.writeRaw(yield* encodeFile(next))
+      if (next.events.length > MAX_EVENTS) {
+        return yield* new EventsStoreLimitExceeded({
+          reason: "events.json event count exceeded the maximum event count.",
+          limit: MAX_EVENTS,
+          actual: next.events.length,
+        })
+      }
+      const encoded = yield* encodeFile(next)
+      const encodedBytes = Buffer.byteLength(encoded, "utf8")
+      if (encodedBytes > MAX_EVENTS_FILE_BYTES) {
+        return yield* new EventsStoreLimitExceeded({
+          reason: "events.json exceeded the maximum encoded file size.",
+          limit: MAX_EVENTS_FILE_BYTES,
+          actual: encodedBytes,
+        })
+      }
+      yield* backend.writeRaw(encoded)
       return { eventCount: next.events.length, file: next }
     }).pipe(appendSemaphore.withPermits(1))
 

@@ -132,8 +132,6 @@ export interface HealthInput {
   readonly metroPort?: number
   /** `webSocketDebuggerUrl`s from Metro /json/list (loopback-enforced downstream). */
   readonly attemptedUrls?: ReadonlyArray<string>
-  /** Pre-computed install state (skips the Fs read); else read from `root`. */
-  readonly installState?: InstallStateResult
 }
 
 /**
@@ -143,7 +141,7 @@ export interface HealthInput {
 export const bridgeHealth = (input: HealthInput): Effect.Effect<HealthResult, never, HermesEvidence | Fs> =>
   Effect.gen(function* () {
     // ── Step 1: install-state (fail-closed BEFORE probing the device) ──
-    const install = input.installState ?? (yield* readInstallState(input.root))
+    const install = yield* readInstallState(input.root)
     if (install.status === "stale") {
       return unavailable("install-state", "stale-bridge", `Bridge install is stale (${install.issue ?? "stale"}).`)
     }

@@ -17,6 +17,9 @@ export const MAX_OUTPUT = 40_000 as const
 
 /** Max items kept from any array in a bridge value (AC-006). */
 export const MAX_ARRAY_ITEMS = 1_000 as const
+export const MAX_OBJECT_KEYS = 1_000 as const
+export const MAX_DEPTH = 32 as const
+export const MAX_STRING_CHARS = 8_192 as const
 
 const serializationFailed = (): unknown => ({
   _bounded: "output",
@@ -25,14 +28,27 @@ const serializationFailed = (): unknown => ({
   limit: MAX_OUTPUT,
 })
 
-/** Recursively cap arrays to `MAX_ARRAY_ITEMS`, annotating dropped counts. */
-const capArrays = (value: unknown, seen = new WeakSet<object>()): unknown => {
+/** Recursively cap bridge values before serialisation can become the bottleneck. */
+const capValue = (value: unknown, depth = 0, seen = new WeakSet<object>()): unknown => {
+  if (typeof value === "string") {
+    return value.length > MAX_STRING_CHARS
+      ? {
+          _bounded: "string",
+          value: value.slice(0, MAX_STRING_CHARS),
+          kept: MAX_STRING_CHARS,
+          dropped: value.length - MAX_STRING_CHARS,
+        }
+      : value
+  }
+  if (depth > MAX_DEPTH) {
+    return { _bounded: "depth", depth, limit: MAX_DEPTH }
+  }
   if (Array.isArray(value)) {
     if (seen.has(value)) {
       return { _bounded: "cycle", reason: "Circular bridge value reference." }
     }
     seen.add(value)
-    const kept = value.slice(0, MAX_ARRAY_ITEMS).map((item) => capArrays(item, seen))
+    const kept = value.slice(0, MAX_ARRAY_ITEMS).map((item) => capValue(item, depth + 1, seen))
     seen.delete(value)
     if (value.length > MAX_ARRAY_ITEMS) {
       return {
@@ -52,8 +68,15 @@ const capArrays = (value: unknown, seen = new WeakSet<object>()): unknown => {
     seen.add(value)
     const source = value as Record<string, unknown>
     const out: Record<string, unknown> = {}
-    for (const key of Object.keys(source)) {
-      out[key] = capArrays(source[key], seen)
+    const keys = Object.keys(source)
+    for (const key of keys.slice(0, MAX_OBJECT_KEYS)) {
+      out[key] = capValue(source[key], depth + 1, seen)
+    }
+    if (keys.length > MAX_OBJECT_KEYS) {
+      out["_bounded"] = "object"
+      out["_kept"] = MAX_OBJECT_KEYS
+      out["_dropped"] = keys.length - MAX_OBJECT_KEYS
+      out["_total"] = keys.length
     }
     seen.delete(value)
     return out
@@ -67,7 +90,7 @@ const capArrays = (value: unknown, seen = new WeakSet<object>()): unknown => {
  * overflows after array-capping (the value is too large to surface whole).
  */
 export const boundBridgeValue = (value: unknown): unknown => {
-  const arrayBounded = capArrays(value)
+  const arrayBounded = capValue(value)
   let serialised: string
   try {
     serialised = JSON.stringify(arrayBounded) ?? ""
