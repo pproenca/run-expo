@@ -53,6 +53,6 @@ is path-confined; all network access is loopback-only.
 ## Links
 
 Full docs, architecture, and the agent-operator workflow:
-<https://github.com/pproenca/expo98>.
+<https://github.com/pproenca/run-expo>.
 
 MIT licensed.

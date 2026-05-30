@@ -7,7 +7,7 @@ description: "Debug expo98 CLI, policy gate, redaction, simulator, Metro, Hermes
 
 Use this skill when expo98 behavior differs between source, the built bundle,
 tests, local tools, simulator/device state, Metro, or a target Expo app. The
-runnable artifact is `packages/app/cli/expo98.mjs` (esbuild bundle, `pnpm build`);
+runnable artifact is `packages/app/cli/run-expo.mjs` (esbuild bundle, `pnpm build`);
 the source only runs under vitest.
 
 ## Default Loop
@@ -34,11 +34,11 @@ the source only runs under vitest.
 
 ```bash
 pnpm build
-node packages/app/cli/expo98.mjs --help
-node packages/app/cli/expo98.mjs --json doctor
-node packages/app/cli/expo98.mjs --json sitemap --root /path/to/expo-app
-node packages/app/cli/expo98.mjs --json policy show
-node packages/app/cli/expo98.mjs --json boot          # observe a fail-closed denial
+node packages/app/cli/run-expo.mjs --help
+node packages/app/cli/run-expo.mjs --json doctor
+node packages/app/cli/run-expo.mjs --json sitemap --root /path/to/expo-app
+node packages/app/cli/run-expo.mjs --json policy show
+node packages/app/cli/run-expo.mjs --json boot          # observe a fail-closed denial
 pnpm exec vitest run packages/core/test
 pnpm test
 ```

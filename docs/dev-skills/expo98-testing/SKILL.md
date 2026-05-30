@@ -8,7 +8,7 @@ description: "Choose, run, rerun, or debug the cheapest safe expo98 validation p
 Use this skill when deciding what to test, debugging a failure, or validating an
 expo98 change without wasting time. This repo is an **Effect-TS pnpm workspace**
 (11 packages under `packages/*`), tested with **vitest** (`@effect/vitest`). The
-runnable CLI is the **esbuild bundle** at `packages/app/cli/expo98.mjs`, built by
+runnable CLI is the **esbuild bundle** at `packages/app/cli/run-expo.mjs`, built by
 `pnpm build` — not the `.ts` source (whose `.js`→`.ts` specifiers resolve only
 under a bundler/vitest, so `node packages/app/src/main.ts` cannot run by design).
 
@@ -27,7 +27,7 @@ Prove the touched surface first. Do not reflexively run every command.
 - **Docs / agent-harness only:** `git diff --check`.
 - **One package's logic:** `pnpm exec vitest run packages/<pkg>/test`, then `pnpm test`.
 - **`packages/core` (safety spine):** also run `packages/core/test/capability-injection.test.ts` and `packages/core/test/confine-path.test.ts` — they pin the fail-closed + confinement invariants.
-- **CLI shell / command surface (`packages/app`, any handler):** `pnpm build` then `pnpm test` (the build makes `bundle-parity.test.ts` run live), then smoke `node packages/app/cli/expo98.mjs --json doctor`.
+- **CLI shell / command surface (`packages/app`, any handler):** `pnpm build` then `pnpm test` (the build makes `bundle-parity.test.ts` run live), then smoke `node packages/app/cli/run-expo.mjs --json doctor`.
 - **`packages/protocols` (CDP/Metro transport):** `pnpm exec vitest run packages/protocols/test` and `pnpm build` (esbuild surfaces bundle-only defects).
 - **Cross-package wiring:** `packages/app/test/dependency-dag.test.ts` (the M4 acyclic guard) + `pnpm -r run typecheck`.
 - **Lockfile / dependency changes:** `pnpm install --frozen-lockfile`, `pnpm test`, `pnpm pack --dry-run --json --filter @expo98/app`.
@@ -38,10 +38,10 @@ Prove the touched surface first. Do not reflexively run every command.
 pnpm install --frozen-lockfile
 pnpm test                      # full vitest acceptance suite (all packages)
 pnpm -r run typecheck          # tsc --noEmit per package
-pnpm build                     # esbuild → packages/app/cli/expo98.mjs
+pnpm build                     # esbuild → packages/app/cli/run-expo.mjs
 pnpm run check                 # format:check + lint + typecheck + build + test
 pnpm exec vitest run packages/<pkg>/test
-node packages/app/cli/expo98.mjs --json doctor   # smoke the shipped bin
+node packages/app/cli/run-expo.mjs --json doctor   # smoke the shipped bin
 ```
 
 ## Live (hardware) tests

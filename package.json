@@ -5,7 +5,7 @@
   "description": "expo98 — local evidence CLI for Expo / React Native iOS work, rebuilt on Effect-TS. pnpm workspace; the publishable CLI (package `expo98`) lives in packages/app.",
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @expo98/app build",
+    "build": "pnpm --filter run-expo build",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test",
     "format": "oxfmt --write --threads=1",
     "format:check": "oxfmt --check --threads=1",

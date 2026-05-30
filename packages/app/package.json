@@ -14,15 +14,15 @@
     "react-native",
     "simulator"
   ],
-  "homepage": "https://github.com/pproenca/expo98#readme",
+  "homepage": "https://github.com/pproenca/run-expo#readme",
   "bugs": {
-    "url": "https://github.com/pproenca/expo98/issues"
+    "url": "https://github.com/pproenca/run-expo/issues"
   },
   "license": "MIT",
   "author": "Pedro Proença",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pproenca/expo98.git",
+    "url": "git+https://github.com/pproenca/run-expo.git",
     "directory": "packages/app"
   },
   "bin": {

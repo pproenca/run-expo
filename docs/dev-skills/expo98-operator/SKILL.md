@@ -22,8 +22,8 @@ what makes it safe to hand to an agent.
 ## The runnable bin
 
 ```bash
-pnpm build      # emits packages/app/cli/expo98.mjs
-BIN="node packages/app/cli/expo98.mjs"    # or the installed `expo98` bin
+pnpm build      # emits packages/app/cli/run-expo.mjs
+BIN="node packages/app/cli/run-expo.mjs"    # or the installed `expo98` bin
 ```
 
 ## The loop: boot → inspect → act → evidence

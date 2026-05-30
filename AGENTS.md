@@ -4,11 +4,11 @@ Telegraph style. Root rules only. Skills own workflows; this file owns hard poli
 
 ## Start
 
-- Repo: `https://github.com/pproenca/expo98`
-- Package: Effect-TS **pnpm workspace** — 11 packages under `packages/*`. The publishable CLI is the package `expo98` (workspace dir `packages/app`); the other 10 are private `@expo98/*` packages inlined into its bundle.
-- Executable: `expo98` (single bin).
+- Repo: `https://github.com/pproenca/run-expo`
+- Package: Effect-TS **pnpm workspace** — 11 packages under `packages/*`. The publishable CLI is the package `run-expo` (workspace dir `packages/app`); the other 10 are private `@expo98/*` packages inlined into its bundle.
+- Executable: `run-expo` (single bin).
 - Source entrypoint: `packages/app/src/main.ts`.
-- Runnable artifact: the esbuild **bundle** `packages/app/cli/expo98.mjs` — build with `pnpm build`. The `.ts` source uses `.js`→`.ts` specifiers that resolve only under a bundler, so the source cannot run un-bundled by design; the bundle is what runs. It is gitignored and shipped via `files`+`prepack`.
+- Runnable artifact: the esbuild **bundle** `packages/app/cli/run-expo.mjs` — build with `pnpm build`. The `.ts` source uses `.js`→`.ts` specifiers that resolve only under a bundler, so the source cannot run un-bundled by design; the bundle is what runs. It is gitignored and shipped via `files`+`prepack`.
 - Source-cited behavior context: `docs/modernization/BUSINESS_RULES.md`.
 - Public contracts: `README.md`, `docs/modernization/` (spec), `package.json`, and packed package contents.
 - Missing deps: `pnpm install --frozen-lockfile`, retry once, then report the first actionable error.
@@ -59,8 +59,8 @@ Telegraph style. Root rules only. Skills own workflows; this file owns hard poli
   - `pnpm test` (full suite) or `pnpm exec vitest run packages/<pkg>/test` (one package)
   - `pnpm -r run typecheck`
   - `pnpm build` after runtime/source changes (makes `bundle-parity.test.ts` run live)
-  - `node packages/app/cli/expo98.mjs --json doctor` for an executable smoke
-  - `pnpm pack --dry-run --json --filter @expo98/app` after `bin`/`files`/README/package changes
+  - `node packages/app/cli/run-expo.mjs --json doctor` for an executable smoke
+  - `pnpm pack --dry-run --json --filter run-expo` after `bin`/`files`/README/package changes
 - For narrow edits, run the smallest test that proves the touched surface first, then broaden only when the contract demands it.
 - 29 live tests are `it.skip`'d (need a booted sim / Hermes / Metro / Expo project / socket); never un-skip them in CI.
 - Do not run independent `pnpm test` commands concurrently in one worktree.
@@ -70,7 +70,7 @@ Telegraph style. Root rules only. Skills own workflows; this file owns hard poli
 
 - `pnpm-lock.yaml` is the only committed package-manager lockfile.
 - `pnpm-workspace.yaml` defines the `packages/*` workspace + the `allowBuilds` gate; keep `esbuild: false` (or `pnpm install --frozen-lockfile` re-breaks).
-- Only the package `expo98` (`packages/app`) is publishable; the other 10 `@expo98/*` packages stay `private` and are inlined by the bundle (so `expo98` ships with zero runtime deps — its workspace deps live under `devDependencies`). Keep `expo98` `files` minimal (the bundle + README + LICENSE). Release via the `v*` tag → `.github/workflows/release.yml` (npm provenance).
+- Only the package `run-expo` (`packages/app`) is publishable; the other 10 `@expo98/*` packages stay `private` and are inlined by the bundle (so `run-expo` ships with zero runtime deps — its workspace deps live under `devDependencies`). Keep `run-expo` `files` minimal (the bundle + README + LICENSE). Release via the `v*` tag → `.github/workflows/release.yml` (npm provenance).
 - No release, version bump, or publish without explicit approval.
 
 ## Git
@@ -92,11 +92,11 @@ Telegraph style. Root rules only. Skills own workflows; this file owns hard poli
 
 ## Skills
 
-Skills live in `.agents/skills/`.
-
-- `$expo98-operator`: drive a real Expo/RN iOS app — the safe boot→inspect→act→evidence agent loop. Start here for any device/inspection task.
-- `$expo98-testing`: choose the cheapest safe test/build/package proof.
-- `$expo98-debugging`: debug CLI, policy gate, redaction, simulator, Metro, Hermes CDP, bridge, network/perf, and source↔bundle drift.
-- `$expo98-docs`: write or review repo + agent docs.
-- `$autoreview`: structured review closeout for non-trivial patches.
-- `$crabbox`: optional remote proof guidance; unavailable unless a valid repo Crabbox config/tooling is present.
+- **Published consumer skill** — `.agents/skills/run-expo/` (`$run-expo`): drive a real Expo/RN iOS app via the published `run-expo` npm bin. This is the **only** skill exposed by `npx skills add pproenca/run-expo`; keep it the sole entry under `.agents/skills/` so a consumer install lands exactly one skill.
+- **Repo-development skills** — `docs/dev-skills/` (deliberately outside the skill-tool scan path):
+  - `expo98-operator`: in-repo operator loop using the **locally built** bundle (`node packages/app/cli/run-expo.mjs`).
+  - `expo98-testing`: choose the cheapest safe test/build/package proof.
+  - `expo98-debugging`: debug CLI, policy gate, redaction, simulator, Metro, Hermes CDP, bridge, network/perf, and source↔bundle drift.
+  - `expo98-docs`: write or review repo + agent docs.
+  - `autoreview`: structured review closeout for non-trivial patches.
+  - `crabbox`: optional remote proof guidance; unavailable unless a valid repo Crabbox config/tooling is present.

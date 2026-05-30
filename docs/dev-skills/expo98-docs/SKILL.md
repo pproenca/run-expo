@@ -9,7 +9,7 @@ Use this skill when writing, editing, or reviewing expo98 docs for CLI usage,
 the safety/policy model, package behavior, architecture, or modernization
 context. expo98 is an Effect-TS pnpm workspace; the publishable CLI is
 the package `expo98` (workspace dir `packages/app`; bin `expo98`, emitted to
-`packages/app/cli/expo98.mjs` by `pnpm build`).
+`packages/app/cli/run-expo.mjs` by `pnpm build`).
 
 ## Core Model
 
@@ -39,7 +39,7 @@ lives under `docs/modernization/`. Do not reference paths that do not exist.
 ## Verification
 
 - Docs-only: `git diff --check`.
-- CLI examples: run them — `node packages/app/cli/expo98.mjs --json <cmd>` (after `pnpm build`).
+- CLI examples: run them — `node packages/app/cli/run-expo.mjs --json <cmd>` (after `pnpm build`).
 - Behavior docs: check against the tests, the source, and `docs/modernization/reimagine/rules-gwt.md`.
 - Package/tarball docs: verify `packages/app/package.json` (`bin`/`files`) and `pnpm pack --dry-run --json --filter @expo98/app`.
 

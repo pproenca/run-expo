@@ -92,7 +92,7 @@ write is path-confined; all network access is loopback-only.
 
 ## Agent efficiency
 
-expo98 exists to end the ad-hoc mess of agent-driven Expo testing — raw
+run-expo exists to end the ad-hoc mess of agent-driven Expo testing — raw
 `xcrun simctl`, hand-written Hermes CDP frames, Metro pokes — by giving an AI
 agent **one CLI with a stable, redacted, fail-closed contract**:
 
@@ -101,7 +101,19 @@ agent **one CLI with a stable, redacted, fail-closed contract**:
 - dangerous actions refused unless explicitly granted — structurally, not by convention;
 - a read-first `doctor → inspect → act (gated) → capture evidence` loop.
 
-See the bundled `expo98-operator` agent skill (`.agents/skills/`) for the full loop.
+### Install the agent skill
+
+Drop the operator skill into any repo so Claude (and 50+ other agents) can drive
+`run-expo` against the Expo app in that repo:
+
+```bash
+npx skills add pproenca/run-expo      # installs the single `run-expo` operator skill
+```
+
+It teaches the agent the safe `doctor → inspect → act (gated) → capture evidence`
+loop over the published `run-expo` bin — point it at the app with
+`--root <expo-project-dir>` (e.g. `--root apps/mobile` in a monorepo). The skill
+source lives at `.agents/skills/run-expo/`.
 
 ## Workspace
 

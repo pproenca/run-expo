@@ -15,7 +15,7 @@ exact remote command to run.
 ## Default Position
 
 - Prefer local targeted proof for expo98 changes.
-- Use `pnpm install --frozen-lockfile`, `pnpm test`, `pnpm -r run typecheck`, `pnpm build`, and `node packages/app/cli/expo98.mjs --json doctor` before considering remote validation.
+- Use `pnpm install --frozen-lockfile`, `pnpm test`, `pnpm -r run typecheck`, `pnpm build`, and `node packages/app/cli/run-expo.mjs --json doctor` before considering remote validation.
 - Do not copy another project's Crabbox config directly. It is tuned for a different monorepo, CI image, cache shape, and environment-variable namespace.
 
 ## If Configured Later
