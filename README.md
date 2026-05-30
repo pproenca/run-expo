@@ -107,13 +107,13 @@ Drop the operator skill into any repo so Claude (and 50+ other agents) can drive
 `run-expo` against the Expo app in that repo:
 
 ```bash
-npx skills add pproenca/run-expo      # installs the single `run-expo` operator skill
+npx skills add pproenca/run-expo      # installs the single `use-run-expo` operator skill
 ```
 
 It teaches the agent the safe `doctor → inspect → act (gated) → capture evidence`
 loop over the published `run-expo` bin — point it at the app with
 `--root <expo-project-dir>` (e.g. `--root apps/mobile` in a monorepo). The skill
-source lives at `.agents/skills/run-expo/`.
+source lives at `.agents/skills/use-run-expo/`.
 
 ## Workspace
 

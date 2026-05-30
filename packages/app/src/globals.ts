@@ -134,6 +134,39 @@ const isValueFlag = (name: string): name is ValueFlag => (VALUE_FLAGS as Readonl
 
 const requiresValue = (name: string): CliUsageError => new CliUsageError({ message: `${name} requires a value.` })
 
+/**
+ * Fold the globals parsed in the ROOT scope (flags written BEFORE the subcommand)
+ * with those parsed in the SUBCOMMAND scope (flags written AFTER it) into one
+ * effective struct, so every global flag is position-independent.
+ *
+ * `@effect/cli` binds a global flag to whichever command scope it textually sits
+ * in: `run-expo --action-policy p <verb>` parses it into the ROOT command, while
+ * `run-expo <verb> --action-policy p` parses it into the SUBCOMMAND. The shell
+ * previously read only the subcommand scope, so a flag in the other position was
+ * silently dropped — notably `--action-policy` in the DOCUMENTED pre-verb spot,
+ * which then fail-closed DENIED gated actions whose policy file actually granted
+ * them. Folding both scopes restores the "global flags work anywhere" contract:
+ * booleans OR together, single-value flags prefer the subcommand scope (closer to
+ * the verb) and fall back to root, and list flags concatenate (de-duped).
+ */
+export const mergeGlobals = (root: CliGlobals, sub: CliGlobals): CliGlobals => ({
+  json: root.json || sub.json,
+  plain: root.plain || sub.plain,
+  ndjson: root.ndjson || sub.ndjson,
+  quiet: root.quiet || sub.quiet,
+  root: Option.orElse(sub.root, () => root.root),
+  stateDir: Option.orElse(sub.stateDir, () => root.stateDir),
+  actionPolicy: Option.orElse(sub.actionPolicy, () => root.actionPolicy),
+  maxOutput: Option.orElse(sub.maxOutput, () => root.maxOutput),
+  allowRuntimeEval: root.allowRuntimeEval || sub.allowRuntimeEval,
+  confirmActions: Array.from(new Set([...root.confirmActions, ...sub.confirmActions])),
+  record: root.record || sub.record,
+  contentBoundaries: root.contentBoundaries || sub.contentBoundaries,
+  debug: root.debug || sub.debug,
+  noColor: root.noColor || sub.noColor,
+  noInput: root.noInput || sub.noInput,
+})
+
 // ──────────────────────────────────────────────────────────────────────────
 // @effect/cli Options — declarative parsing of the global flags. The guard
 // above is the AUTHORITY for AC-015/016; these Options drive --help/--version,

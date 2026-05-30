@@ -1,5 +1,5 @@
 ---
-name: run-expo
+name: use-run-expo
 description: "Drive a real Expo / React Native iOS app from an AI agent using the run-expo CLI — the efficient, safe boot→inspect→act→evidence loop. Use when an agent must test, inspect, or capture evidence from a running Expo app instead of hand-rolling xcrun/simctl/Hermes CDP/Metro calls."
 ---
 

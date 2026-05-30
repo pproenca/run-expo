@@ -1,7 +1,5 @@
 {
-  "include_ext": [
-    ".ts"
-  ],
+  "include_ext": [".ts"],
   "exclude_globs": [
     "**/node_modules/**",
     "**/dist/**",
@@ -25,10 +23,7 @@
       "packages/protocols/src/errors.ts",
       "packages/protocols/src/loopback.ts"
     ],
-    "primitive": [
-      "packages/domain/src/entities.ts",
-      "packages/domain/src/decisions.ts"
-    ],
+    "primitive": ["packages/domain/src/entities.ts", "packages/domain/src/decisions.ts"],
     "seam": [
       "packages/core/src/capabilities.ts",
       "packages/core/src/subprocess.ts",
@@ -44,13 +39,8 @@
       "packages/protocols/src/network-evidence.ts",
       "packages/expo-integration/src/**/*.ts"
     ],
-    "pipeline": [
-      "packages/core/src/dispatch.ts"
-    ],
-    "scaffold": [
-      "packages/app/src/**/*.ts",
-      "packages/overlay-server/src/**/*.ts"
-    ]
+    "pipeline": ["packages/core/src/dispatch.ts"],
+    "scaffold": ["packages/app/src/**/*.ts", "packages/overlay-server/src/**/*.ts"]
   },
   "feature_roots": [
     "packages/handlers-devtools/src/**/*.ts",

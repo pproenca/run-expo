@@ -53,6 +53,18 @@ jobs:
             exit 1
           fi
 
+      # The BUILT bin (from Verify above) must report the same version it ships as.
+      # Guards the esbuild build-time inject so a release can never publish a bin
+      # whose --version disagrees with the tarball (the 0.1.2 → "0.1.1" defect).
+      - name: Assert built bin version matches package
+        run: |
+          BIN_VERSION="$(node packages/app/cli/run-expo.mjs --version)"
+          PKG_VERSION="$(node -p "require('./packages/app/package.json').version")"
+          if [ "$BIN_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::built bin reports '$BIN_VERSION' but package.json is '$PKG_VERSION'"
+            exit 1
+          fi
+
       # Publish only the CLI package. `prepack` rebuilds the bundle into the
       # tarball; `files` ships only cli/run-expo.mjs + README + LICENSE.
       - name: Publish to npm

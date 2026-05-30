@@ -9,7 +9,7 @@ import { Cause, Console, Effect, Exit, Layer, Option } from "effect"
 import { handlerCommands } from "./all-commands.js"
 import { CLI_VERSION, coreReadCommands } from "./commands.js"
 import { formatJson, formatPlain, selectMode } from "./envelope.js"
-import { type CliGlobals, assertUsage, globalOptions } from "./globals.js"
+import { type CliGlobals, assertUsage, globalOptions, mergeGlobals } from "./globals.js"
 import { AppLayer } from "./layers.js"
 import { resolvePolicy } from "./policy-resolve.js"
 import { type CommandRegistration, registerCommands, runRegistered } from "./registry.js"
@@ -115,27 +115,49 @@ const resolveInGroup = (
 }
 
 /**
+ * The root command BASE — its NAME + global options, WITHOUT the subcommands
+ * attached yet. Every subcommand handler references this value as a `@effect/cli`
+ * config tag (`yield* rootBase`) to read the globals parsed in the ROOT scope,
+ * i.e. the flags written BEFORE the subcommand. Splitting the base out (rather
+ * than reading off the fully-assembled `rootCommand`) avoids a definition cycle:
+ * the subcommands need the parent's tag, and the parent needs the subcommands.
+ */
+const rootBase = Command.make(CLI_NAME, { globals: globalOptions }, () =>
+  Console.log(`${CLI_NAME} ${CLI_VERSION} — run with --help for commands.`),
+).pipe(Command.withDescription("run-expo — local-first evidence CLI for Expo / RN iOS."))
+
+/**
  * Build one `@effect/cli` subcommand for a first-token group. It carries the
  * shared global options plus a repeated positional arg list, picks the matching
  * registration by sub-verb, resolves the effective policy, runs the core command
  * THROUGH dispatch (gate + boundary), and emits the selected envelope. The
  * handler's effect is `void` (it prints); the exit code is carried out-of-band
  * via `ProgramExit` so `@effect/cli`'s ValidationError handling stays untouched.
+ *
+ * A `@effect/cli` flag binds to whichever scope it textually sits in, so the
+ * handler MERGES the root-scope globals (`yield* rootBase`, flags before the
+ * verb) with its own subcommand-scope globals (flags after the verb). Without
+ * this merge, `--action-policy <file>` in the DOCUMENTED pre-verb position is
+ * dropped and the gate fail-closed DENIES a granted action — the user-visible
+ * "taps don't work when they should" bug.
  */
 const subcommandForGroup = (name: string, group: ReadonlyArray<CommandRegistration>) => {
   const summary = group[0]?.summary ?? name
   return Command.make(
     name,
     { globals: globalOptions, args: Args.repeated(Args.text({ name: "args" })) },
-    ({ globals, args }) => {
-      const resolved = resolveInGroup(group, args)
-      if (resolved === undefined) {
-        // Unknown sub-verb for a known family ⇒ usage error (exit 2).
-        return Effect.fail(new ProgramExit(2 as ExitCode))
-      }
-      const [reg, positionals] = resolved
-      return runVerb(reg, globals, positionals)
-    },
+    ({ globals, args }) =>
+      Effect.gen(function* () {
+        const { globals: rootGlobals } = yield* rootBase
+        const effective = mergeGlobals(rootGlobals, globals)
+        const resolved = resolveInGroup(group, args)
+        if (resolved === undefined) {
+          // Unknown sub-verb for a known family ⇒ usage error (exit 2).
+          return yield* Effect.fail(new ProgramExit(2 as ExitCode))
+        }
+        const [reg, positionals] = resolved
+        return yield* runVerb(reg, effective, positionals)
+      }),
   ).pipe(Command.withDescription(summary))
 }
 
@@ -176,12 +198,8 @@ const runVerb = (
 const subcommands = groupByFirstToken(registry.all).map(([name, group]) => subcommandForGroup(name, group))
 const subcommandsNonEmpty = asNonEmpty(subcommands)
 
-/** The root command: global options + every registered verb as a subcommand. */
-const rootCommand = Command.make(CLI_NAME, { globals: globalOptions }, () =>
-  Console.log(`${CLI_NAME} ${CLI_VERSION} — run with --help for commands.`),
-).pipe(Command.withDescription("run-expo — local-first evidence CLI for Expo / RN iOS."), (self) =>
-  Command.withSubcommands(self, subcommandsNonEmpty),
-)
+/** The root command: `rootBase` (global options) + every registered verb. */
+const rootCommand = Command.withSubcommands(rootBase, subcommandsNonEmpty)
 
 /** Emit the finalised payload on the channel the globals selected. */
 const emit = (result: DispatchResult<unknown>, globals: CliGlobals): Effect.Effect<void> => {

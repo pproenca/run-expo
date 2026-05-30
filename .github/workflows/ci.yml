@@ -63,7 +63,17 @@ jobs:
         run: pnpm test
 
       # Read-only end-to-end smoke of the shipped artifact (no device needed).
-      - name: Smoke the bin
+      # The version-parity check guards the build-time inject: the BUILT bin must
+      # report exactly packages/app/package.json `version`. This is the gate that
+      # would have caught 0.1.2 shipping as "0.1.1" (a stale hardcoded constant).
+      - name: Smoke the bin (+ version parity)
         run: |
           node packages/app/cli/run-expo.mjs --json doctor
           node packages/app/cli/run-expo.mjs --json version
+          BIN_VERSION="$(node packages/app/cli/run-expo.mjs --version)"
+          PKG_VERSION="$(node -p "require('./packages/app/package.json').version")"
+          if [ "$BIN_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::built bin reports '$BIN_VERSION' but package.json is '$PKG_VERSION'"
+            exit 1
+          fi
+          echo "version parity OK: $BIN_VERSION"

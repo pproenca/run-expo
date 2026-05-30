@@ -14,7 +14,7 @@
  */
 
 // Global flags + the AC-015/016 pre-parse guard (architecture finding N2).
-export { assertUsage, type CliGlobals, globalOptions, VALUE_FLAGS, type ValueFlag } from "./globals.js"
+export { assertUsage, type CliGlobals, globalOptions, mergeGlobals, VALUE_FLAGS, type ValueFlag } from "./globals.js"
 
 // Output envelope (AC-003/012 redaction + AC-041 truncation at the boundary).
 export { formatJson, formatPlain, type JsonEnvelope, ndjsonEnvelope, type OutputMode, selectMode } from "./envelope.js"

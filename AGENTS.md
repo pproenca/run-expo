@@ -92,7 +92,7 @@ Telegraph style. Root rules only. Skills own workflows; this file owns hard poli
 
 ## Skills
 
-- **Published consumer skill** — `.agents/skills/run-expo/` (`$run-expo`): drive a real Expo/RN iOS app via the published `run-expo` npm bin. This is the **only** skill exposed by `npx skills add pproenca/run-expo`; keep it the sole entry under `.agents/skills/` so a consumer install lands exactly one skill.
+- **Published consumer skill** — `.agents/skills/use-run-expo/` (`$use-run-expo`): drive a real Expo/RN iOS app via the published `run-expo` npm bin. This is the **only** skill exposed by `npx skills add pproenca/run-expo`; keep it the sole entry under `.agents/skills/` so a consumer install lands exactly one skill.
 - **Repo-development skills** — `docs/dev-skills/` (deliberately outside the skill-tool scan path):
   - `expo98-operator`: in-repo operator loop using the **locally built** bundle (`node packages/app/cli/run-expo.mjs`).
   - `expo98-testing`: choose the cheapest safe test/build/package proof.

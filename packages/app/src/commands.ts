@@ -16,10 +16,14 @@ import { type CommandContext, type CommandRegistration, registration } from "./r
  */
 
 /** The CLI version reported by `version` and `--version`. */
-// Kept in sync with packages/app/package.json `version` (the published version);
-// bump both together on release. CI runs the built bin, so a drift surfaces as a
-// visible `version` mismatch in the smoke step.
-export const CLI_VERSION = "0.1.1"
+// Injected at build time from packages/app/package.json `version` via esbuild
+// `define` (scripts/build.mjs) — there is no second copy to bump, so the shipped
+// bin can NEVER report a stale version (the defect that shipped 0.1.2 as "0.1.1").
+// Under vitest/dev there is no define: the bare global is absent, so `typeof` is
+// "undefined" (safe on an undeclared name) and we fall back to a dev marker. CI's
+// bin-smoke step asserts the BUILT bin's version equals package.json (belt + braces).
+declare const __RUN_EXPO_VERSION__: string
+export const CLI_VERSION: string = typeof __RUN_EXPO_VERSION__ === "string" ? __RUN_EXPO_VERSION__ : "0.0.0-dev"
 
 // ── policy show — render the effective PolicyDecision for an action (AC-001). ─
 const policyShow = registration({

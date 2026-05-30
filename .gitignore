@@ -33,11 +33,11 @@ expo98.policy.json
 
 # Local project-agent skill installs. Only repo-owned skills are visible by
 # default; promoting a new repo skill should require an intentional `git add -f`.
-# `run-expo` is the single published consumer skill `npx skills add pproenca/run-expo`
+# `use-run-expo` is the single published consumer skill `npx skills add pproenca/run-expo`
 # installs; repo-development skills live under docs/dev-skills/ (outside this scan path).
 .agents/skills/*
-!.agents/skills/run-expo/
-!.agents/skills/run-expo/**
+!.agents/skills/use-run-expo/
+!.agents/skills/use-run-expo/**
 
 # Claude Code session/project state (harness-managed, never committed).
 .claude/

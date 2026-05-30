@@ -8,7 +8,7 @@ import {
 } from "@expo98/core"
 import { makeMemoryFs, MemoryFsLayer } from "@expo98/domain"
 import { Effect, Layer, Option } from "effect"
-import { coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "run-expo"
+import { CLI_VERSION, coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "run-expo"
 
 /**
  * The proof READ commands run end-to-end THROUGH core's dispatch — the gate +
@@ -61,7 +61,11 @@ describe("Read commands through dispatch", () => {
       expect(result.exitCode).toBe(EXIT_SUCCESS)
       const payload = result.payload as { available: boolean; version: string }
       expect(payload.available).toBe(true)
-      expect(payload.version).toBe("0.1.1")
+      // The `version` command plumbs CLI_VERSION through dispatch — assert that
+      // wiring against the constant, NOT a hardcoded literal (which is what let
+      // 0.1.2 ship as "0.1.1"). Under vitest CLI_VERSION is the "0.0.0-dev"
+      // fallback; the BUILT bin's real version is asserted by CI's smoke step.
+      expect(payload.version).toBe(CLI_VERSION)
     }).pipe(Effect.provide(Layer.merge(TestCaps, MemoryFsLayer))),
   )
 
