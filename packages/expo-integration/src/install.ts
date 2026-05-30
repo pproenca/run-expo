@@ -21,6 +21,7 @@
 import {
   command,
   type Command,
+  confinePath,
   DeviceCapability,
   dispatch,
   type DispatchResult,
@@ -85,45 +86,50 @@ export const removePlan = (root: string): BridgePlan => {
   }
 }
 
+const confinedBridgeFilePaths = (root: string) =>
+  Effect.all({
+    metadata: confinePath(root, ".expo98/bridge.json"),
+    source: confinePath(root, "src/expo98-devtools-bridge.ts"),
+    legacyMetadata: confinePath(root, ".expo-ios/bridge.json"),
+  })
+
 /** The `source-write` install command — writes both files via the capability. */
 export const installWriteCommand = (root: string): Command<"source-write", BridgeWriteResult> => {
-  const paths = bridgeFilePaths(root)
   return command(
     { action: BRIDGE_INSTALL_TOKEN, sideEffect: "source-write" },
-    SourceWriteCapability.pipe(
-      Effect.flatMap((cap) =>
-        cap
-          .writeFile(paths.metadata, bridgeMetadataContents())
-          .pipe(Effect.zipRight(cap.writeFile(paths.source, bridgeSourceContents()))),
-      ),
-      Effect.as<BridgeWriteResult>({
+    Effect.gen(function* () {
+      const paths = yield* confinedBridgeFilePaths(root)
+      const cap = yield* SourceWriteCapability
+      yield* cap
+        .writeFile(paths.metadata, bridgeMetadataContents())
+        .pipe(Effect.zipRight(cap.writeFile(paths.source, bridgeSourceContents())))
+      return {
         action: BRIDGE_INSTALL_TOKEN,
         applied: true,
         written: [paths.metadata, paths.source],
         deleted: [],
-      }),
-    ),
+      } satisfies BridgeWriteResult
+    }),
   )
 }
 
 /** The `source-write` remove command — deletes both files (+ legacy fallback). */
 export const removeWriteCommand = (root: string): Command<"source-write", BridgeWriteResult> => {
-  const paths = bridgeFilePaths(root)
   return command(
     { action: BRIDGE_REMOVE_TOKEN, sideEffect: "source-write" },
-    SourceWriteCapability.pipe(
-      Effect.flatMap((cap) =>
-        cap
-          .deleteFile(paths.metadata)
-          .pipe(Effect.zipRight(cap.deleteFile(paths.source)), Effect.zipRight(cap.deleteFile(paths.legacyMetadata))),
-      ),
-      Effect.as<BridgeWriteResult>({
+    Effect.gen(function* () {
+      const paths = yield* confinedBridgeFilePaths(root)
+      const cap = yield* SourceWriteCapability
+      yield* cap
+        .deleteFile(paths.metadata)
+        .pipe(Effect.zipRight(cap.deleteFile(paths.source)), Effect.zipRight(cap.deleteFile(paths.legacyMetadata)))
+      return {
         action: BRIDGE_REMOVE_TOKEN,
         applied: true,
         written: [],
         deleted: [paths.metadata, paths.source, paths.legacyMetadata],
-      }),
-    ),
+      } satisfies BridgeWriteResult
+    }),
   )
 }
 

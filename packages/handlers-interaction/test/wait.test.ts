@@ -162,6 +162,35 @@ describe("AC-004 wait.fn runtime-eval gate", () => {
     }),
   )
 
+  it.effect("AC-035 wait --fn eval is bounded by timeoutMs", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      const caps = Layer.mergeAll(
+        Layer.succeed(
+          RuntimeEvalCapability,
+          RuntimeEvalCapability.of({
+            evaluate: () => Ref.update(calls, (n) => n + 1).pipe(Effect.zipRight(Effect.never)),
+          }),
+        ),
+        Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("ok") })),
+        Layer.succeed(
+          SourceWriteCapability,
+          SourceWriteCapability.of({
+            writeFile: () => Effect.void,
+            deleteFile: () => Effect.void,
+          }),
+        ),
+      )
+      const cmd = waitCommand({ fn: "true", timeoutMs: 100 }, { hasRuntimeAdapter: true })
+      const fiber = yield* Effect.fork(run(cmd, { allowRuntimeEval: true }, caps))
+      yield* TestClock.adjust("100 millis")
+      const result = yield* Fiber.join(fiber)
+      const payload = result.payload as { error?: string }
+      expect(payload.error).toContain("Runtime wait predicate timed out after 100ms")
+      expect(yield* Ref.get(calls)).toBe(1)
+    }),
+  )
+
   it.effect(
     "AC-004 wait --fn with NO runtime adapter → unavailable shape, eval NEVER invoked (even when allowed)",
     () =>

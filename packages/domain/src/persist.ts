@@ -159,6 +159,21 @@ const readJson =
 export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistence => {
   const write = writeJson(fs)
   const read = readJson(fs)
+  const sessionSemaphores = new Map<string, ReturnType<typeof Effect.unsafeMakeSemaphore>>()
+  const sessionLock = (stateRoot: string, sessionId: string): ReturnType<typeof Effect.unsafeMakeSemaphore> => {
+    const key = `${stateRoot}\0${sessionId}`
+    const existing = sessionSemaphores.get(key)
+    if (existing !== undefined) {
+      return existing
+    }
+    const created = Effect.unsafeMakeSemaphore(1)
+    sessionSemaphores.set(key, created)
+    return created
+  }
+  const withSessionLock =
+    (stateRoot: string, sessionId: string) =>
+    <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      effect.pipe(sessionLock(stateRoot, sessionId).withPermits(1))
 
   // -- session helpers ----------------------------------------------------
   const loadSession = (
@@ -302,7 +317,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       }
       yield* writeSession(layout, updated)
       return updated
-    })
+    }).pipe(withSessionLock(stateRoot, sessionId))
 
   const sessionClean: Persistence["sessionClean"] = (input) =>
     Effect.gen(function* () {
@@ -348,7 +363,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       }
       yield* writeSession(layout, updated)
       return updated
-    })
+    }).pipe(withSessionLock(stateRoot, sessionId))
 
   const targetCurrent: Persistence["targetCurrent"] = (stateRoot, sessionId) =>
     Effect.gen(function* () {
@@ -399,7 +414,7 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
       yield* writeSession(layout, updated)
       yield* checkInvariants(layout, updated)
       return updated
-    })
+    }).pipe(withSessionLock(stateRoot, sessionId))
 
   const snapshotShow: Persistence["snapshotShow"] = (stateRoot, sessionId, snapshotId) =>
     Effect.gen(function* () {

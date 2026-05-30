@@ -77,6 +77,26 @@ describe("S5 Redaction — strongest superset (AC-003, AC-012)", () => {
     expect(out).not.toContain("top")
   })
 
+  it("AC-012 redacts bare credential values in free strings", () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.VeryLongSignature"
+    const blob = [
+      "tokenless Bearer abcdefghijklmnop",
+      "openai sk-abcdefghijklmnopqrstuvwxyz",
+      "github ghp_abcdefghijklmnopqrstuvwxyz",
+      "slack xoxb-123456789012-abcdefghijkl",
+      `jwt ${jwt}`,
+      "-----BEGIN PRIVATE KEY-----\nabcdef\n-----END PRIVATE KEY-----",
+    ].join("\n")
+    const out = redactSecretsInString(blob)
+    expect(out).toContain(`Bearer ${REDACTED}`)
+    expect(out).not.toContain("abcdefghijklmnop")
+    expect(out).not.toContain("sk-abcdefghijklmnopqrstuvwxyz")
+    expect(out).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz")
+    expect(out).not.toContain("xoxb-123456789012-abcdefghijkl")
+    expect(out).not.toContain(jwt)
+    expect(out).not.toContain("BEGIN PRIVATE KEY")
+  })
+
   it("AC-003 case-insensitive key matching", () => {
     const out = redact({ AUTHORIZATION: "a", ApiKey: "b" }) as Record<string, unknown>
     expect(out.AUTHORIZATION).toBe(REDACTED)

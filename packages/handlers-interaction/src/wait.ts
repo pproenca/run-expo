@@ -21,7 +21,7 @@
  * The handler reaches `RuntimeEvalCapability` ONLY in the `wait.fn` branch (its
  * descriptor class is `runtime-eval`); the read branches have `R = never`.
  */
-import { command, type Command, RuntimeEvalCapability } from "@expo98/core"
+import { CliRuntimeError, command, type Command, RuntimeEvalCapability } from "@expo98/core"
 import { Clock, Effect } from "effect"
 import { clamp } from "./support.js"
 import { descriptor } from "./support.js"
@@ -162,7 +162,14 @@ const fnWaitCommand = (args: WaitArgs): Command<"runtime-eval", WaitResult> => {
   return command(
     descriptor("wait.fn", "runtime-eval"),
     RuntimeEvalCapability.pipe(
-      Effect.flatMap((evalCap) => evalCap.evaluate(`Boolean(${fn})`)),
+      Effect.flatMap((evalCap) =>
+        evalCap.evaluate(`Boolean(${fn})`).pipe(
+          Effect.timeoutFail({
+            duration: `${timeoutMs} millis`,
+            onTimeout: () => new CliRuntimeError({ message: `Runtime wait predicate timed out after ${timeoutMs}ms.` }),
+          }),
+        ),
+      ),
       Effect.map(
         (value): WaitResult => ({
           action: "wait.fn",

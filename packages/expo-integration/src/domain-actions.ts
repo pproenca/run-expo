@@ -7,26 +7,44 @@
  *   - controls `press`      → device ; any other controls action → read
  *
  * Gating (fail-closed, AC-006):
- *   1. Classify the action.
- *   2. If NON-read and the policy does not allow the EXACT action →
- *      `policyDeniedPayload` and DO NOT call the bridge (capability withheld).
- *   3. Otherwise call the bridge, then DEFENSE-IN-DEPTH re-check: if the action
- *      is non-read and policy still isn't allowed, re-deny (a second, independent
- *      gate so a classification regression can't slip a mutate through).
- *   4. Surface the bridge value REDACTED (by core at the boundary) + SIZE-BOUNDED
- *      (`MAX_OUTPUT`/`MAX_ARRAY_ITEMS`), tagged with
- *      `domain/action/metroPort/target/transport/evidenceSource/policy`.
+ *   1. Classify the action and build a core `Command` with that descriptor.
+ *   2. Run it through core `dispatch`; a denied mutate never executes the
+ *      handler, so the bridge is not consulted.
+ *   3. Allowed mutates require the device capability in the handler `R`, proving
+ *      that only the dispatch gate-pass branch can run the bridge call.
+ *   4. Re-check the gate after the bridge call as defense-in-depth, then surface
+ *      bounded evidence.
  *
  * The bridge is reached via the `BridgeTransport` SEAM (Expo DevTools Plugins SDK
  * in production); it is the READ/evidence channel, NOT a dangerous capability —
  * the policy gate above is what authorises a mutate, enforced before any call.
  */
-import { gate, policyDeniedPayload, type PolicyDeniedPayload, type PolicyDocument, type SideEffect } from "@expo98/core"
+import {
+  command,
+  type Command,
+  type CommandDescriptor,
+  type DispatchResult,
+  dispatch,
+  DeviceCapability,
+  gate,
+  policyDeniedPayload,
+  type PolicyDeniedPayload,
+  type PolicyDocument,
+  RuntimeEvalCapability,
+  SourceWriteCapability,
+  type SideEffect,
+} from "@expo98/core"
 import { Effect } from "effect"
 import { boundBridgeValue } from "./bound.js"
-import { BridgeTransport, type BridgeCallResult, type BridgeUnavailableCode } from "./bridge-transport.js"
+import {
+  BridgeTransport,
+  type BridgeCallResult,
+  type BridgeTransportService,
+  type BridgeUnavailableCode,
+} from "./bridge-transport.js"
 
 export type DomainName = "storage" | "state" | "controls"
+type DomainActionSideEffect = "read" | "device"
 
 /** Read actions per domain (everything else in that domain is a mutate). */
 const READ_ACTIONS: Readonly<Record<DomainName, ReadonlyArray<string>>> = {
@@ -43,7 +61,7 @@ const DEVICE_ACTIONS: Readonly<Record<DomainName, ReadonlyArray<string>>> = {
 }
 
 /** Classify a `domain/action` into its side-effect class (AC-006). */
-export const domainActionSideEffect = (domain: DomainName, action: string): SideEffect => {
+export const domainActionSideEffect = (domain: DomainName, action: string): DomainActionSideEffect => {
   if (domain === "controls") {
     return READ_ACTIONS.controls.includes(action) ? "read" : "device"
   }
@@ -83,17 +101,6 @@ const EVIDENCE_SOURCE = "bridge" as const
 /** The policy-gate action key for a domain action (`<domain>.<action>`). */
 export const domainActionKey = (domain: DomainName, action: string): string => `${domain}.${action}`
 
-/** Is this non-read action allowed by the policy? (the gate predicate.) */
-const nonReadAllowed = (
-  domain: DomainName,
-  action: string,
-  sideEffect: SideEffect,
-  policy: PolicyDocument,
-): boolean => {
-  const descriptor = { action: domainActionKey(domain, action), sideEffect }
-  return gate(descriptor, policy)._tag === "allow"
-}
-
 const evidence = (input: DomainActionInput, sideEffect: SideEffect, call: BridgeCallResult): DomainActionEvidence => ({
   domain: input.domain,
   action: input.action,
@@ -108,34 +115,68 @@ const evidence = (input: DomainActionInput, sideEffect: SideEffect, call: Bridge
   ...(call.code !== undefined ? { code: call.code } : {}),
 })
 
+const internalCapabilities = <A>(
+  effect: Effect.Effect<A, never, DeviceCapability | RuntimeEvalCapability | SourceWriteCapability>,
+): Effect.Effect<A> =>
+  effect.pipe(
+    Effect.provideService(
+      DeviceCapability,
+      DeviceCapability.of({
+        invoke: () => Effect.dieMessage("domain action dispatch injected device capability unexpectedly"),
+      }),
+    ),
+    Effect.provideService(
+      RuntimeEvalCapability,
+      RuntimeEvalCapability.of({
+        evaluate: () => Effect.dieMessage("domain action dispatch injected runtime-eval capability unexpectedly"),
+      }),
+    ),
+    Effect.provideService(
+      SourceWriteCapability,
+      SourceWriteCapability.of({
+        writeFile: () => Effect.dieMessage("domain action dispatch injected source-write capability unexpectedly"),
+        deleteFile: () => Effect.dieMessage("domain action dispatch injected source-write capability unexpectedly"),
+      }),
+    ),
+  )
+
+const buildDomainCommand = (
+  input: DomainActionInput,
+  transport: BridgeTransportService,
+): Command<"read", DomainActionResult> | Command<"device", DomainActionResult> => {
+  const { action, domain, policy } = input
+  const sideEffect = domainActionSideEffect(domain, action)
+  const descriptor: CommandDescriptor & { readonly sideEffect: typeof sideEffect } = {
+    action: domainActionKey(domain, action),
+    sideEffect,
+  }
+  const runBridge = Effect.gen(function* () {
+    const call = yield* transport.call(domain, action, input.args ?? {})
+    if (sideEffect !== "read" && gate(descriptor, policy)._tag === "deny") {
+      return policyDeniedPayload(`Policy denied action "${descriptor.action}" (defense-in-depth).`, policy)
+    }
+    return evidence(input, sideEffect, call)
+  })
+
+  return sideEffect === "read"
+    ? command(descriptor as CommandDescriptor & { readonly sideEffect: "read" }, runBridge)
+    : command(
+        descriptor as CommandDescriptor & { readonly sideEffect: "device" },
+        DeviceCapability.pipe(Effect.flatMap(() => runBridge)),
+      )
+}
+
 /**
- * Run a bridge storage/state/controls action with the AC-006 gate. Returns a
- * `policyDeniedPayload` (without touching the bridge) for a withheld mutate, else
- * the size-bounded bridge evidence.
+ * Run a bridge storage/state/controls action through core dispatch. A denied
+ * mutate returns a `policyDeniedPayload` without touching the bridge; allowed
+ * actions return size-bounded bridge evidence.
  */
 export const runDomainAction = (input: DomainActionInput): Effect.Effect<DomainActionResult, never, BridgeTransport> =>
   Effect.gen(function* () {
-    const { action, domain, policy } = input
-    const sideEffect = domainActionSideEffect(domain, action)
-    const isRead = sideEffect === "read"
-    const actionKey = domainActionKey(domain, action)
-
-    // 1. First gate: a non-read action needs an explicit policy allow.
-    if (!isRead && !nonReadAllowed(domain, action, sideEffect, policy)) {
-      // CAPABILITY WITHHELD: the bridge is NEVER consulted for a denied mutate.
-      return policyDeniedPayload(`Policy denied action.`, policy)
-    }
-
-    // 2. Allowed (or read): consult the bridge transport.
     const transport = yield* BridgeTransport
-    const call = yield* transport.call(domain, action, input.args ?? {})
-
-    // 3. DEFENSE-IN-DEPTH: re-check the gate after the call so a classification
-    //    drift cannot surface a mutate's result without an allow.
-    if (!isRead && !nonReadAllowed(domain, action, sideEffect, policy)) {
-      return policyDeniedPayload(`Policy denied action "${actionKey}" (defense-in-depth).`, policy)
-    }
-
-    // 4. Surface bounded evidence (redaction happens at core's output boundary).
-    return evidence(input, sideEffect, call)
+    const result: DispatchResult<DomainActionResult> = yield* dispatch(
+      buildDomainCommand(input, transport),
+      input.policy,
+    ).pipe(internalCapabilities)
+    return result.payload as DomainActionResult
   })

@@ -3,7 +3,15 @@ import { realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { Args, Command } from "@effect/cli"
 import { NodeContext, NodeRuntime } from "@effect/platform-node"
-import { type CapabilityEnv, type DispatchResult, EXIT_SUCCESS, type ExitCode, exitCodeForError } from "@expo98/core"
+import {
+  type CapabilityEnv,
+  type CommandDescriptor,
+  type DispatchResult,
+  EXIT_SUCCESS,
+  type ExitCode,
+  exitCodeForError,
+  redact,
+} from "@expo98/core"
 import { Fs } from "@expo98/domain"
 import { Cause, Console, Effect, Exit, Layer, Option } from "effect"
 import { handlerCommands } from "./all-commands.js"
@@ -114,6 +122,23 @@ const resolveInGroup = (
   return undefined
 }
 
+/** Resolve a CLI path or descriptor action to the descriptor owned by registry. */
+const resolvePolicyDescriptor = (
+  actionOrPath: string,
+  ctx: Omit<Parameters<CommandRegistration["build"]>[0], "resolvePolicyDescriptor">,
+): CommandDescriptor | undefined => {
+  for (const candidate of registry.all) {
+    if (candidate.path === actionOrPath) {
+      return candidate.build(ctx).descriptor
+    }
+    const descriptor = candidate.build(ctx).descriptor
+    if (descriptor.action === actionOrPath) {
+      return descriptor
+    }
+  }
+  return undefined
+}
+
 /**
  * The root command BASE — its NAME + global options, WITHOUT the subcommands
  * attached yet. Every subcommand handler references this value as a `@effect/cli`
@@ -182,12 +207,16 @@ const runVerb = (
   Effect.gen(function* () {
     const fs = yield* Fs
     const policy = yield* resolvePolicy(globals)
-    const result: DispatchResult<unknown> = yield* runRegistered(reg, {
+    const baseContext = {
       positionals,
       policy,
       fs,
       root: Option.getOrElse(globals.root, () => process.cwd()),
       artifactsRoot: Option.getOrElse(globals.stateDir, () => Option.getOrElse(globals.root, () => process.cwd())),
+    }
+    const result: DispatchResult<unknown> = yield* runRegistered(reg, {
+      ...baseContext,
+      resolvePolicyDescriptor: (actionOrPath) => resolvePolicyDescriptor(actionOrPath, baseContext),
     })
     yield* emit(result, globals)
     if (result.exitCode !== EXIT_SUCCESS) {
@@ -220,7 +249,7 @@ const emit = (result: DispatchResult<unknown>, globals: CliGlobals): Effect.Effe
 const emitUsageError = (message: string, globals: CliGlobals): Effect.Effect<void> => {
   switch (selectMode(globals)) {
     case "plain":
-      return Console.error(message)
+      return Console.error(String(redact(message)))
     case "ndjson":
       return Console.error(formatNdjson({ ok: false, error: message }))
     case "json":

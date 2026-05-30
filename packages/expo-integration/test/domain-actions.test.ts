@@ -8,13 +8,13 @@
 import { describe, expect, it } from "@effect/vitest"
 import { redact, REDACTED } from "@expo98/core"
 import {
-  BridgeTransport,
   type DomainActionEvidence,
   domainActionSideEffect,
   MAX_ARRAY_ITEMS,
   runDomainAction,
 } from "@expo98/expo-integration"
 import { Effect, Layer, Ref } from "effect"
+import { BridgeTransport } from "../src/bridge-transport.js"
 
 const makeBridge = (calls: Ref.Ref<number>, value: unknown = { ok: true }) =>
   Layer.succeed(

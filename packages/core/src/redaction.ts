@@ -52,6 +52,15 @@ export const redactSecretsInString = (input: string): string => {
   out = out.replace(/([A-Za-z0-9_.-]{1,256})(\s*:\s*)([^\r\n]*)/g, (match, key: string, sep: string, _value: string) =>
     SECRET_PARAM_KEY.test(key) ? `${key}${sep}${REDACTED}` : match,
   )
+  // Bare credential values seen in logs/stdout/stderr where the provider has
+  // already stripped the header/key context. Keep these focused to avoid turning
+  // ordinary IDs into secrets.
+  out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/g, `Bearer ${REDACTED}`)
+  out = out.replace(/\b(sk-[A-Za-z0-9_-]{12,})\b/g, REDACTED)
+  out = out.replace(/\b(gh[pousr]_[A-Za-z0-9_]{12,})\b/g, REDACTED)
+  out = out.replace(/\b(xox[a-z]-[A-Za-z0-9-]{12,})\b/g, REDACTED)
+  out = out.replace(/\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g, REDACTED)
+  out = out.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, REDACTED)
   return out
 }
 

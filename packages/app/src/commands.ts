@@ -34,14 +34,17 @@ const policyShow = registration({
     command(
       { action: "policy", sideEffect: "read" } as const,
       Effect.sync(() => {
-        // `policy show [action]` — evaluate the gate for the named action as a
-        // `device`-classed action (the representative gated class), revealing the
-        // effective decision under the resolved policy. Reads always allow.
+        // `policy show [action]` evaluates the gate for the authoritative
+        // descriptor when the registry can resolve it; unknown names stay
+        // fail-closed as device-classed actions.
         const action = ctx.positionals[0] ?? "policy"
-        const decision = gate({ action, sideEffect: "device" }, ctx.policy)
+        const descriptor = ctx.resolvePolicyDescriptor?.(action) ?? ({ action, sideEffect: "device" } as const)
+        const decision = gate(descriptor, ctx.policy)
         return {
           available: true,
           action,
+          descriptor,
+          sideEffect: descriptor.sideEffect,
           policy: ctx.policy,
           decision: decision._tag,
           denied: decision._tag === "deny",

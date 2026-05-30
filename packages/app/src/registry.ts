@@ -46,6 +46,8 @@ export interface CommandContext {
   readonly root?: string
   /** Effective confined artifact root from `--state-dir`/`--root`, falling back to CWD. */
   readonly artifactsRoot?: string
+  /** Resolve a user-supplied action/path to the authoritative command descriptor. */
+  readonly resolvePolicyDescriptor?: (actionOrPath: string) => CommandDescriptor | undefined
 }
 
 /**

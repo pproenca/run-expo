@@ -1,7 +1,8 @@
-import { Command, CommandExecutor, FileSystem } from "@effect/platform"
+import { FileSystem } from "@effect/platform"
 import { NodeContext } from "@effect/platform-node"
-import { type PlatformError } from "@effect/platform/Error"
 import {
+  DEFAULT_MAX_BUFFER,
+  DEFAULT_TIMEOUT_MS,
   DeviceCapability,
   type DeviceCapabilityService,
   IdDefault,
@@ -15,6 +16,7 @@ import {
   SubprocessFailed,
   type SubprocessService,
   SubprocessTimeout,
+  PathEscape,
   ToolNotFound,
 } from "@expo98/core"
 import { Fs, type FsPort, StorageFailure } from "@expo98/domain"
@@ -28,7 +30,9 @@ import {
   MetroProbeLayer,
   WsCdpSocketFactoryLayer,
 } from "@expo98/protocols"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
+import { dirname } from "node:path"
 
 /**
  * The node-backed Layer stack — the COMPOSITION ROOT (S12).
@@ -95,90 +99,136 @@ export const NodeFsLayer = Layer.effect(Fs, makeNodeFs)
 // ── core.Subprocess adapter — argv-only @effect/platform Command (no shell). ──
 
 /**
- * Map a `@effect/platform` `PlatformError` to core's typed subprocess taxonomy.
- * `SystemError`'s `reason` distinguishes a missing tool (`NotFound`) and a
- * timeout (`TimedOut`); everything else is a generic `SubprocessFailed`.
+ * The node-backed subprocess: argv-only (`spawn(tool, args)`, no shell), with
+ * default timeout and max-buffer containment. A non-zero exit is surfaced as
+ * `SubprocessFailed` so the device capability sees the same typed contract the
+ * fake uses in tests.
  */
-const mapPlatformError = (
-  tool: string,
-  options: RunOptions | undefined,
-  err: PlatformError,
-): ToolNotFound | SubprocessTimeout | SubprocessFailed => {
-  if (err._tag === "SystemError" && err.reason === "NotFound") {
-    return new ToolNotFound({ tool })
-  }
-  if (err._tag === "SystemError" && err.reason === "TimedOut") {
-    return new SubprocessTimeout({
-      tool,
-      timeoutMs: options?.timeoutMs ?? 0,
-    })
-  }
-  return new SubprocessFailed({ tool, exitCode: 1, stderr: String(err) })
-}
-
-/**
- * The node-backed subprocess: argv-only (`Command.make(tool, ...args)` — the
- * arguments are passed as an ARRAY to the child, NEVER through a shell, so there
- * is no CWE-78 surface), capturing stdout/stderr and the exit code in a single
- * `start` inside a scope. A non-zero exit is surfaced as `SubprocessFailed` so
- * the device capability sees the same typed contract the fake uses in tests.
- */
-const makeNodeSubprocess = Effect.gen(function* () {
-  const executor = yield* CommandExecutor.CommandExecutor
-
+const makeNodeSubprocess = Effect.sync(() => {
   const run = (
     tool: string,
     args: ReadonlyArray<string>,
     options?: RunOptions,
   ): Effect.Effect<RunResult, ToolNotFound | SubprocessTimeout | SubprocessFailed> => {
-    // argv-only: no shell, no string interpolation — the arguments are an array.
-    let cmd = Command.make(tool, ...args)
-    if (options?.cwd !== undefined) {
-      cmd = Command.workingDirectory(cmd, options.cwd)
-    }
-    if (options?.env !== undefined) {
-      cmd = Command.env(cmd, options.env)
-    }
+    const maxBuffer = options?.maxBuffer ?? DEFAULT_MAX_BUFFER
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-    const collected = Effect.scoped(
-      Effect.gen(function* () {
-        const proc = yield* executor.start(cmd)
-        const decode = (stream: Stream.Stream<Uint8Array, PlatformError>) =>
-          stream.pipe(Stream.decodeText("utf-8"), Stream.mkString)
-        const [stdout, stderr, exitCode] = yield* Effect.all(
-          [decode(proc.stdout), decode(proc.stderr), proc.exitCode],
-          { concurrency: "unbounded" },
-        )
-        return { tool, args, stdout, stderr, exitCode: exitCode as number }
-      }),
-    )
+    return Effect.async<RunResult, ToolNotFound | SubprocessTimeout | SubprocessFailed>((resume) => {
+      let child: ChildProcessWithoutNullStreams | undefined
+      let settled = false
+      let totalBytes = 0
+      const stdoutChunks: Array<Buffer> = []
+      const stderrChunks: Array<Buffer> = []
 
-    const withTimeout =
-      options?.timeoutMs !== undefined
-        ? collected.pipe(
-            Effect.timeoutFail({
-              duration: `${options.timeoutMs} millis`,
-              onTimeout: () => new SubprocessTimeout({ tool, timeoutMs: options.timeoutMs ?? 0 }),
-            }),
-          )
-        : collected
+      const killChild = () => {
+        if (child === undefined || child.killed) return
+        if (process.platform !== "win32" && child.pid !== undefined) {
+          try {
+            process.kill(-child.pid, "SIGKILL")
+            return
+          } catch {
+            // Fall back to killing the direct child when the process group is unavailable.
+          }
+        }
+        child.kill("SIGKILL")
+      }
 
-    return withTimeout.pipe(
-      Effect.mapError((err): ToolNotFound | SubprocessTimeout | SubprocessFailed =>
-        err instanceof SubprocessTimeout ? err : mapPlatformError(tool, options, err),
-      ),
-      Effect.flatMap((result) =>
-        result.exitCode === 0
-          ? Effect.succeed(result)
-          : Effect.fail(
+      const finish = (effect: Effect.Effect<RunResult, ToolNotFound | SubprocessTimeout | SubprocessFailed>) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        resume(effect)
+      }
+
+      const onData = (target: Array<Buffer>) => (chunk: Buffer) => {
+        if (settled) return
+        totalBytes += chunk.byteLength
+        if (totalBytes > maxBuffer) {
+          killChild()
+          finish(
+            Effect.fail(
               new SubprocessFailed({
                 tool,
-                exitCode: result.exitCode,
-                stderr: result.stderr,
+                exitCode: 1,
+                stderr: `subprocess output exceeded maxBuffer ${maxBuffer}`,
               }),
             ),
-      ),
-    )
+          )
+          return
+        }
+        target.push(chunk)
+      }
+
+      const timeout = setTimeout(() => {
+        killChild()
+        finish(Effect.fail(new SubprocessTimeout({ tool, timeoutMs })))
+      }, timeoutMs)
+
+      try {
+        child = spawn(tool, [...args], {
+          cwd: options?.cwd,
+          detached: process.platform !== "win32",
+          env: options?.env === undefined ? process.env : { ...process.env, ...options.env },
+          shell: false,
+        })
+      } catch (error) {
+        clearTimeout(timeout)
+        const message = error instanceof Error ? error.message : String(error)
+        return Effect.sync(() =>
+          resume(
+            Effect.fail(
+              new SubprocessFailed({
+                tool,
+                exitCode: 1,
+                stderr: message,
+              }),
+            ),
+          ),
+        )
+      }
+
+      child.stdout.on("data", onData(stdoutChunks))
+      child.stderr.on("data", onData(stderrChunks))
+      child.on("error", (error: NodeJS.ErrnoException) => {
+        finish(
+          error.code === "ENOENT"
+            ? Effect.fail(new ToolNotFound({ tool }))
+            : Effect.fail(
+                new SubprocessFailed({
+                  tool,
+                  exitCode: 1,
+                  stderr: error.message,
+                }),
+              ),
+        )
+      })
+      child.on("close", (code) => {
+        if (settled) return
+        const result: RunResult = {
+          tool,
+          args,
+          stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+          stderr: Buffer.concat(stderrChunks).toString("utf8"),
+          exitCode: code ?? 1,
+        }
+        finish(
+          result.exitCode === 0
+            ? Effect.succeed(result)
+            : Effect.fail(
+                new SubprocessFailed({
+                  tool,
+                  exitCode: result.exitCode,
+                  stderr: result.stderr,
+                }),
+              ),
+        )
+      })
+
+      return Effect.sync(() => {
+        clearTimeout(timeout)
+        killChild()
+      })
+    })
   }
 
   const service: SubprocessService = { run }
@@ -227,9 +277,39 @@ const SourceWriteCapabilityLayer = Layer.effect(
   SourceWriteCapability,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
+    const nearestExistingAncestor = (path: string): Effect.Effect<readonly [string, string] | null> =>
+      Effect.suspend(() => {
+        const parent = dirname(path)
+        const loop = (candidate: string): Effect.Effect<readonly [string, string] | null> =>
+          fs.exists(candidate).pipe(
+            Effect.flatMap((present) => {
+              if (present) {
+                return fs.realPath(candidate).pipe(Effect.map((real) => [candidate, real] as const))
+              }
+              const next = dirname(candidate)
+              return next === candidate ? Effect.succeed(null) : loop(next)
+            }),
+            Effect.catchAll(() => Effect.succeed(null)),
+          )
+        return loop(parent)
+      })
+    const rejectSymlinkAncestor = (path: string): Effect.Effect<string> =>
+      nearestExistingAncestor(path).pipe(
+        Effect.flatMap((ancestor) => {
+          if (ancestor === null) {
+            return Effect.succeed(path)
+          }
+          const [lexical, real] = ancestor
+          return lexical === real
+            ? Effect.succeed(path)
+            : Effect.die(new PathEscape({ root: lexical, candidate: path, resolved: real }))
+        }),
+      )
     const service: SourceWriteCapabilityService = {
-      writeFile: (path, contents) => fs.writeFileString(path, contents).pipe(Effect.orDie),
-      deleteFile: (path) => fs.remove(path, { recursive: true }).pipe(Effect.orDie),
+      writeFile: (path, contents) =>
+        rejectSymlinkAncestor(path).pipe(Effect.flatMap((confined) => fs.writeFileString(confined, contents)), Effect.orDie),
+      deleteFile: (path) =>
+        rejectSymlinkAncestor(path).pipe(Effect.flatMap((confined) => fs.remove(confined, { recursive: true })), Effect.orDie),
     }
     return service
   }),

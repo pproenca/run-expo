@@ -60,13 +60,9 @@ export {
   REGISTRATION_PROBE_EXPRESSION,
 } from "./health.js"
 
-// Bridge transport SEAM (Expo DevTools Plugins SDK in production)
-export {
-  BridgeTransport,
-  type BridgeCallResult,
-  type BridgeTransportService,
-  type BridgeUnavailableCode,
-} from "./bridge-transport.js"
+// Bridge transport SEAM stays internal; public callers use `runDomainAction`,
+// which routes mutations through core dispatch before this transport is touched.
+export { type BridgeCallResult, type BridgeTransportService, type BridgeUnavailableCode } from "./bridge-transport.js"
 
 // Bridge domain actions (AC-006)
 export {

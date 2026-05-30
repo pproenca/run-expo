@@ -17,7 +17,7 @@ import { describe, expect, it } from "@effect/vitest"
  * asserted directly. The live loopback bind + EADDRINUSE port search round-trip
  * is `it.skip`'d (needs a real socket).
  */
-import { IdDefault } from "@expo98/core"
+import { IdDefault, REDACTED } from "@expo98/core"
 import { Effect, Layer } from "effect"
 import {
   checkOrigin,
@@ -237,6 +237,22 @@ describe("AC-014 POST hardening (handleRequest, in-memory store)", () => {
         expect(read.file.events[0]!.kind).toBe("comment")
         expect(read.file.events[0]!.payload).toMatchObject({ text: "hi" })
         expect(read.file.updatedAt).toBeDefined()
+      }
+    }).pipe(Effect.provide(testLayer)),
+  )
+
+  it.effect("VALID POST redacts free-form payload before persistence", () =>
+    Effect.gen(function* () {
+      const store = yield* EventsStoreTag
+      const body = JSON.stringify({
+        comments: [{ kind: "comment", payload: { text: "hi", note: "Bearer sk-overlay-secret-token" } }],
+      })
+      const res = yield* handleRequest(post({ body }), config)
+      expect(res.status).toBe(200)
+      const read = yield* store.read
+      expect(read.available).toBe(true)
+      if (read.available) {
+        expect(read.file.events[0]!.payload).toMatchObject({ text: "hi", note: `Bearer ${REDACTED}` })
       }
     }).pipe(Effect.provide(testLayer)),
   )

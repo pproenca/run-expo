@@ -85,6 +85,14 @@ describe("Integration — assembled program over synthetic argv", () => {
     expect(envelope.error).toContain("Unknown subcommand: trace definitely-not-a-subcommand")
   })
 
+  it("plain usage errors are redacted before stderr", async () => {
+    const result = await runCaptured("--plain", "trace", "sk-usage-error-secret123")
+    expect(result.code).toBe(2)
+    const message = result.errors.at(-1) ?? ""
+    expect(message).toContain("[redacted]")
+    expect(message).not.toContain("sk-usage-error-secret123")
+  })
+
   it("--ndjson emits the final command payload as one event line", async () => {
     const result = await runCaptured("doctor", "--ndjson")
     expect(result.code).toBe(0)
@@ -108,6 +116,19 @@ describe("Integration — assembled program over synthetic argv", () => {
       expect(envelope.data?.action).toBe("trace.start")
       expect(envelope.data?.code).not.toBe("policy-denied")
     }
+  })
+
+  it("policy show resolves a named action to its authoritative side-effect class", async () => {
+    const result = await runCaptured("--json", "--allow-runtime-eval", "policy", "show", "trace.start")
+    expect(result.code).toBe(0)
+    const envelope = JSON.parse(result.logs.at(-1) ?? "{}") as {
+      ok: boolean
+      data?: { denied?: boolean; decision?: string; sideEffect?: string }
+    }
+    expect(envelope.ok).toBe(true)
+    expect(envelope.data?.sideEffect).toBe("runtime-eval")
+    expect(envelope.data?.denied).toBe(false)
+    expect(envelope.data?.decision).toBe("allow")
   })
 
   it("--root reaches root-sensitive command builders", async () => {

@@ -1,4 +1,4 @@
-import { Id } from "@expo98/core"
+import { Id, redact } from "@expo98/core"
 import { type OverlayEvent } from "@expo98/domain"
 import { Effect, Schema } from "effect"
 import { BodyTooLarge, MalformedBody, OriginRejected, type RequestRejection, TokenRejected } from "./errors.js"
@@ -46,8 +46,7 @@ import {
 /**
  * One inbound review comment. Permissive but TYPED (the legacy appended any JSON
  * verbatim). `kind` defaults to `"comment"`; `payload` is a free-form record
- * that is redacted at the output boundary by `@expo98/core` before it ever
- * leaves the process.
+ * redacted before persistence so events.json never becomes a secret sink.
  */
 export const OverlayComment = Schema.Struct({
   kind: Schema.optional(Schema.String),
@@ -166,7 +165,7 @@ const commentToEvent = (comment: OverlayComment, id: string, now: string): Overl
   id,
   createdAt: now,
   kind: comment.kind ?? "comment",
-  payload: comment.payload ?? {},
+  payload: redact(comment.payload ?? {}) as Record<string, unknown>,
 })
 
 // ===========================================================================

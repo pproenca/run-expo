@@ -1,9 +1,31 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Ref } from "effect"
+import type { TargetRecord } from "../src/entities.js"
 import { Fs, makeMemoryFs } from "../src/fs-port.js"
+import type { TargetId } from "../src/ids.js"
 import * as P from "../src/paths.js"
 import { makePersistence } from "../src/persist.js"
 import { STATE_ROOT, TestClock } from "./helpers.js"
+
+const target = (suffix: string): TargetRecord => {
+  const targetId = `ios:DEVICE-${suffix}:com.example:${suffix}` as TargetId
+  return {
+    targetId,
+    platform: "ios",
+    device: { id: `DEVICE-${suffix}`, name: "iPhone", state: "booted" },
+    app: { bundleId: "com.example", processName: "Example", running: true },
+    metro: {
+      port: Number(suffix),
+      status: "running",
+      targetId: `page-${suffix}`,
+      title: "Example",
+      appId: "com.example",
+      debuggerUrl: `ws://127.0.0.1:${suffix}/x`,
+    },
+    selected: true,
+    stale: false,
+  }
+}
 
 /**
  * AC-024 — Sessions own an artifact namespace and move new → close → clean.
@@ -128,6 +150,34 @@ describe("AC-024 session lifecycle (new -> close -> clean)", () => {
       clock.advance(8 * 86_400_000)
       const deleted = yield* p.sessionClean({ stateRoot: STATE_ROOT })
       expect(deleted).toContain(old.sessionId)
+    }),
+  )
+
+  it.effect("session aggregate writes are serialized per session", () =>
+    Effect.gen(function* () {
+      const base = yield* makeMemoryFs()
+      const activeWrites = yield* Ref.make(0)
+      const maxConcurrentWrites = yield* Ref.make(0)
+      const trackedWrite = (path: string, contents: string) =>
+        Effect.gen(function* () {
+          const active = yield* Ref.updateAndGet(activeWrites, (n) => n + 1)
+          yield* Ref.update(maxConcurrentWrites, (n) => Math.max(n, active))
+          yield* Effect.yieldNow()
+          yield* base.writeFile(path, contents)
+        }).pipe(Effect.ensuring(Ref.update(activeWrites, (n) => n - 1)))
+      const fs = { ...base, writeFile: trackedWrite, writeFileAtomic: trackedWrite }
+      const p = makePersistence(fs, new TestClock())
+      const session = yield* p.sessionNew({ stateRoot: STATE_ROOT, name: "serialized" })
+
+      yield* Effect.all(
+        [
+          p.targetSave(STATE_ROOT, session.sessionId, target("8081")),
+          p.targetSave(STATE_ROOT, session.sessionId, target("8082")),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(yield* Ref.get(maxConcurrentWrites)).toBe(1)
     }),
   )
 
