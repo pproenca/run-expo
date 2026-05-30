@@ -15,10 +15,10 @@
  *      (fake) capability — confirming the dispatch path is real, not a stub.
  */
 import { describe, expect, it } from "@effect/vitest"
-import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "@expo98/app"
 import { DeviceCapability, EXIT_SUCCESS, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import { makeMemoryFs } from "@expo98/domain"
 import { Effect, Layer, Option, Ref } from "effect"
+import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "expo98"
 
 const registry = registerCommands([...coreReadCommands, ...handlerCommands])
 

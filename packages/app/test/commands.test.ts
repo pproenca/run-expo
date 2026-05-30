@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@effect/vitest"
-import { coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "@expo98/app"
 import {
   DeviceCapability,
   EXIT_RUNTIME_FAILURE,
@@ -9,6 +8,7 @@ import {
 } from "@expo98/core"
 import { makeMemoryFs, MemoryFsLayer } from "@expo98/domain"
 import { Effect, Layer, Option } from "effect"
+import { coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "expo98"
 
 /**
  * The proof READ commands run end-to-end THROUGH core's dispatch — the gate +
@@ -61,7 +61,7 @@ describe("Read commands through dispatch", () => {
       expect(result.exitCode).toBe(EXIT_SUCCESS)
       const payload = result.payload as { available: boolean; version: string }
       expect(payload.available).toBe(true)
-      expect(payload.version).toBe("0.0.0")
+      expect(payload.version).toBe("0.1.0")
     }).pipe(Effect.provide(Layer.merge(TestCaps, MemoryFsLayer))),
   )
 

@@ -1,0 +1,69 @@
+name: ci
+
+# Trust gate: the shipped artifact can never silently drift from source. Every
+# push/PR runs format + lint + typecheck + BUILD + the full suite (which includes
+# the source<->bundle parity test) + a read-only smoke of both bins, on the
+# engines floor and current. The build runs BEFORE test so the bundle exists and
+# packages/app/test/bundle-parity.test.ts asserts live (it skips when unbuilt).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The engines floor (>=20.19.0) and current. Both must stay green.
+        node: ["20.19.0", "24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      # --frozen-lockfile fails if the lockfile drifted; allowBuilds pins the
+      # ignored native build scripts (esbuild/@parcel/watcher/msgpackr) so the
+      # build-scripts gate never aborts the install.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm run format:check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm -r run typecheck
+
+      # Build BEFORE test so the bundle<->source parity test runs live (not
+      # skipped) and the bin-smoke steps below have an artifact.
+      - name: Build bins
+        run: pnpm run build
+
+      - name: Test (incl. live bundle-parity guard)
+        run: pnpm test
+
+      # Read-only end-to-end smoke of the shipped artifact (no device needed).
+      - name: Smoke the bin
+        run: |
+          node packages/app/cli/expo98.mjs --json doctor
+          node packages/app/cli/expo98.mjs --json version

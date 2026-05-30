@@ -16,7 +16,10 @@ import { type CommandContext, type CommandRegistration, registration } from "./r
  */
 
 /** The CLI version reported by `version` and `--version`. */
-export const CLI_VERSION = "0.0.0"
+// Kept in sync with packages/app/package.json `version` (the published version);
+// bump both together on release. CI runs the built bin, so a drift surfaces as a
+// visible `version` mismatch in the smoke step.
+export const CLI_VERSION = "0.1.0"
 
 // ── policy show — render the effective PolicyDecision for an action (AC-001). ─
 const policyShow = registration({

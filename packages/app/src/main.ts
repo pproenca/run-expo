@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { Args, Command } from "@effect/cli"
 import { NodeContext, NodeRuntime } from "@effect/platform-node"
 import { type CapabilityEnv, type DispatchResult, EXIT_SUCCESS, type ExitCode, exitCodeForError } from "@expo98/core"
@@ -15,10 +17,10 @@ import { type CommandRegistration, registerCommands, runRegistered } from "./reg
 /**
  * The CLI shell composition root (S12).
  *
- * Bins preserved: `expo98` (primary) + `expo-ios` (identical impl, pure
- * re-export). The bundle/bin step (esbuild → committed `cli/expo98.mjs` +
- * `cli/expo-ios.mjs`) is DEFERRED — no `bin` is declared in package.json yet
- * (per scope item 5).
+ * Bin: `expo98` — the single published executable. The bundle/bin step
+ * (esbuild → `cli/expo98.mjs`, declared as the package `bin`) is wired in
+ * `scripts/build.mjs`; the bundle is the runnable artifact (the `.ts` source
+ * resolves `.js`→`.ts` specifiers only under a bundler).
  */
 
 export const CLI_NAME = "expo98"
@@ -38,13 +40,30 @@ const asNonEmpty = <T>(arr: ReadonlyArray<T>): readonly [T, ...Array<T>] => {
   return [head, ...tail]
 }
 
-/** True when this module is the process entry point (vs imported by a test). */
+/**
+ * True when this module is the process entry point (vs imported by a test).
+ *
+ * Prefer Node's `import.meta.main` (Node ≥ 24): it is symlink-safe. The older
+ * `import.meta.url === file://${argv[1]}` comparison is UNRELIABLE — under
+ * macOS, `process.argv[1]` is the literal path (`/tmp/x.mjs`) while
+ * `import.meta.url` resolves symlinks (`file:///private/tmp/x.mjs`), so they
+ * diverge and the entry guard mis-fires (bundle silently no-ops). Fall back to a
+ * realpath-normalised comparison only when `import.meta.main` is absent.
+ */
 const isEntryModule = (): boolean => {
+  const meta = import.meta as ImportMeta & { main?: boolean }
+  if (typeof meta.main === "boolean") {
+    return meta.main
+  }
   const entry = process.argv[1]
   if (entry === undefined) {
     return false
   }
-  return import.meta.url === new URL(`file://${entry}`).href
+  try {
+    return fileURLToPath(import.meta.url) === realpathSync(entry)
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -267,8 +286,7 @@ const messageOf = (error: unknown): string =>
 /**
  * The real process entry: run over `process.argv`, apply the POSIX exit code via
  * a custom `NodeRuntime` teardown (NOT `defaultTeardown`, which maps every
- * failure to exit 1 — the N2 root cause). Both `expo98` and `expo-ios` bins
- * resolve here (identical impl).
+ * failure to exit 1 — the N2 root cause). The `expo98` bin resolves here.
  */
 export const main = (): void => {
   const program = runProgram(process.argv).pipe(Effect.provide(AppLayer))

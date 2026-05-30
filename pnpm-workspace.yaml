@@ -2,6 +2,18 @@ packages:
   - "packages/*"
 # vitest's optional native deps — not needed for `vitest run`, so don't run their
 # install scripts. (pnpm 11 added this block as placeholders; resolved to false.)
+# esbuild's native binary comes from its @esbuild/<platform> optional dep, so its
+# own build script is not needed either — keep it false so `pnpm install
+# --frozen-lockfile` does not abort on the build-scripts gate.
 allowBuilds:
   "@parcel/watcher": false
+  esbuild: false
   msgpackr-extract: false
+
+# NOTE (work item C1 — supply-chain delay): `minimumReleaseAge: 10080` (refuse
+# dep versions <7 days old) was tried and REVERTED here because the current
+# lockfile pins a transitive dep (`tinyexec@1.2.2`, via vitest) younger than the
+# cutoff, which makes EVERY pnpm command fail the deps-status check
+# (ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION). Re-enable it only together with a
+# refreshed lockfile (all entries older than the cutoff) or a
+# `minimumReleaseAgeExclude` for the offending packages.

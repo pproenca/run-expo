@@ -1,5 +1,5 @@
 /**
- * `@expo98/app` — the CLI SHELL + composition root (S12) of the Effect-TS
+ * `expo98` (workspace `app`) — the CLI SHELL + composition root (S12) of the Effect-TS
  * rebuild of `expo98`.
  *
  * Public surface:

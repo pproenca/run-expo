@@ -1,8 +1,41 @@
 {
-  "name": "@expo98/app",
-  "version": "0.0.0",
-  "private": true,
-  "description": "expo98 reimagined — CLI shell (@effect/cli) + composition root: global flags, POSIX exit codes, --json|--plain|--ndjson envelope, command registry. Preserves both expo98/expo-ios bins.",
+  "name": "expo98",
+  "version": "0.1.0",
+  "description": "Local-first evidence CLI for Expo / React Native iOS work: inspect a running app over Hermes CDP, drive the iOS simulator, probe Metro, and capture redacted, reproducible evidence — every state-changing action behind a fail-closed policy gate.",
+  "keywords": [
+    "agent",
+    "cdp",
+    "cli",
+    "evidence",
+    "expo",
+    "hermes",
+    "ios",
+    "metro",
+    "react-native",
+    "simulator"
+  ],
+  "homepage": "https://github.com/pproenca/expo98#readme",
+  "bugs": {
+    "url": "https://github.com/pproenca/expo98/issues"
+  },
+  "license": "MIT",
+  "author": "Pedro Proença",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pproenca/expo98.git",
+    "directory": "packages/app"
+  },
+  "bin": {
+    "expo98": "./cli/expo98.mjs"
+  },
+  "files": [
+    "cli/expo98.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin"
+  ],
   "type": "module",
   "exports": {
     ".": {
@@ -10,10 +43,15 @@
       "import": "./src/index.ts"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@effect/cli": "^0.75.1",
     "@effect/platform": "^0.96.1",
     "@effect/platform-node": "^0.106.0",
@@ -27,6 +65,10 @@
     "@expo98/handlers-snapshot": "workspace:*",
     "@expo98/overlay-server": "workspace:*",
     "@expo98/protocols": "workspace:*",
-    "effect": "^3.21.2"
+    "effect": "^3.21.2",
+    "esbuild": "0.25.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

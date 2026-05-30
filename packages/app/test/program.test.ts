@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { AppLayer, runProgram } from "@expo98/app"
 import { Effect } from "effect"
+import { AppLayer, runProgram } from "expo98"
 
 /**
  * Integration: run the ASSEMBLED command with a synthetic argv, end-to-end,

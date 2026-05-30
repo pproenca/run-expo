@@ -44,7 +44,9 @@ const readManifests = (): ReadonlyMap<string, PackageManifest> => {
       continue // a dir without a package.json is not a workspace package
     }
     const manifest = JSON.parse(raw) as PackageManifest
-    if (typeof manifest.name === "string" && manifest.name.startsWith(SCOPE)) {
+    // Foundation/handler packages keep the `@expo98/*` scope; the publishable CLI
+    // package is the bare name `expo98` (the composition root / `app`).
+    if (typeof manifest.name === "string" && (manifest.name.startsWith(SCOPE) || manifest.name === APP)) {
       manifests.set(manifest.name, manifest)
     }
   }
@@ -61,12 +63,13 @@ const expoDepsOf = (manifest: PackageManifest): ReadonlySet<string> => {
   return new Set(Object.keys(all).filter((dep) => dep.startsWith(SCOPE)))
 }
 
-const short = (name: string): string => name.slice(SCOPE.length)
+const short = (name: string): string => (name.startsWith(SCOPE) ? name.slice(SCOPE.length) : name)
 
 const CORE = "@expo98/core"
 const DOMAIN = "@expo98/domain"
 const PROTOCOLS = "@expo98/protocols"
-const APP = "@expo98/app"
+// The publishable CLI package is the bare name `expo98` (was `@expo98/app`).
+const APP = "expo98"
 const FOUNDATION: ReadonlySet<string> = new Set([CORE, DOMAIN, PROTOCOLS])
 
 describe("M4 — dependency DAG guard", () => {

@@ -8,6 +8,13 @@ coverage/
 .npm/
 .pnpm-store/
 
+# Built CLI artifacts — emitted by `pnpm build` (packages/app/scripts/build.mjs),
+# shipped in the npm tarball via package.json "files" + a "prepack" hook, and
+# rebuilt fresh in CI. Never tracked (a committed artifact drifts from source).
+# `cli/` = the bundle; `LICENSE` = a synced copy of the root LICENSE for the tarball.
+packages/app/cli/
+packages/app/LICENSE
+
 # --- local evidence / agent-tool state (never committed) ---
 .scratch/
 .artifacts/
@@ -35,5 +42,10 @@ expo98.policy.json
 !.agents/skills/expo98-debugging/**
 !.agents/skills/expo98-docs/
 !.agents/skills/expo98-docs/**
+!.agents/skills/expo98-operator/
+!.agents/skills/expo98-operator/**
 !.agents/skills/crabbox/
 !.agents/skills/crabbox/**
+
+# Claude Code session/project state (harness-managed, never committed).
+.claude/

@@ -1,0 +1,61 @@
+name: release
+
+# Tag-triggered publish of the `expo98` CLI to npm with provenance.
+# Push a tag like `v0.1.0` (after bumping packages/app/package.json) to release.
+# The publish is gated behind the full verify+build run, and ships ONLY the
+# self-contained bundle (the 10 internal @expo98/* packages stay private; their
+# code is inlined by esbuild, so the published package has zero runtime deps).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write # npm provenance (OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Full gate before publishing — never ship a red tree.
+      - name: Verify
+        run: |
+          pnpm run format:check
+          pnpm run lint
+          pnpm -r run typecheck
+          pnpm run build
+          pnpm test
+
+      # Tag version must match the package version, or the release is rejected.
+      - name: Assert tag matches package version
+        run: |
+          PKG_VERSION="$(node -p "require('./packages/app/package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME (=$TAG_VERSION) != packages/app version $PKG_VERSION"
+            exit 1
+          fi
+
+      # Publish only the CLI package. `prepack` rebuilds the bundle into the
+      # tarball; `files` ships only cli/expo98.mjs + README + LICENSE.
+      - name: Publish to npm
+        run: pnpm --filter expo98 publish --no-git-checks --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
