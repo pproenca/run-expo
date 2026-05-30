@@ -72,10 +72,6 @@ import {
 import { Effect } from "effect"
 import { type CommandContext, type CommandRegistration, eraseRegistration, registration } from "./registry.js"
 
-/** The default project root used to confine artifact writes / locate bridge files. */
-const ARTIFACTS_ROOT = "/tmp/expo98-artifacts" as const
-const PROJECT_ROOT = process.cwd()
-
 /** A numeric positional, or `undefined` when absent / non-numeric. */
 const num = (s: string | undefined): number | undefined => {
   if (s === undefined) {
@@ -84,6 +80,9 @@ const num = (s: string | undefined): number | undefined => {
   const n = Number(s)
   return Number.isFinite(n) ? n : undefined
 }
+
+const projectRoot = (ctx: CommandContext): string => ctx.root ?? process.cwd()
+const artifactsRoot = (ctx: CommandContext): string => ctx.artifactsRoot ?? projectRoot(ctx)
 
 // ───────────────────────────────────────────────────────────────────────────
 // handlers-devtools — trace / inspector / navigation / console / errors
@@ -246,7 +245,7 @@ const screenshotReg = eraseRegistration(
     path: "screenshot",
     summary: "Capture a screenshot to a confined artifact path (device, gated).",
     sideEffect: "device",
-    build: (ctx: CommandContext) => screenshotCommand(ARTIFACTS_ROOT, { outputPath: ctx.positionals[0], full: false }),
+    build: (ctx: CommandContext) => screenshotCommand(artifactsRoot(ctx), { outputPath: ctx.positionals[0], full: false }),
   }),
 )
 
@@ -449,7 +448,7 @@ const bridgeInstallReg = eraseRegistration(
     path: "bridge install",
     summary: "Install the in-app bridge files (source-write; needs confirmation).",
     sideEffect: "source-write",
-    build: () => installWriteCommand(PROJECT_ROOT),
+    build: (ctx: CommandContext) => installWriteCommand(projectRoot(ctx)),
   }),
 )
 
@@ -458,7 +457,7 @@ const bridgeRemoveReg = eraseRegistration(
     path: "bridge remove",
     summary: "Remove the in-app bridge files (source-write; needs confirmation).",
     sideEffect: "source-write",
-    build: () => removeWriteCommand(PROJECT_ROOT),
+    build: (ctx: CommandContext) => removeWriteCommand(projectRoot(ctx)),
   }),
 )
 
@@ -490,7 +489,7 @@ const sitemapReg = eraseRegistration(
         Effect.sync(() => ({
           available: true,
           action: "sitemap",
-          entries: buildSitemap(ctx.positionals),
+          entries: buildSitemap(ctx.positionals.length > 0 ? ctx.positionals : [projectRoot(ctx)]),
         })),
       ),
   }),

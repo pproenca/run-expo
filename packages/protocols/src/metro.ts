@@ -229,6 +229,16 @@ const make = Effect.gen(function* () {
           malformedTargets: [],
         } satisfies MetroTargetsResult
       }
+      if (res.right.status < 200 || res.right.status >= 400) {
+        return {
+          available: false,
+          metroPort,
+          status: "unavailable",
+          reason: UNREACHABLE_REASON,
+          targets: [],
+          malformedTargets: [],
+        } satisfies MetroTargetsResult
+      }
 
       let parsed: unknown
       try {

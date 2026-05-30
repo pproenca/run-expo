@@ -286,8 +286,8 @@ export const captureSnapshot = (
     // 2. SEMANTIC bridge path (primary).
     const semanticPayload = yield* semantic.capture()
     if (semanticPayload !== null) {
-      const snapshotId = makeSnapshotId(input.clock.nowIso(), input.clock.suffix())
       const generatedAt = input.clock.nowIso()
+      const snapshotId = makeSnapshotId(generatedAt, input.clock.suffix())
       const semanticBridge: SemanticBridgeSnapshot = {
         ...(semanticPayload.routeHint !== undefined ? { routeHint: semanticPayload.routeHint } : {}),
         refs: semanticPayload.refs.map((r) => ({
@@ -321,8 +321,8 @@ export const captureSnapshot = (
     const nativeResult = yield* native.describeUi()
     switch (nativeResult._tag) {
       case "ok": {
-        const snapshotId = makeSnapshotId(input.clock.nowIso(), input.clock.suffix())
         const generatedAt = input.clock.nowIso()
+        const snapshotId = makeSnapshotId(generatedAt, input.clock.suffix())
         const snapshot = assembleSnapshot({
           source: "native-axe",
           sourceTag: "native-axe",

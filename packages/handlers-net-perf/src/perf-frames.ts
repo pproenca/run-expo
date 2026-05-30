@@ -82,7 +82,7 @@ export const frameStats = (frames: ReadonlyArray<FrameSample>): FrameStats => {
   const deltas: Array<number> = []
   for (const frame of window) {
     const delta = numberOrNull(frame.deltaMs)
-    if (delta !== null) {
+    if (delta !== null && delta > 0) {
       deltas.push(delta)
     }
   }

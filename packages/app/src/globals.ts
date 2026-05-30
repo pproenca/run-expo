@@ -68,14 +68,12 @@ export interface CliGlobals {
 }
 
 // ── The value flags whose absent value must yield exit 2 (AC-016). ──────────
-// Long names and their accepted forms. `--allow-runtime-eval` and `--confirm-
-// actions` are value flags here too (the spec lists them under value flags).
+// Long names and their accepted forms.
 export const VALUE_FLAGS = [
   "--root",
   "--state-dir",
   "--action-policy",
   "--max-output",
-  "--allow-runtime-eval",
   "--confirm-actions",
 ] as const
 

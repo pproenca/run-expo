@@ -14,6 +14,7 @@
  */
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Queue } from "effect"
+import { WebSocketServer } from "ws"
 import {
   assertLoopbackUrl,
   boundedOpenMs,
@@ -28,6 +29,7 @@ import {
   HermesRuntimeEvalLayer,
   isLoopbackHost,
   originForPort,
+  WsCdpSocketFactoryLayer,
 } from "../src/index.js"
 
 // ------------------------------------------------------------------------------------------------
@@ -233,6 +235,44 @@ describe("AC-030 CDP round trip (fake socket) — Origin, bounded open, id-corre
       if (!res.available) expect(res.diagnostics.attemptedUrls).toEqual(["ws://127.0.0.1:8081/debug"])
     }).pipe(Effect.provide(HermesEvidenceLayer.pipe(Layer.provide(layer))))
   })
+
+  it.effect("AC-030 real ws adapter sends Origin and receives frames without a live Hermes target", () =>
+    Effect.gen(function* () {
+      let server: WebSocketServer | null = null
+      try {
+        const setup = yield* Effect.promise(
+          () =>
+            new Promise<{ readonly server: WebSocketServer; readonly port: number; readonly origins: Array<string | null> }>(
+              (resolve) => {
+                const origins: Array<string | null> = []
+                const wsServer = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+                wsServer.on("connection", (socket, request) => {
+                  origins.push(request.headers.origin ?? null)
+                  socket.send("ready")
+                })
+                wsServer.once("listening", () => {
+                  const address = wsServer.address()
+                  if (address === null || typeof address === "string") return
+                  resolve({ server: wsServer, port: address.port, origins })
+                })
+              },
+            ),
+        )
+        server = setup.server
+        const factory = yield* CdpSocketFactory
+        const socket = yield* factory.connect({
+          url: `ws://127.0.0.1:${setup.port}/debug`,
+          origin: "http://127.0.0.1:8081",
+          openTimeoutMs: 500,
+        })
+        expect(yield* socket.receive).toBe("ready")
+        expect(setup.origins).toEqual(["http://127.0.0.1:8081"])
+        yield* socket.close
+      } finally {
+        server?.close()
+      }
+    }).pipe(Effect.provide(WsCdpSocketFactoryLayer)),
+  )
 
   // ---- live-only paths (need a running Hermes target) ----
   it.skip("AC-030 live Runtime.evaluate round-trip — needs running Hermes target", () => {})

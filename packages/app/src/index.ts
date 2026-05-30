@@ -17,7 +17,15 @@
 export { assertUsage, type CliGlobals, globalOptions, mergeGlobals, VALUE_FLAGS, type ValueFlag } from "./globals.js"
 
 // Output envelope (AC-003/012 redaction + AC-041 truncation at the boundary).
-export { formatJson, formatPlain, type JsonEnvelope, ndjsonEnvelope, type OutputMode, selectMode } from "./envelope.js"
+export {
+  formatJson,
+  formatNdjson,
+  formatPlain,
+  type JsonEnvelope,
+  ndjsonEnvelope,
+  type OutputMode,
+  selectMode,
+} from "./envelope.js"
 
 // Command registry + composition wiring.
 export {

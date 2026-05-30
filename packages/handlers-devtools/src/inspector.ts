@@ -18,7 +18,7 @@
  * to exactly `CapabilityFor<S>` — a `read` verb's handler is `R = never` and
  * literally cannot name the eval capability.
  */
-import { command, type Command, DeviceCapability, RuntimeEvalCapability } from "@expo98/core"
+import { CliRuntimeError, command, type Command, DeviceCapability, RuntimeEvalCapability } from "@expo98/core"
 import { Effect, Match } from "effect"
 import { descriptor, EVAL_TIMEOUT_MS } from "./support.js"
 
@@ -50,8 +50,15 @@ export interface InspectorResult {
   readonly action: string
   readonly verb: InspectorVerb
   readonly sideEffect: InspectorSideEffect
+  readonly available?: boolean
+  readonly reason?: string
   readonly timeoutMs: number
   readonly value: unknown
+}
+
+export interface InspectorArgs {
+  readonly probe?: unknown
+  readonly comments?: unknown
 }
 
 /** Package-controlled mutating expression (writes the runtime review global). */
@@ -59,12 +66,6 @@ const inspectorEvalExpression = (verb: InspectorEvalVerb): string =>
   `globalThis.__CODEX_SIMULATOR_REVIEW__ && globalThis.__CODEX_SIMULATOR_REVIEW__.${
     verb === "install-comment-menu" ? "install" : verb === "clear-comments" ? "clear" : "toggle"
   }()`
-
-/** Read-only probe expression (package-controlled; legitimate `read` use). */
-const inspectorReadExpression = (verb: InspectorReadVerb): string =>
-  verb === "probe"
-    ? "globalThis.__CODEX_SIMULATOR_REVIEW__ ? 'present' : 'absent'"
-    : "(globalThis.__CODEX_SIMULATOR_REVIEW__ && globalThis.__CODEX_SIMULATOR_REVIEW__.comments) || []"
 
 const result = (verb: InspectorVerb, sideEffect: InspectorSideEffect, value: unknown): InspectorResult => ({
   action: `inspector.${verb}`,
@@ -80,13 +81,20 @@ const result = (verb: InspectorVerb, sideEffect: InspectorSideEffect, value: unk
  * A read verb's handler. `R = CapabilityFor<"read"> = never`: it CANNOT name the
  * eval capability — the AC-011 structural guarantee at this boundary.
  */
-const readInspectorCommand = (verb: InspectorReadVerb): Command<"read", InspectorResult> =>
+const readInspectorCommand = (verb: InspectorReadVerb, args: InspectorArgs): Command<"read", InspectorResult> =>
   command(
     descriptor(`inspector.${verb}`, "read"),
-    // Read verbs are classified `read`; here we model the read as a pure
-    // package-controlled projection so the handler's R stays `never`. (A real
-    // build would route this through `HermesEvidence` via `R`, still `read`.)
-    Effect.succeed(result(verb, "read", inspectorReadExpression(verb))),
+    Effect.sync(() => {
+      const value = verb === "probe" ? args.probe : args.comments
+      if (value === undefined) {
+        return {
+          ...result(verb, "read", null),
+          available: false,
+          reason: "No inspector read evidence was provided.",
+        }
+      }
+      return { ...result(verb, "read", value), available: true }
+    }),
   )
 
 /** A mutating verb's handler — reaches the eval capability via `R` (gated). */
@@ -94,7 +102,14 @@ const evalInspectorCommand = (verb: InspectorEvalVerb): Command<"runtime-eval", 
   command(
     descriptor(`inspector.${verb}`, "runtime-eval"),
     RuntimeEvalCapability.pipe(
-      Effect.flatMap((evalCap) => evalCap.evaluate(inspectorEvalExpression(verb))),
+      Effect.flatMap((evalCap) =>
+        evalCap.evaluate(inspectorEvalExpression(verb)).pipe(
+          Effect.timeoutFail({
+            duration: `${EVAL_TIMEOUT_MS} millis`,
+            onTimeout: () => new CliRuntimeError({ message: `Runtime eval timed out after ${EVAL_TIMEOUT_MS}ms.` }),
+          }),
+        ),
+      ),
       Effect.map((value) => result(verb, "runtime-eval", value)),
     ),
   )
@@ -119,9 +134,9 @@ export type InspectorCommand =
   | Command<"device", InspectorResult>
 
 /** Build the right per-class command for a verb (EXHAUSTIVE over the class). */
-export const inspectorCommand = (verb: InspectorVerb): InspectorCommand =>
+export const inspectorCommand = (verb: InspectorVerb, args: InspectorArgs = {}): InspectorCommand =>
   Match.value(inspectorSideEffect(verb)).pipe(
-    Match.when("read", () => readInspectorCommand(verb as InspectorReadVerb)),
+    Match.when("read", () => readInspectorCommand(verb as InspectorReadVerb, args)),
     Match.when("runtime-eval", () => evalInspectorCommand(verb as InspectorEvalVerb)),
     Match.when("device", () => deviceInspectorCommand(verb as InspectorDeviceVerb)),
     Match.exhaustive,

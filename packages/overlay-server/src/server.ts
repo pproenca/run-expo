@@ -105,7 +105,7 @@ export const readCappedText = (source: Readable, limit: number): Effect.Effect<C
       }
       total += buffer.length
       if (total > limit) {
-        source.pause()
+        source.destroy()
         done(Effect.succeed({ _tag: "TooLarge", limitBytes: limit, actualBytes: total }))
         return
       }

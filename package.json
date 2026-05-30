@@ -2,7 +2,7 @@
   "name": "expo98-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "expo98 — local evidence CLI for Expo / React Native iOS work, rebuilt on Effect-TS. pnpm workspace; the publishable CLI (package `expo98`) lives in packages/app.",
+  "description": "run-expo — local evidence CLI for Expo / React Native iOS work, rebuilt on Effect-TS. pnpm workspace; the publishable CLI package lives in packages/app.",
   "type": "module",
   "scripts": {
     "build": "pnpm --filter run-expo build",

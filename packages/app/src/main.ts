@@ -8,7 +8,7 @@ import { Fs } from "@expo98/domain"
 import { Cause, Console, Effect, Exit, Layer, Option } from "effect"
 import { handlerCommands } from "./all-commands.js"
 import { CLI_VERSION, coreReadCommands } from "./commands.js"
-import { formatJson, formatPlain, selectMode } from "./envelope.js"
+import { formatJson, formatNdjson, formatPlain, selectMode } from "./envelope.js"
 import { type CliGlobals, assertUsage, globalOptions, mergeGlobals } from "./globals.js"
 import { AppLayer } from "./layers.js"
 import { resolvePolicy } from "./policy-resolve.js"
@@ -153,6 +153,7 @@ const subcommandForGroup = (name: string, group: ReadonlyArray<CommandRegistrati
         const resolved = resolveInGroup(group, args)
         if (resolved === undefined) {
           // Unknown sub-verb for a known family ⇒ usage error (exit 2).
+          yield* emitUsageError(`Unknown subcommand: ${[name, ...args].join(" ")}`, effective)
           return yield* Effect.fail(new ProgramExit(2 as ExitCode))
         }
         const [reg, positionals] = resolved
@@ -185,6 +186,8 @@ const runVerb = (
       positionals,
       policy,
       fs,
+      root: Option.getOrElse(globals.root, () => process.cwd()),
+      artifactsRoot: Option.getOrElse(globals.stateDir, () => Option.getOrElse(globals.root, () => process.cwd())),
     })
     yield* emit(result, globals)
     if (result.exitCode !== EXIT_SUCCESS) {
@@ -208,12 +211,20 @@ const emit = (result: DispatchResult<unknown>, globals: CliGlobals): Effect.Effe
     case "plain":
       return Console.log(formatPlain(result.payload))
     case "ndjson":
-      // The proof read commands return a single payload (not a progress stream),
-      // so NDJSON degrades to a single redacted+truncated JSON line. Streaming
-      // handlers (deferred) return a `Stream` piped via `ndjsonEnvelope`.
-      return Console.log(formatJson(result.payload, result.exitCode))
+      return Console.log(formatNdjson(result.payload))
     case "json":
       return Console.log(formatJson(result.payload, result.exitCode))
+  }
+}
+
+const emitUsageError = (message: string, globals: CliGlobals): Effect.Effect<void> => {
+  switch (selectMode(globals)) {
+    case "plain":
+      return Console.error(message)
+    case "ndjson":
+      return Console.error(formatNdjson({ ok: false, error: message }))
+    case "json":
+      return Console.error(formatJson({ ok: false, error: message }, 2 as ExitCode))
   }
 }
 

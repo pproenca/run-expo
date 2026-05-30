@@ -42,6 +42,10 @@ export interface CommandContext {
    * dangerous-capability surface a read command can name.
    */
   readonly fs: FsPort
+  /** Effective project root from `--root`, falling back to the process CWD. */
+  readonly root?: string
+  /** Effective confined artifact root from `--state-dir`/`--root`, falling back to CWD. */
+  readonly artifactsRoot?: string
 }
 
 /**

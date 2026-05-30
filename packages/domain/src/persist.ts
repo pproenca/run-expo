@@ -137,7 +137,7 @@ const decodeRun = Schema.decodeUnknown(RunRecord)
 const writeJson =
   (fs: FsPort) =>
   (path: string, value: unknown): Effect.Effect<void, StorageFailure> =>
-    fs.writeFile(path, JSON.stringify(value, null, 2))
+    (fs.writeFileAtomic ?? fs.writeFile)(path, JSON.stringify(value, null, 2))
 
 const readJson =
   (fs: FsPort) =>
@@ -365,6 +365,15 @@ export const makePersistence = (fs: FsPort, clock: PersistenceClock): Persistenc
     Effect.gen(function* () {
       const layout = P.makeLayout(stateRoot)
       const session = yield* loadSession(layout, sessionId)
+      if (session.activeTargetId !== null && session.activeTargetId !== snapshot.targetId) {
+        return yield* Effect.fail(
+          new InvariantViolation({
+            invariant: "snapshot-target-matches-active-target",
+            sessionId,
+            detail: `snapshot.targetId=${snapshot.targetId} != activeTargetId=${session.activeTargetId}`,
+          }),
+        )
+      }
 
       // Write the full SnapshotResult (strict).
       const snapEncoded = yield* Effect.orDie(encodeSnapshot(snapshot))

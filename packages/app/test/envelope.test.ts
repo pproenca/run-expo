@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { OUTPUT_BUDGET } from "@expo98/core"
 import { Chunk, Effect, Stream } from "effect"
-import { formatJson, formatPlain, ndjsonEnvelope, selectMode } from "run-expo"
+import { formatJson, formatNdjson, formatPlain, ndjsonEnvelope, selectMode } from "../src/index"
 
 describe("Output envelope — --json { ok, data } / { ok, error } (§3.2)", () => {
   it("success → { ok:true, data } with the payload redacted", () => {
@@ -52,6 +52,14 @@ describe("selectMode — channel selection", () => {
 })
 
 describe("AC-041 — --ndjson streaming: per-event redaction + running-total truncation", () => {
+  it("formats a final command payload as one redacted event, not a JSON envelope", () => {
+    const out = formatNdjson({ available: true, token: "SECRET" })
+    const parsed = JSON.parse(out) as { available: boolean; token: string; ok?: boolean }
+    expect(parsed.available).toBe(true)
+    expect(parsed.token).toBe("[redacted]")
+    expect(parsed.ok).toBeUndefined()
+  })
+
   it.effect("each event is one redacted JSON line", () =>
     Effect.gen(function* () {
       const events = Stream.fromIterable([

@@ -413,7 +413,7 @@ export interface BacklogRunRowResult {
   readonly command: string
   readonly argv: ReadonlyArray<string>
   readonly classification: RowClassification
-  readonly exitCode: number
+  readonly exitCode: number | null
 }
 
 export interface BacklogRunResult {
@@ -520,7 +520,7 @@ export const liveBacklogRunCommand = (
           command: row.command,
           argv: row.argv,
           classification,
-          exitCode: rowEvidence?.exitCode ?? 0,
+          exitCode: rowEvidence?.exitCode ?? null,
         }
       })
       const payload = { action: "live-backlog.run", verb: "run" as const, rows }

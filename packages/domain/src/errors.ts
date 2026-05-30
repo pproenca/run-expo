@@ -43,6 +43,7 @@ export class InvariantViolation extends Data.TaggedError("InvariantViolation")<{
     | "activeTargetId-points-at-target"
     | "lastSnapshotId-points-at-snapshot"
     | "refcache-mirrors-lastSnapshotId"
+    | "snapshot-target-matches-active-target"
   readonly sessionId: string
   readonly detail: string
 }> {}

@@ -18,10 +18,22 @@ export const MAX_OUTPUT = 40_000 as const
 /** Max items kept from any array in a bridge value (AC-006). */
 export const MAX_ARRAY_ITEMS = 1_000 as const
 
+const serializationFailed = (): unknown => ({
+  _bounded: "output",
+  reason: "Bridge value could not be serialized.",
+  bytes: null,
+  limit: MAX_OUTPUT,
+})
+
 /** Recursively cap arrays to `MAX_ARRAY_ITEMS`, annotating dropped counts. */
-const capArrays = (value: unknown): unknown => {
+const capArrays = (value: unknown, seen = new WeakSet<object>()): unknown => {
   if (Array.isArray(value)) {
-    const kept = value.slice(0, MAX_ARRAY_ITEMS).map(capArrays)
+    if (seen.has(value)) {
+      return { _bounded: "cycle", reason: "Circular bridge value reference." }
+    }
+    seen.add(value)
+    const kept = value.slice(0, MAX_ARRAY_ITEMS).map((item) => capArrays(item, seen))
+    seen.delete(value)
     if (value.length > MAX_ARRAY_ITEMS) {
       return {
         _bounded: "array",
@@ -34,11 +46,16 @@ const capArrays = (value: unknown): unknown => {
     return kept
   }
   if (value !== null && typeof value === "object") {
+    if (seen.has(value)) {
+      return { _bounded: "cycle", reason: "Circular bridge value reference." }
+    }
+    seen.add(value)
     const source = value as Record<string, unknown>
     const out: Record<string, unknown> = {}
     for (const key of Object.keys(source)) {
-      out[key] = capArrays(source[key])
+      out[key] = capArrays(source[key], seen)
     }
+    seen.delete(value)
     return out
   }
   return value
@@ -55,7 +72,7 @@ export const boundBridgeValue = (value: unknown): unknown => {
   try {
     serialised = JSON.stringify(arrayBounded) ?? ""
   } catch {
-    serialised = ""
+    return serializationFailed()
   }
   if (serialised.length <= MAX_OUTPUT) {
     return arrayBounded

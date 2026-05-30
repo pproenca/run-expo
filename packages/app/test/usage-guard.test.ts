@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { exitCodeForError } from "@expo98/core"
 import { Effect, Exit } from "effect"
-import { assertUsage, VALUE_FLAGS } from "run-expo"
+import { assertUsage, VALUE_FLAGS } from "../src/index"
 
 /**
  * AC-015 / AC-016 — the CONTRACT TESTS, written FIRST (architecture finding N2).
@@ -92,7 +92,7 @@ describe("AC-016 — value flags require a value (→ exit 2)", () => {
   it.effect("AC-016 boolean flags are NOT value flags (no value required)", () =>
     Effect.gen(function* () {
       expect(yield* usageExit(["doctor", "--json"])).toBe(0)
-      expect(yield* usageExit(["doctor", "--quiet", "--debug", "--no-color"])).toBe(0)
+      expect(yield* usageExit(["doctor", "--quiet", "--debug", "--no-color", "--allow-runtime-eval"])).toBe(0)
     }),
   )
 })

@@ -19,6 +19,7 @@ import { StorageFailure } from "./errors.js"
 export interface FsPort {
   readonly readFile: (path: string) => Effect.Effect<string, StorageFailure>
   readonly writeFile: (path: string, contents: string) => Effect.Effect<void, StorageFailure>
+  readonly writeFileAtomic?: (path: string, contents: string) => Effect.Effect<void, StorageFailure>
   readonly exists: (path: string) => Effect.Effect<boolean, StorageFailure>
   readonly mkdirp: (path: string) => Effect.Effect<void, StorageFailure>
   /** List immediate child entry names of a directory (not recursive). */
@@ -143,7 +144,7 @@ export const makeMemoryFs = (): Effect.Effect<FsPort> =>
         return { files, dirs }
       })
 
-    return { readFile, writeFile, exists, mkdirp, readDir, remove }
+    return { readFile, writeFile, writeFileAtomic: writeFile, exists, mkdirp, readDir, remove }
   })
 
 /** A ready-to-use in-memory `Fs` Layer for tests. */

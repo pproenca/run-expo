@@ -84,6 +84,30 @@ describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
     expect(renumbered.tree.map((n) => n.ref)).toEqual(["@e1", "@e2"])
   })
 
+  it("renumberRefs keeps tree nodes matched to their original RefRecord", () => {
+    const sid = "snapshot-abc-aaaaaa" as SnapshotId
+    const renumbered = renumberRefs({
+      ...makeSnapshot(sid),
+      refs: [mkRef(7), mkRef(3)],
+      tree: [mkNode(3), mkNode(7)],
+    })
+    expect(renumbered.refs.map((r) => [r.label, r.ref])).toEqual([
+      ["Btn 7", "@e1"],
+      ["Btn 3", "@e2"],
+    ])
+    expect(renumbered.tree.map((n) => [n.label, n.ref])).toEqual([
+      ["Btn 3", "@e2"],
+      ["Btn 7", "@e1"],
+    ])
+  })
+
+  it("path helpers reject traversal in persisted id segments", () => {
+    const layout = P.makeLayout(STATE_ROOT)
+    expect(() => P.sessionFile(layout, "../escape")).toThrow(/Invalid sessionId/)
+    expect(() => P.snapshotFile(layout, "review-1", "../escape")).toThrow(/Invalid snapshotId/)
+    expect(() => P.runRecordFile(STATE_ROOT, "../escape")).toThrow(/Invalid runId/)
+  })
+
   it.effect("persist writes snapshot + refs, moves lastSnapshotId, invariants hold", () =>
     Effect.gen(function* () {
       const clock = new TestClock()
@@ -115,6 +139,35 @@ describe("AC-026 snapshot persist + 3 Session pointer invariants", () => {
 
       // All three invariants pass an explicit verification.
       yield* p.verifyInvariants(STATE_ROOT, session.sessionId)
+    }),
+  )
+
+  it.effect("persist rejects a snapshot for a different active target before writing artifacts", () =>
+    Effect.gen(function* () {
+      const clock = new TestClock()
+      const fs = yield* makeMemoryFs()
+      const p = makePersistence(fs, clock)
+      const layout = P.makeLayout(STATE_ROOT)
+
+      const session = yield* p.sessionNew({ stateRoot: STATE_ROOT, name: "wrong-target" })
+      yield* p.targetSave(STATE_ROOT, session.sessionId, targetRecord)
+
+      const sid = "snapshot-cap-aaaaaa" as SnapshotId
+      const snap = {
+        ...renumberRefs(makeSnapshot(sid)),
+        targetId: "ios:other:com.example:8081" as TargetId,
+      }
+      const result = yield* p.snapshotPersist(STATE_ROOT, session.sessionId, snap).pipe(Effect.either)
+
+      expect(result._tag).toBe("Left")
+      if (result._tag === "Left") {
+        expect(result.left._tag).toBe("InvariantViolation")
+        if (result.left._tag === "InvariantViolation") {
+          expect(result.left.invariant).toBe("snapshot-target-matches-active-target")
+        }
+      }
+      expect(yield* fs.exists(P.snapshotFile(layout, session.sessionId, sid))).toBe(false)
+      expect(yield* fs.exists(P.refsFile(layout, session.sessionId))).toBe(false)
     }),
   )
 

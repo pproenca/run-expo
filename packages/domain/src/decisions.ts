@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import type { RefCache, SnapshotResult, TargetRecord } from "./entities.js"
+import { REF_ID_PATTERN } from "./ids.js"
 import type { RefRecord, ScreenBox, ScreenPoint } from "./value-objects.js"
 
 /**
@@ -13,7 +14,7 @@ import type { RefRecord, ScreenBox, ScreenPoint } from "./value-objects.js"
 // AC-017 — ref validity
 // ---------------------------------------------------------------------------
 
-export const REF_FORMAT = /^@e\d+$/
+export const REF_FORMAT = REF_ID_PATTERN
 export const STALE_REASON = "Ref is stale. Capture a new snapshot before acting."
 
 export const RefUnavailableReason = Schema.Literal(
@@ -205,15 +206,19 @@ export const checkSnapshotPrereqs = (input: {
  * `snapshotPersist`.
  */
 export const renumberRefs = (snapshot: SnapshotResult): SnapshotResult => {
+  const oldToNew = new Map<string, RefRecord["ref"]>()
   const refs = snapshot.refs.map((r, i) => ({
     ...r,
     ref: `@e${i + 1}` as RefRecord["ref"],
     snapshotId: snapshot.snapshotId,
     stale: false,
   }))
-  const tree = snapshot.tree.map((n, i) => ({
+  snapshot.refs.forEach((r, i) => {
+    oldToNew.set(r.ref, refs[i]!.ref)
+  })
+  const tree = snapshot.tree.map((n) => ({
     ...n,
-    ref: `@e${i + 1}` as RefRecord["ref"],
+    ref: oldToNew.get(n.ref) ?? n.ref,
   }))
   return { ...snapshot, refs, tree }
 }

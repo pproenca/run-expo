@@ -32,6 +32,7 @@ import { type InstallStateResult, readInstallState } from "./install-state.js"
 export type HealthUnavailableCode =
   | "stale-bridge"
   | "incompatible-project"
+  | "bridge-not-installed"
   | "no-runtime-target"
   | "transport-failure"
   | "missing-bridge"
@@ -154,9 +155,9 @@ export const bridgeHealth = (input: HealthInput): Effect.Effect<HealthResult, ne
         `Bridge install is incompatible (${install.issue ?? "incompatible"}).`,
       )
     }
-    // `absent` and `present` may proceed to probe; only `present` can become ready,
-    // but `absent` still proceeds so the transport/registration steps report the
-    // missing bridge honestly rather than masking it as an install issue.
+    if (install.status === "absent") {
+      return unavailable("install-state", "bridge-not-installed", "Bridge is not installed in this project.")
+    }
 
     // ── Step 2: transport (Hermes target + CDP round-trip) ──
     const hermes = yield* HermesEvidence

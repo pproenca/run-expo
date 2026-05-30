@@ -59,6 +59,21 @@ const makeNodeFs = Effect.gen(function* () {
   const port: FsPort = {
     readFile: (p) => fs.readFileString(p).pipe(Effect.mapError(fail("read", p))),
     writeFile: (p, contents) => fs.writeFileString(p, contents).pipe(Effect.mapError(fail("write", p))),
+    writeFileAtomic: (p, contents) => {
+      const slash = p.lastIndexOf("/")
+      const dir = slash <= 0 ? "/" : p.slice(0, slash)
+      const leaf = slash < 0 ? p : p.slice(slash + 1)
+      const tmp = `${dir}/.${leaf}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+      return fs.writeFileString(tmp, contents).pipe(
+        Effect.flatMap(() => fs.rename(tmp, p)),
+        Effect.catchAll((cause) =>
+          fs.remove(tmp).pipe(
+            Effect.ignore,
+            Effect.flatMap(() => Effect.fail(fail("write", p)(cause))),
+          ),
+        ),
+      )
+    },
     exists: (p) => fs.exists(p).pipe(Effect.mapError(fail("read", p))),
     mkdirp: (p) => fs.makeDirectory(p, { recursive: true }).pipe(Effect.mapError(fail("write", p))),
     readDir: (p) => fs.readDirectory(p).pipe(Effect.mapError(fail("list", p))),
@@ -198,8 +213,10 @@ const RuntimeEvalCapabilityLayer = Layer.effect(
       // supplied by the handler in the deferred packages — here the composition
       // root proves the wiring with no candidates (returns unavailable, never
       // throws), keeping the read-path side-effect-free.
-      evaluate: (expression) =>
-        hermes.evaluate(expression, { attemptedUrls: [] }).pipe(Effect.map((result) => result as unknown)),
+      evaluate: (expression, options) =>
+        hermes
+          .evaluate(expression, { attemptedUrls: [], metroPort: options?.metroPort })
+          .pipe(Effect.map((result) => result as unknown)),
     }
     return service
   }),

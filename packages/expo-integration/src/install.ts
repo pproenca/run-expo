@@ -172,7 +172,17 @@ const runBridgeWrite = (
       return dispatched as DispatchResult<BridgeWritePayload>
     }
 
-    // Denied (missing policy/confirmation) → richer confirmation-required payload.
+    if (
+      typeof dispatched.payload !== "object" ||
+      dispatched.payload === null ||
+      !("reason" in dispatched.payload) ||
+      typeof (dispatched.payload as { reason: unknown }).reason !== "string" ||
+      !(dispatched.payload as { reason: string }).reason.includes("requires confirmation token")
+    ) {
+      return dispatched as DispatchResult<BridgeWritePayload>
+    }
+
+    // Denied for missing confirmation → richer confirmation-required payload.
     const status = yield* readInstallState(root)
     const plan = action === BRIDGE_INSTALL_TOKEN ? installPlan(root) : removePlan(root)
     const confirmationPayload: BridgeConfirmationRequired = {

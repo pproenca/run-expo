@@ -26,6 +26,8 @@ export interface LogArgs {
 export interface LogResult {
   readonly action: string
   readonly stream: LogStream
+  readonly available: boolean
+  readonly reason?: string
   readonly limit: number
   readonly entries: ReadonlyArray<LogEntry>
 }
@@ -36,7 +38,18 @@ export interface LogResult {
  */
 export const logsCommand = (stream: LogStream, args: LogArgs = {}): Command<"read", LogResult> => {
   const limit = resolveLimit(args.limit)
+  const hasEvidence = args.entries !== undefined
   const entries = takeLast(args.entries ?? [], limit)
   const action = stream
-  return command(descriptor(action, "read"), Effect.succeed<LogResult>({ action, stream, limit, entries }))
+  return command(
+    descriptor(action, "read"),
+    Effect.succeed<LogResult>({
+      action,
+      stream,
+      available: hasEvidence,
+      ...(hasEvidence ? {} : { reason: "No log read evidence was provided." }),
+      limit,
+      entries,
+    }),
+  )
 }

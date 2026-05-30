@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Option } from "effect"
-import { type CliGlobals, mergeGlobals } from "run-expo"
+import { type CliGlobals, mergeGlobals } from "../src/index"
 
 /**
  * `mergeGlobals` folds the ROOT-scope globals (flags written BEFORE the

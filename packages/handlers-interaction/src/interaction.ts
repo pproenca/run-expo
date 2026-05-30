@@ -16,7 +16,7 @@
  * root via core's `confinePath` BEFORE any write (AC-013).
  */
 import { command, type Command, confinePath, DeviceCapability } from "@expo98/core"
-import { Effect, Match } from "effect"
+import { Duration, Effect, Match } from "effect"
 import {
   type GestureArgs,
   type GestureKind,
@@ -76,17 +76,27 @@ export const gestureCommand = (kind: GestureKind, args: GestureArgs = {}): Comma
     descriptor("gesture", "device"),
     DeviceCapability.pipe(
       Effect.flatMap((cap) =>
-        cap.invoke("idb", [
-          "ui",
-          "gesture",
-          kind,
-          String(plan.from.x),
-          String(plan.from.y),
-          String(plan.to.x),
-          String(plan.to.y),
-          "--duration",
-          String(plan.durationMs),
-        ]),
+        Effect.gen(function* () {
+          const values: Array<unknown> = []
+          for (let i = 0; i < plan.repeat; i += 1) {
+            const value = yield* cap.invoke("idb", [
+              "ui",
+              "gesture",
+              kind,
+              String(plan.from.x),
+              String(plan.from.y),
+              String(plan.to.x),
+              String(plan.to.y),
+              "--duration",
+              String(plan.durationMs),
+            ])
+            values.push(value)
+            if (i + 1 < plan.repeat && plan.intervalMs > 0) {
+              yield* Effect.sleep(Duration.millis(plan.intervalMs))
+            }
+          }
+          return values.length === 1 ? values[0] : values
+        }),
       ),
       Effect.map((value): GestureResult => ({ action: "gesture", kind, plan, value })),
     ),
@@ -134,6 +144,8 @@ export interface RefActionResult {
   readonly action: string
   readonly verb: RefActionVerb
   readonly ref: string
+  readonly available?: boolean
+  readonly reason?: string
   readonly point: ScreenPoint | null
   readonly scroll: ScrollPlan | null
   readonly value: unknown
@@ -155,21 +167,37 @@ export const refActionCommand = (
   const device = args.device ?? DEFAULT_DEVICE
   return command(
     descriptor(`ref.${verb}`, "device"),
-    DeviceCapability.pipe(
-      Effect.flatMap((cap) =>
-        cap.invoke("idb", ["ui", verb, "--udid", device, ref, ...(args.value !== undefined ? [args.value] : [])]),
-      ),
-      Effect.map(
-        (value): RefActionResult => ({
+    Effect.gen(function* () {
+      if (refActionIsPointAction(verb) && point === null) {
+        return {
           action: `ref.${verb}`,
           verb,
           ref,
+          available: false,
+          reason: "Ref has no bounds; cannot compute a point.",
           point,
           scroll,
-          value,
-        }),
-      ),
-    ),
+          value: null,
+        } satisfies RefActionResult
+      }
+      const cap = yield* DeviceCapability
+      const value = yield* cap.invoke("idb", [
+        "ui",
+        verb,
+        "--udid",
+        device,
+        ref,
+        ...(args.value !== undefined ? [args.value] : []),
+      ])
+      return {
+        action: `ref.${verb}`,
+        verb,
+        ref,
+        point,
+        scroll,
+        value,
+      } satisfies RefActionResult
+    }),
   )
 }
 
@@ -225,7 +253,7 @@ export const clipboardCommand = (verb: ClipboardVerb, args: ClipboardArgs = {}):
   const device = args.device ?? DEFAULT_DEVICE
   const argv = Match.value(verb).pipe(
     Match.when("read", () => ["simctl", "pbpaste", device]),
-    Match.when("write", () => ["simctl", "pbcopy", device]),
+    Match.when("write", () => ["simctl", "pbcopy", device, args.text ?? ""]),
     Match.when("paste", () => ["simctl", "pbpaste", device]),
     Match.exhaustive,
   )
@@ -277,9 +305,28 @@ export const screenshotCommand = (
     Effect.gen(function* () {
       // AC-013: confine BEFORE any device work / write. Escape → PathEscape fail.
       const outputPath = yield* confinePath(artifactsRoot, requestedPath)
-      const value = yield* DeviceCapability.pipe(
-        Effect.flatMap((cap) => cap.invoke("xcrun", ["simctl", "io", device, "screenshot", outputPath])),
-      )
+      const cap = yield* DeviceCapability
+      const value =
+        plan === null
+          ? yield* cap.invoke("xcrun", ["simctl", "io", device, "screenshot", outputPath])
+          : yield* Effect.gen(function* () {
+              const captures: Array<unknown> = []
+              for (let i = 0; i < plan.segmentCount; i++) {
+                captures.push(yield* cap.invoke("xcrun", ["simctl", "io", device, "screenshot", outputPath]))
+                if (i < plan.segmentCount - 1) {
+                  yield* cap.invoke("idb", [
+                    "ui",
+                    "gesture",
+                    "swipe",
+                    String(plan.swipe.startX),
+                    String(plan.swipe.startY),
+                    String(plan.swipe.endX),
+                    String(plan.swipe.endY),
+                  ])
+                }
+              }
+              return captures
+            })
       const result: ScreenshotResult = {
         action: "screenshot",
         full,

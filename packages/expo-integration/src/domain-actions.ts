@@ -32,8 +32,7 @@ export type DomainName = "storage" | "state" | "controls"
 const READ_ACTIONS: Readonly<Record<DomainName, ReadonlyArray<string>>> = {
   storage: ["list", "get"],
   state: ["list"],
-  // controls is inverted: `press` is the only device action; the rest are reads.
-  controls: [],
+  controls: ["describe"],
 }
 
 /** Device (mutating) actions per domain — only meaningful for `controls`. */
@@ -46,8 +45,7 @@ const DEVICE_ACTIONS: Readonly<Record<DomainName, ReadonlyArray<string>>> = {
 /** Classify a `domain/action` into its side-effect class (AC-006). */
 export const domainActionSideEffect = (domain: DomainName, action: string): SideEffect => {
   if (domain === "controls") {
-    // `press` → device, everything else → read.
-    return DEVICE_ACTIONS.controls.includes(action) ? "device" : "read"
+    return READ_ACTIONS.controls.includes(action) ? "read" : "device"
   }
   // storage/state: listed read actions → read, else device (mutate).
   return READ_ACTIONS[domain].includes(action) ? "read" : "device"

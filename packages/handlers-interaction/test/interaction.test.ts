@@ -81,6 +81,22 @@ describe("AC-005 interaction handlers are device-gated", () => {
     }),
   )
 
+  it.effect("AC-037 gesture repeat executes every planned repetition", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<ReadonlyArray<string>>([])
+      const result = yield* run(
+        gestureCommand("tap", { x: 10, y: 20, repeat: 3, intervalMs: 0 }),
+        { allow: ["gesture"] },
+        makeCaps(calls),
+      )
+      const payload = result.payload as { plan?: { repeat?: number; intervalMs?: number }; value?: unknown }
+      expect(payload.plan?.repeat).toBe(3)
+      expect(payload.plan?.intervalMs).toBe(0)
+      expect(payload.value).toEqual(["device-ok", "device-ok", "device-ok"])
+      expect((yield* Ref.get(calls))).toHaveLength(3)
+    }),
+  )
+
   it.effect("AC-005 keyboard type is DENIED without policy, zero device work", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make<ReadonlyArray<string>>([])

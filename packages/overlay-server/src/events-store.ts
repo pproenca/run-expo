@@ -106,6 +106,7 @@ export interface RawEventsBackend {
 
 /** Build an `EventsStore` from a raw-bytes backend. */
 export const makeEventsStore = (backend: RawEventsBackend): EventsStore => {
+  const appendSemaphore = Effect.unsafeMakeSemaphore(1)
   const read: Effect.Effect<EventsReadResult, EventsStoreError> = Effect.gen(function* () {
     const present = yield* backend.exists
     if (!present) {
@@ -146,7 +147,7 @@ export const makeEventsStore = (backend: RawEventsBackend): EventsStore => {
       }
       yield* backend.writeRaw(yield* encodeFile(next))
       return { eventCount: next.events.length, file: next }
-    })
+    }).pipe(appendSemaphore.withPermits(1))
 
   const clear: Effect.Effect<void, EventsStoreError> = backend.removeRaw
 

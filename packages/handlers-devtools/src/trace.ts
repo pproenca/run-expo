@@ -10,7 +10,7 @@
  * policy and no flag the handler is never even built — the eval capability is
  * never invoked.
  */
-import { command, type Command, RuntimeEvalCapability } from "@expo98/core"
+import { CliRuntimeError, command, type Command, RuntimeEvalCapability } from "@expo98/core"
 import { Effect, Match } from "effect"
 import { descriptor, EVAL_TIMEOUT_MS, resolveMaxEvents, resolveMetroPort } from "./support.js"
 
@@ -62,7 +62,14 @@ export const traceCommand = (verb: TraceVerb, args: TraceArgs = {}): Command<"ru
   return command(
     descriptor(action, traceSideEffect(verb)),
     RuntimeEvalCapability.pipe(
-      Effect.flatMap((evalCap) => evalCap.evaluate(traceExpression(verb, maxEvents))),
+      Effect.flatMap((evalCap) =>
+        evalCap.evaluate(traceExpression(verb, maxEvents), { metroPort }).pipe(
+          Effect.timeoutFail({
+            duration: `${EVAL_TIMEOUT_MS} millis`,
+            onTimeout: () => new CliRuntimeError({ message: `Runtime eval timed out after ${EVAL_TIMEOUT_MS}ms.` }),
+          }),
+        ),
+      ),
       Effect.map(
         (value): TraceResult => ({
           action,

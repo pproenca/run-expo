@@ -19,7 +19,7 @@
  *     policy attached and mutate nothing — the device capability is invoked 0×.
  */
 import { command, type Command, DeviceCapability } from "@expo98/core"
-import { Effect, Match } from "effect"
+import { Duration, Effect, Match } from "effect"
 import {
   type CrashAction,
   type CrashCheck,
@@ -128,7 +128,14 @@ const supportsDryRun = (verb: LifecycleVerb): boolean => verb === "install-app" 
  * paths/mtimes. (A real build resolves the per-device DiagnosticReports dir; here
  * the listing tool is package-controlled and the parsing is pure.)
  */
-const CRASH_SCAN_ARGS: ReadonlyArray<string> = ["simctl", "spawn", "booted", "log", "collect", "--crash-reports"]
+const crashScanArgs = (device: string): ReadonlyArray<string> => [
+  "simctl",
+  "spawn",
+  device,
+  "log",
+  "collect",
+  "--crash-reports",
+]
 
 /**
  * Parse the crash-scan tool output into candidates. Each non-empty line is
@@ -178,7 +185,10 @@ export const lifecycleCommand = (verb: LifecycleVerb, args: LifecycleArgs = {}):
           Effect.gen(function* () {
             const startedAt = Date.now()
             const value = yield* cap.invoke("xcrun", argvFor(verb, args))
-            const scan = yield* cap.invoke("xcrun", CRASH_SCAN_ARGS)
+            if (waitedMs > 0) {
+              yield* Effect.sleep(Duration.millis(waitedMs))
+            }
+            const scan = yield* cap.invoke("xcrun", crashScanArgs(device))
             const evaluation = evaluateCrash({
               action: crashAction,
               bundleId,

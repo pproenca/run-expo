@@ -8,7 +8,7 @@ import {
 } from "@expo98/core"
 import { makeMemoryFs, MemoryFsLayer } from "@expo98/domain"
 import { Effect, Layer, Option } from "effect"
-import { CLI_VERSION, coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "run-expo"
+import { CLI_VERSION, coreReadCommands, registerCommands, resolvePolicy, runRegistered } from "../src/index"
 
 /**
  * The proof READ commands run end-to-end THROUGH core's dispatch — the gate +

@@ -79,12 +79,9 @@ describe("AC-008 bridge install/remove require a confirmation token", () => {
         // No policy / no confirmation token.
         const result = yield* bridgeInstall(ROOT, {}).pipe(Effect.provide(makeLayer(c, fs)))
 
-        const payload = result.payload as BridgeConfirmationRequired
-        expect(payload.applied).toBe(false)
-        expect(payload.requiredConfirmation).toBe(BRIDGE_INSTALL_TOKEN)
-        expect(payload.status.status).toBe("absent")
-        expect(payload.plan.action).toBe(BRIDGE_INSTALL_TOKEN)
-        expect(payload.plan.writes).toEqual([paths.metadata, paths.source])
+        const payload = result.payload as { code?: string; denied?: boolean }
+        expect(payload.code).toBe("policy-denied")
+        expect(payload.denied).toBe(true)
 
         // THE denial assertion: the write capability was invoked 0×.
         expect(yield* Ref.get(c.calls)).toBe(0)
@@ -154,7 +151,7 @@ describe("AC-008 bridge install/remove require a confirmation token", () => {
       }).pipe(Effect.provide(makeLayer(c, fs)))
 
       // A no-token install now reports the post-install status as `present`.
-      const after = yield* bridgeInstall(ROOT, {}).pipe(Effect.provide(makeLayer(c, fs)))
+      const after = yield* bridgeInstall(ROOT, { allow: [BRIDGE_INSTALL_TOKEN] }).pipe(Effect.provide(makeLayer(c, fs)))
       const payload = after.payload as BridgeConfirmationRequired
       expect(payload.status.status).toBe("present")
     }),
@@ -173,11 +170,9 @@ describe("AC-008 bridge install/remove require a confirmation token", () => {
       yield* fs.writeFile(paths.source, bridgeSourceContents()).pipe(Effect.orDie)
 
       const result = yield* bridgeRemove(ROOT, {}).pipe(Effect.provide(makeLayer(c, fs)))
-      const payload = result.payload as BridgeConfirmationRequired
-      expect(payload.applied).toBe(false)
-      expect(payload.requiredConfirmation).toBe(BRIDGE_REMOVE_TOKEN)
-      expect(payload.status.status).toBe("present")
-      expect(payload.plan.deletes).toEqual([paths.metadata, paths.source, paths.legacyMetadata])
+      const payload = result.payload as { code?: string; denied?: boolean }
+      expect(payload.code).toBe("policy-denied")
+      expect(payload.denied).toBe(true)
       // Denial assertion: zero capability calls, files still present.
       expect(yield* Ref.get(c.calls)).toBe(0)
       expect(yield* fs.exists(paths.metadata).pipe(Effect.orDie)).toBe(true)

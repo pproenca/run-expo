@@ -100,8 +100,18 @@ export const queryParam = (query: string, name: string): string | null => {
   for (const pair of query.split("&")) {
     const eq = pair.indexOf("=")
     const key = eq < 0 ? pair : pair.slice(0, eq)
-    if (decodeURIComponent(key) === name) {
-      return eq < 0 ? "" : decodeURIComponent(pair.slice(eq + 1))
+    let decodedKey: string
+    try {
+      decodedKey = decodeURIComponent(key)
+    } catch {
+      return null
+    }
+    if (decodedKey === name) {
+      try {
+        return eq < 0 ? "" : decodeURIComponent(pair.slice(eq + 1))
+      } catch {
+        return null
+      }
     }
   }
   return null

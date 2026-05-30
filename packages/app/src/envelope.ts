@@ -46,6 +46,9 @@ export const formatPlain = (payload: unknown): string => {
   return truncate(lines.join("\n"), OUTPUT_BUDGET)
 }
 
+/** Build one NDJSON event line for a finalised, non-streaming command result. */
+export const formatNdjson = (payload: unknown): string => truncate(JSON.stringify(redact(payload)), OUTPUT_BUDGET)
+
 /** Pull a string error message out of a failure payload, redacted. */
 const errorString = (payload: unknown): string => {
   const redacted = redact(payload)

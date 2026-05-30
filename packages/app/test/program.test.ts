@@ -3,8 +3,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { AppLayer, runProgram } from "run-expo"
 import { afterAll, vi } from "vitest"
+import { AppLayer, runProgram } from "../src/index"
 
 /**
  * Integration: run the ASSEMBLED command with a synthetic argv, end-to-end,
@@ -17,6 +17,26 @@ import { afterAll, vi } from "vitest"
 const NODE = "node"
 const SCRIPT = "/abs/run-expo.mjs"
 const run = (...args: ReadonlyArray<string>) => runProgram([NODE, SCRIPT, ...args]).pipe(Effect.provide(AppLayer))
+
+const runCaptured = async (
+  ...args: ReadonlyArray<string>
+): Promise<{ code: number; logs: ReadonlyArray<string>; errors: ReadonlyArray<string> }> => {
+  const logs: Array<string> = []
+  const errors: Array<string> = []
+  const logSpy = vi.spyOn(console, "log").mockImplementation((...parts: ReadonlyArray<unknown>) => {
+    logs.push(parts.map(String).join(" "))
+  })
+  const errorSpy = vi.spyOn(console, "error").mockImplementation((...parts: ReadonlyArray<unknown>) => {
+    errors.push(parts.map(String).join(" "))
+  })
+  try {
+    const code = await Effect.runPromise(runProgram([NODE, SCRIPT, ...args]).pipe(Effect.provide(AppLayer)))
+    return { code, logs, errors }
+  } finally {
+    logSpy.mockRestore()
+    errorSpy.mockRestore()
+  }
+}
 
 describe("Integration — assembled program over synthetic argv", () => {
   it.effect("exit 0 — `version` succeeds through the whole stack", () =>
@@ -56,6 +76,50 @@ describe("Integration — assembled program over synthetic argv", () => {
       expect(yield* run("definitely-not-a-command")).toBe(2)
     }),
   )
+
+  it("exit 2 — an unknown subcommand in a known family emits a JSON usage error", async () => {
+    const result = await runCaptured("--json", "trace", "definitely-not-a-subcommand")
+    expect(result.code).toBe(2)
+    const envelope = JSON.parse(result.errors.at(-1) ?? "{}") as { ok: boolean; error: string }
+    expect(envelope.ok).toBe(false)
+    expect(envelope.error).toContain("Unknown subcommand: trace definitely-not-a-subcommand")
+  })
+
+  it("--ndjson emits the final command payload as one event line", async () => {
+    const result = await runCaptured("doctor", "--ndjson")
+    expect(result.code).toBe(0)
+    const event = JSON.parse(result.logs.at(-1) ?? "{}") as { available?: boolean; ok?: boolean }
+    expect(event.available).toBe(true)
+    expect(event.ok).toBeUndefined()
+  })
+
+  it("--allow-runtime-eval is a boolean global before or after the verb", async () => {
+    for (const args of [
+      ["--json", "--allow-runtime-eval", "trace", "start"],
+      ["--json", "trace", "start", "--allow-runtime-eval"],
+    ] as const) {
+      const result = await runCaptured(...args)
+      expect(result.code).toBe(0)
+      const envelope = JSON.parse(result.logs.at(-1) ?? "{}") as {
+        ok: boolean
+        data?: { action?: string; code?: string }
+      }
+      expect(envelope.ok).toBe(true)
+      expect(envelope.data?.action).toBe("trace.start")
+      expect(envelope.data?.code).not.toBe("policy-denied")
+    }
+  })
+
+  it("--root reaches root-sensitive command builders", async () => {
+    const result = await runCaptured("--json", "--root", "/tmp/run-expo-fixture", "sitemap")
+    expect(result.code).toBe(0)
+    const envelope = JSON.parse(result.logs.at(-1) ?? "{}") as {
+      ok: boolean
+      data?: { entries?: ReadonlyArray<{ source: string }> }
+    }
+    expect(envelope.ok).toBe(true)
+    expect(envelope.data?.entries?.[0]?.source).toBe("/tmp/run-expo-fixture")
+  })
 })
 
 /**
@@ -77,21 +141,17 @@ describe("Integration — --action-policy is position-independent", () => {
   const decisionFor = async (
     ...args: ReadonlyArray<string>
   ): Promise<{ code: number; ok: boolean; denied: boolean; decision: string }> => {
-    const lines: Array<string> = []
-    const spy = vi.spyOn(console, "log").mockImplementation((...parts: ReadonlyArray<unknown>) => {
-      lines.push(parts.map(String).join(" "))
-    })
-    let code: number
-    try {
-      code = await Effect.runPromise(runProgram([NODE, SCRIPT, ...args]).pipe(Effect.provide(AppLayer)))
-    } finally {
-      spy.mockRestore()
-    }
-    const envelope = JSON.parse(lines.at(-1) ?? "{}") as {
+    const result = await runCaptured(...args)
+    const envelope = JSON.parse(result.logs.at(-1) ?? "{}") as {
       ok: boolean
       data: { denied?: boolean; decision?: string }
     }
-    return { code, ok: envelope.ok, denied: envelope.data?.denied ?? false, decision: envelope.data?.decision ?? "" }
+    return {
+      code: result.code,
+      ok: envelope.ok,
+      denied: envelope.data?.denied ?? false,
+      decision: envelope.data?.decision ?? "",
+    }
   }
 
   it("grants a policied action with --action-policy BEFORE the verb (the documented position)", async () => {

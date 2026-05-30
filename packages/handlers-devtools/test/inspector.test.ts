@@ -116,12 +116,14 @@ describe("AC-011 inspector mutating actions gated; reads ungated", () => {
         const payload = result.payload as {
           action?: string
           sideEffect?: string
+          available?: boolean
           code?: string
         }
         // A read runs with no policy — NOT denied.
         expect(payload.code).not.toBe("policy-denied")
         expect(payload.action).toBe(`inspector.${verb}`)
         expect(payload.sideEffect).toBe("read")
+        expect(payload.available).toBe(false)
         expect(result.sideEffect).toBe("read")
         // Reads neither touch eval nor device.
         expect(yield* Ref.get(c.evalCalls)).toBe(0)
@@ -129,6 +131,27 @@ describe("AC-011 inspector mutating actions gated; reads ungated", () => {
       }),
     )
   }
+
+  it.effect("AC-011 inspector read verbs return supplied read evidence instead of placeholders", () =>
+    Effect.gen(function* () {
+      const c = yield* makeCounters
+      const probe = yield* run(inspectorCommand("probe", { probe: "present" }) as Command<SideEffect, InspectorResult>, {}, makeCaps(c))
+      const comments = yield* run(
+        inspectorCommand("read-comments", { comments: [{ id: "c1", body: "note" }] }) as Command<
+          SideEffect,
+          InspectorResult
+        >,
+        {},
+        makeCaps(c),
+      )
+      expect((probe.payload as { available?: boolean; value?: unknown }).available).toBe(true)
+      expect((probe.payload as { value?: unknown }).value).toBe("present")
+      expect((comments.payload as { available?: boolean; value?: unknown }).available).toBe(true)
+      expect((comments.payload as { value?: unknown }).value).toEqual([{ id: "c1", body: "note" }])
+      expect(yield* Ref.get(c.evalCalls)).toBe(0)
+      expect(yield* Ref.get(c.deviceCalls)).toBe(0)
+    }),
+  )
 
   it.effect("AC-011 inspector open-dev-menu is device-gated: DENIED without policy, zero device work", () =>
     Effect.gen(function* () {

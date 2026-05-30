@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Cause, Effect, Option, Stream } from "effect"
 import { DeviceCapability, RuntimeEvalCapability, SourceWriteCapability } from "./capabilities.js"
 import { CliRuntimeError, type DomainError, EXIT_SUCCESS, type ExitCode } from "./errors.js"
 import {
@@ -10,7 +10,7 @@ import {
   type SideEffect,
 } from "./policy.js"
 import { redact } from "./redaction.js"
-import { RunningTruncator } from "./truncate.js"
+import { OUTPUT_BUDGET } from "./truncate.js"
 
 /**
  * S6 — Dispatch Runtime. THE capability-injection gate.
@@ -196,14 +196,9 @@ const errorMessage = (error: DomainError): string =>
 
 /** Pull the first failure out of a Cause without throwing. */
 const extractError = (cause: unknown): DomainError => {
-  if (
-    typeof cause === "object" &&
-    cause !== null &&
-    "_tag" in cause &&
-    (cause as { _tag: unknown })._tag === "Fail" &&
-    "error" in cause
-  ) {
-    return (cause as { error: DomainError }).error
+  const failure = Cause.failureOption(cause as Cause.Cause<DomainError>)
+  if (Option.isSome(failure)) {
+    return failure.value
   }
   return new CliRuntimeError({ message: "Unexpected handler defect." })
 }
@@ -277,12 +272,25 @@ export const runBatch = (
 
 export const ndjsonStream = <E, R>(events: Stream.Stream<unknown, E, R>): Stream.Stream<string, E, R> =>
   Stream.suspend(() => {
-    const budget = new RunningTruncator()
+    let used = 0
+    let overflowed = false
     return events.pipe(
-      // redact whole value, serialise one JSON per line, apply running budget
+      // Redact whole value, serialise one JSON per line, and preserve JSON
+      // framing at the truncation boundary by emitting a final overflow event.
       Stream.map((event) => {
         const line = JSON.stringify(redact(event)) + "\n"
-        return budget.push(line)
+        if (overflowed) {
+          return ""
+        }
+        if (used + line.length <= OUTPUT_BUDGET) {
+          used += line.length
+          return line
+        }
+        overflowed = true
+        const admitted = Math.max(OUTPUT_BUDGET - used, 0)
+        const dropped = line.length - admitted
+        used = OUTPUT_BUDGET
+        return JSON.stringify({ _truncated: true, dropped }) + "\n"
       }),
       Stream.filter((emitted) => emitted.length > 0),
     )

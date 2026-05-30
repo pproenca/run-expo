@@ -177,6 +177,7 @@ describe("AC-029 launch/reload attach crashCheck and fail closed on crash", () =
       const calls = yield* Ref.make<ReadonlyArray<string>>([])
       const cmd = lifecycleCommand("launch-app", {
         bundleId: "com.example.app",
+        crashCheckMs: 0,
       })
       const result = yield* run(
         cmd,
@@ -208,6 +209,7 @@ describe("AC-029 launch/reload attach crashCheck and fail closed on crash", () =
         const scan = `/Library/Logs/DiagnosticReports/com.example.app-2026.ips\t${future}`
         const cmd = lifecycleCommand("launch-app", {
           bundleId: "com.example.app",
+          crashCheckMs: 0,
         })
         const result = yield* run(cmd, { allow: ["launch-app"] }, makeCaps(calls, scan))
         const payload = result.payload as {
@@ -226,7 +228,7 @@ describe("AC-029 launch/reload attach crashCheck and fail closed on crash", () =
   it.effect("AC-029 reload-app also attaches a crashCheck", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make<ReadonlyArray<string>>([])
-      const cmd = lifecycleCommand("reload-app", { bundleId: "com.example.app" })
+      const cmd = lifecycleCommand("reload-app", { bundleId: "com.example.app", crashCheckMs: 0 })
       const result = yield* run(cmd, { allow: ["reload-app"] }, makeCaps(calls, ""))
       const payload = result.payload as { crashCheck?: { action?: string } }
       expect(payload.crashCheck?.action).toBe("reload-app")
@@ -239,7 +241,7 @@ describe("AC-029 launch/reload attach crashCheck and fail closed on crash", () =
       // A report from the distant past must not be matched.
       const past = 0
       const scan = `/Library/Logs/DiagnosticReports/old.crash\t${past}`
-      const cmd = lifecycleCommand("launch-app", { bundleId: "com.example.app" })
+      const cmd = lifecycleCommand("launch-app", { bundleId: "com.example.app", crashCheckMs: 0 })
       const result = yield* run(cmd, { allow: ["launch-app"] }, makeCaps(calls, scan))
       const payload = result.payload as { available?: boolean; crashCheck?: { reportCount?: number } }
       expect(payload.available).toBe(true)

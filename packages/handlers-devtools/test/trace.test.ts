@@ -103,6 +103,33 @@ describe("AC-010 trace is runtime-eval through core's gate", () => {
     }),
   )
 
+  it.effect("AC-010 trace passes the resolved metroPort into the runtime-eval capability", () =>
+    Effect.gen(function* () {
+      const seen = yield* Ref.make<ReadonlyArray<number | undefined>>([])
+      const caps = Layer.mergeAll(
+        Layer.succeed(
+          RuntimeEvalCapability,
+          RuntimeEvalCapability.of({
+            evaluate: (_expression, options) =>
+              Ref.update(seen, (ports) => [...ports, options?.metroPort]).pipe(Effect.as({ ok: true })),
+          }),
+        ),
+        Layer.succeed(DeviceCapability, DeviceCapability.of({ invoke: () => Effect.succeed("device-ok") })),
+        Layer.succeed(
+          SourceWriteCapability,
+          SourceWriteCapability.of({
+            writeFile: () => Effect.void,
+            deleteFile: () => Effect.void,
+          }),
+        ),
+      )
+      yield* dispatch(traceCommand("start", { metroPort: 19000 }), { allowRuntimeEval: true }).pipe(
+        Effect.provide(caps),
+      )
+      expect(yield* Ref.get(seen)).toEqual([19000])
+    }),
+  )
+
   it.skip("AC-010 live trace against a running Hermes patches RAF + commit hook", () => {
     // Requires a running Metro + Hermes target; pure logic is fully covered above
     // with the injected fake eval capability.

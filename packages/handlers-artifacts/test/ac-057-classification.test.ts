@@ -196,6 +196,30 @@ describe("AC-057 live-backlog row classification (fake live-evidence signal)", (
     }),
   )
 
+  it.effect("AC-057 live-backlog run reports missing evidence without a fake success exit code", () =>
+    Effect.gen(function* () {
+      const result = yield* dispatch(
+        liveBacklogRunCommand(
+          {
+            metroPort: 8081,
+            bundleId: "com.example.myapp",
+            device: "iPhone 16 Pro",
+            devClientUrl: "exp+myapp://x",
+          },
+          {},
+        ),
+        {},
+      ).pipe(Effect.provide(Caps))
+
+      const payload = result.payload as {
+        rows: ReadonlyArray<{ id: string; classification: string; exitCode: number | null }>
+      }
+      const row = payload.rows.find((r) => r.id === "metro-status")
+      expect(row?.classification).toBe("environment-blocked")
+      expect(row?.exitCode).toBeNull()
+    }),
+  )
+
   it.skip("AC-057 live-backlog run against a REAL environment (Metro + Hermes + simulator)", () => {
     // Requires a running Metro/Hermes/simulator to produce real per-row evidence
     // through the live-evidence probe (WS URLs / CDP calls / running packager /

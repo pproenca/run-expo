@@ -48,10 +48,12 @@ describe("AC-039 console/errors limit clamp + last-N", () => {
         const result = yield* dispatch(cmd, {}).pipe(Effect.provide(Caps))
         const payload = result.payload as {
           limit: number
+          available: boolean
           entries: ReadonlyArray<LogEntry>
           action: string
         }
         expect(payload.action).toBe(stream)
+        expect(payload.available).toBe(true)
         expect(payload.limit).toBe(100)
         expect(payload.entries.length).toBe(100)
         // last-N: the final entry is the newest (m249), the first kept is m150.
@@ -81,6 +83,16 @@ describe("AC-039 console/errors limit clamp + last-N", () => {
       const result = yield* dispatch(cmd, {}).pipe(Effect.provide(Caps))
       const payload = result.payload as { entries: ReadonlyArray<LogEntry> }
       expect(payload.entries.length).toBe(7)
+    }),
+  )
+
+  it.effect("AC-039 missing log evidence is explicit unavailable data, not a fake empty success", () =>
+    Effect.gen(function* () {
+      const result = yield* dispatch(logsCommand("console"), {}).pipe(Effect.provide(Caps))
+      const payload = result.payload as { available?: boolean; reason?: string; entries?: ReadonlyArray<LogEntry> }
+      expect(payload.available).toBe(false)
+      expect(payload.reason).toContain("No log read evidence")
+      expect(payload.entries).toEqual([])
     }),
   )
 })

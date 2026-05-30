@@ -54,10 +54,25 @@ describe("AC-007 navigation reads ungated; mutations gated", () => {
       expect(navigationSideEffect("state")).toBe("read")
       const cmd = navigationCommand("state") as Command<SideEffect, NavigationResult>
       const result = yield* run(cmd, {}, makeCaps(deviceCalls))
-      const payload = result.payload as { action?: string; code?: string }
+      const payload = result.payload as { action?: string; code?: string; available?: boolean; value?: unknown }
       expect(payload.code).not.toBe("policy-denied")
       expect(payload.action).toBe("navigation.state")
+      expect(payload.available).toBe(false)
+      expect(payload.value).toBeNull()
       expect(result.sideEffect).toBe("read")
+      expect(yield* Ref.get(deviceCalls)).toBe(0)
+    }),
+  )
+
+  it.effect("AC-007 navigation state returns supplied read evidence instead of a placeholder route", () =>
+    Effect.gen(function* () {
+      const deviceCalls = yield* Ref.make(0)
+      const state = { route: "/settings", stack: ["/", "/settings"] }
+      const cmd = navigationCommand("state", { state }) as Command<SideEffect, NavigationResult>
+      const result = yield* run(cmd, {}, makeCaps(deviceCalls))
+      const payload = result.payload as { available?: boolean; value?: unknown }
+      expect(payload.available).toBe(true)
+      expect(payload.value).toEqual(state)
       expect(yield* Ref.get(deviceCalls)).toBe(0)
     }),
   )

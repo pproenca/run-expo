@@ -10,6 +10,15 @@ const join = (...parts: ReadonlyArray<string>): string =>
     .filter((p) => p.length > 0)
     .join("/")
 
+const SEGMENT = /^[A-Za-z0-9._:-]+$/
+
+const segment = (label: string, value: string): string => {
+  if (!SEGMENT.test(value) || value === "." || value === "..") {
+    throw new Error(`Invalid ${label}: path separators and traversal segments are not allowed`)
+  }
+  return value
+}
+
 /** A resolved state root, e.g. `<cwd>/.scratch/expo98` or `--state-dir`. */
 export interface Layout {
   readonly stateRoot: string
@@ -19,7 +28,7 @@ export const makeLayout = (stateRoot: string): Layout => ({ stateRoot })
 
 export const sessionsDir = (l: Layout): string => join(l.stateRoot, "sessions")
 
-export const sessionDir = (l: Layout, sessionId: string): string => join(sessionsDir(l), sessionId)
+export const sessionDir = (l: Layout, sessionId: string): string => join(sessionsDir(l), segment("sessionId", sessionId))
 
 export const sessionFile = (l: Layout, sessionId: string): string => join(sessionDir(l, sessionId), "session.json")
 
@@ -30,7 +39,7 @@ export const refsFile = (l: Layout, sessionId: string): string => join(sessionDi
 export const snapshotsDir = (l: Layout, sessionId: string): string => join(sessionDir(l, sessionId), "snapshots")
 
 export const snapshotFile = (l: Layout, sessionId: string, snapshotId: string): string =>
-  join(snapshotsDir(l, sessionId), `${snapshotId}.json`)
+  join(snapshotsDir(l, sessionId), `${segment("snapshotId", snapshotId)}.json`)
 
 /** Per-session artifact namespace (`session new` creates this, AC-024). */
 export const artifactsDir = (l: Layout, sessionId: string): string => join(sessionDir(l, sessionId), "artifacts")
@@ -40,6 +49,6 @@ export const artifactsDir = (l: Layout, sessionId: string): string => join(sessi
  * sessions (entities.md: RunRecord aggregate). The legacy `runs`-parent quirk
  * is DROPPED — `--state-dir` is treated literally.
  */
-export const runRecordFile = (stateDir: string, runId: string): string => join(stateDir, `${runId}.json`)
+export const runRecordFile = (stateDir: string, runId: string): string => join(stateDir, `${segment("runId", runId)}.json`)
 
 export { join as joinPath }

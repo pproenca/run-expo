@@ -16,7 +16,7 @@ import { SubprocessFailed, SubprocessTimeout, ToolNotFound } from "./errors.js"
 /** runtime-eval capability — injects/evaluates JS in the app (CDP). AC-004/010/011. */
 export interface RuntimeEvalCapabilityService {
   /** Evaluate an expression in the running app and return the value by-value. */
-  readonly evaluate: (expression: string) => Effect.Effect<unknown>
+  readonly evaluate: (expression: string, options?: { readonly metroPort?: number }) => Effect.Effect<unknown>
 }
 
 export class RuntimeEvalCapability extends Context.Tag("@expo98/core/RuntimeEvalCapability")<

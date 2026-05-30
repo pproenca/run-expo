@@ -18,7 +18,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { DeviceCapability, EXIT_SUCCESS, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import { makeMemoryFs } from "@expo98/domain"
 import { Effect, Layer, Option, Ref } from "effect"
-import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "run-expo"
+import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "../src/index"
 
 const registry = registerCommands([...coreReadCommands, ...handlerCommands])
 
@@ -178,10 +178,10 @@ describe("Final integration — full command surface", () => {
       const fs = yield* makeMemoryFs()
       const deviceCalls = yield* Ref.make(0)
       const evalCalls = yield* Ref.make(0)
-      const reg = registry.get("launch-app")!
+      const reg = registry.get("boot-simulator")!
       const result = yield* runRegistered(reg, {
-        positionals: ["booted", "com.example.app"],
-        policy: { allow: ["launch-app"] },
+        positionals: ["iPhone-15"],
+        policy: { allow: ["boot-simulator"] },
         fs,
       }).pipe(Effect.provide(countingCaps(deviceCalls, evalCalls)))
       expect(result.exitCode).toBe(EXIT_SUCCESS)

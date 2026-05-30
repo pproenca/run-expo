@@ -26,7 +26,7 @@ const connect: CdpSocketFactory["connect"] = (options) =>
 
     // Buffer inbound frames so a `receive` that runs after a frame arrived still gets it.
     // The Queue is created synchronously via runSync so the message handler can offer into it.
-    const inbound = Effect.runSync(Queue.unbounded<string | null>())
+    const inbound = Effect.runSync(Queue.unbounded<string | null | CdpSocketError>())
 
     const openTimer = setTimeout(() => {
       if (settled) return
@@ -76,7 +76,9 @@ const connect: CdpSocketFactory["connect"] = (options) =>
               }
             })
           }),
-        receive: Queue.take(inbound),
+        receive: Queue.take(inbound).pipe(
+          Effect.flatMap((frame) => (frame instanceof CdpSocketError ? Effect.fail(frame) : Effect.succeed(frame))),
+        ),
         close: Effect.sync(() => {
           try {
             ws.close()
@@ -85,6 +87,11 @@ const connect: CdpSocketFactory["connect"] = (options) =>
           }
         }),
       }
+      ws.on("error", (err: Error) => {
+        Effect.runSync(
+          Queue.offer(inbound, new CdpSocketError({ url: options.url, reason: "Read", cause: err })),
+        )
+      })
       resume(Effect.succeed(socket))
     })
 
