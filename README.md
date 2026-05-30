@@ -47,7 +47,7 @@ BIN="node packages/app/cli/run-expo.mjs"
 
 # Reads — always allowed, no policy needed:
 $BIN --json doctor                         # tool/capability readiness
-$BIN --json sitemap --root ./my-app        # Expo Router sitemap
+$BIN --json sitemap --root ./apps/mobile   # Expo Router sitemap
 $BIN --json expo-compat 54 0.81            # Expo ⇄ React Native compatibility
 $BIN --json policy show                     # the effective policy decision
 $BIN --json snapshot                        # accessibility + RN tree (live app)

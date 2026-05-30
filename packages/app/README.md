@@ -31,7 +31,7 @@ The package is a single self-contained bundle with **zero runtime dependencies**
 ```bash
 # Reads — always allowed, no policy needed:
 run-expo --json doctor                         # tool/capability readiness
-run-expo --json sitemap --root ./my-app        # Expo Router sitemap
+run-expo --json sitemap --root ./apps/mobile   # Expo Router sitemap
 run-expo --json policy show                     # the effective policy decision
 
 # State-changing actions — denied by default (reported as data at exit 0):

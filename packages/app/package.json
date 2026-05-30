@@ -1,6 +1,6 @@
 {
   "name": "run-expo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local-first evidence CLI for Expo / React Native iOS work: inspect a running app over Hermes CDP, drive the iOS simulator, probe Metro, and capture redacted, reproducible evidence — every state-changing action behind a fail-closed policy gate.",
   "keywords": [
     "agent",
