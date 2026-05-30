@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { OUTPUT_BUDGET } from "@expo98/core"
 import { Chunk, Effect, Stream } from "effect"
-import { formatJson, formatPlain, ndjsonEnvelope, selectMode } from "expo98"
+import { formatJson, formatPlain, ndjsonEnvelope, selectMode } from "run-expo"
 
 describe("Output envelope — --json { ok, data } / { ok, error } (§3.2)", () => {
   it("success → { ok:true, data } with the payload redacted", () => {

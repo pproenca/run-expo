@@ -18,7 +18,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { DeviceCapability, EXIT_SUCCESS, RuntimeEvalCapability, SourceWriteCapability } from "@expo98/core"
 import { makeMemoryFs } from "@expo98/domain"
 import { Effect, Layer, Option, Ref } from "effect"
-import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "expo98"
+import { coreReadCommands, handlerCommands, registerCommands, runRegistered } from "run-expo"
 
 const registry = registerCommands([...coreReadCommands, ...handlerCommands])
 

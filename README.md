@@ -1,6 +1,6 @@
-# expo98
+# run-expo
 
-`expo98` is a local-first **evidence CLI for Expo / React Native iOS work**. It
+`run-expo` is a local-first **evidence CLI for Expo / React Native iOS work**. It
 inspects a running app over the Hermes Chrome DevTools Protocol, drives the iOS
 simulator via `xcrun`/`simctl`, probes Metro, and captures **redacted,
 reproducible evidence** — with every state-changing action behind an explicit,
@@ -28,21 +28,22 @@ the bundle (not the source) is what runs.
 
 ```bash
 pnpm install
-pnpm build        # emits packages/app/cli/expo98.mjs
-node packages/app/cli/expo98.mjs --json doctor
+pnpm build        # emits packages/app/cli/run-expo.mjs
+node packages/app/cli/run-expo.mjs --json doctor
 ```
 
-Once published, `npx expo98 --json doctor` (or a global `expo98` bin) runs the
-same self-contained bundle. The published package is `expo98` (unscoped); the
-bundle is gitignored and shipped in the npm tarball via `files` + a `prepack`
-build hook, with **zero runtime dependencies** (everything is inlined).
+Once published, `npx run-expo --json doctor` (or a global `run-expo` bin) runs the
+same self-contained bundle. The published package is `run-expo` (unscoped); the
+bin it installs is `run-expo`. The bundle is gitignored and shipped in the npm
+tarball via `files` + a `prepack` build hook, with **zero runtime dependencies**
+(everything is inlined).
 
 ## Usage
 
 Every command takes a global output mode and prints a single envelope.
 
 ```bash
-BIN="node packages/app/cli/expo98.mjs"
+BIN="node packages/app/cli/run-expo.mjs"
 
 # Reads — always allowed, no policy needed:
 $BIN --json doctor                         # tool/capability readiness

@@ -125,7 +125,7 @@ describe("Schema round-trip (encode -> decode === original)", () => {
     roundtrip(RunRecord, {
       schemaVersion: 1,
       runId: "2026-aaaaaa" as RunId,
-      cli: { name: "expo98", version: "1.0.0" },
+      cli: { name: "run-expo", version: "1.0.0" },
       command: "snapshot",
       args: ["--json"],
       root: "/p",
@@ -144,8 +144,22 @@ describe("Schema round-trip (encode -> decode === original)", () => {
       schemaVersion: 1,
       bridgeVersion: "1.0.0",
       developmentOnly: true,
-      generatedBy: "expo98",
+      generatedBy: "run-expo",
       domains: ["navigation", "network", "snapshot"],
+    }),
+  )
+
+  // Lenient read: a bridge stamped by the old `expo98` name still decodes.
+  it.effect("BridgeMetadata — legacy expo98 stamp still decodes", () =>
+    Effect.gen(function* () {
+      const decoded = yield* Schema.decodeUnknown(BridgeMetadata)({
+        schemaVersion: 1,
+        bridgeVersion: "1.0.0",
+        developmentOnly: true,
+        generatedBy: "expo98",
+        domains: ["navigation"],
+      })
+      expect(decoded.generatedBy).toBe("expo98")
     }),
   )
 

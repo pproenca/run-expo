@@ -98,7 +98,7 @@ describe("AC-027 bridge install state", () => {
         schemaVersion: 1,
         bridgeVersion: "0.9.0",
         developmentOnly: true,
-        generatedBy: "expo98",
+        generatedBy: "run-expo",
         domains: [],
       })
       const result = yield* withFs((fs) =>
@@ -119,7 +119,7 @@ describe("AC-027 bridge install state", () => {
         schemaVersion: 2,
         bridgeVersion: "1.0.0",
         developmentOnly: true,
-        generatedBy: "expo98",
+        generatedBy: "run-expo",
         domains: [],
       })
       const result = yield* withFs((fs) =>
@@ -140,7 +140,7 @@ describe("AC-027 bridge install state", () => {
         schemaVersion: 1,
         bridgeVersion: "1.0.0",
         developmentOnly: false,
-        generatedBy: "expo98",
+        generatedBy: "run-expo",
         domains: [],
       })
       const result = yield* withFs((fs) =>

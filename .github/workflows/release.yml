@@ -54,8 +54,8 @@ jobs:
           fi
 
       # Publish only the CLI package. `prepack` rebuilds the bundle into the
-      # tarball; `files` ships only cli/expo98.mjs + README + LICENSE.
+      # tarball; `files` ships only cli/run-expo.mjs + README + LICENSE.
       - name: Publish to npm
-        run: pnpm --filter expo98 publish --no-git-checks --provenance --access public
+        run: pnpm --filter run-expo publish --no-git-checks --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

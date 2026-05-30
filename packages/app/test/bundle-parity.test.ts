@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
  * Source ↔ bundle PARITY guard (ASSESSMENT debt #8 — the legacy's missing
  * safeguard).
  *
- * The runnable artifact is the esbuild BUNDLE (`cli/expo98.mjs`), not the `.ts`
+ * The runnable artifact is the esbuild BUNDLE (`cli/run-expo.mjs`), not the `.ts`
  * source (whose `.js`→`.ts` specifiers resolve only under a bundler). Nothing
  * otherwise proves the SHIPPED bin wires the SAME command surface the in-process
  * source registry does — a stale or partial bundle would pass every other test.
@@ -26,7 +26,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { handlerCommands } from "../src/all-commands.js"
 import { coreReadCommands } from "../src/commands.js"
 
-const BIN = fileURLToPath(new URL("../cli/expo98.mjs", import.meta.url))
+const BIN = fileURLToPath(new URL("../cli/run-expo.mjs", import.meta.url))
 
 /** First verb token of each registration — the `@effect/cli` subcommand names. */
 const sourceFirstTokens = (): ReadonlySet<string> => {

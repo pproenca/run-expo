@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { exitCodeForError } from "@expo98/core"
 import { Effect, Exit } from "effect"
-import { assertUsage, VALUE_FLAGS } from "expo98"
+import { assertUsage, VALUE_FLAGS } from "run-expo"
 
 /**
  * AC-015 / AC-016 — the CONTRACT TESTS, written FIRST (architecture finding N2).

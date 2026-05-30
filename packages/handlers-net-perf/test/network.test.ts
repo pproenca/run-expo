@@ -163,7 +163,7 @@ describe("AC-045 duplicates", () => {
 })
 
 describe("AC-045 HAR", () => {
-  const creator = { name: "expo98", version: "0.1.0" }
+  const creator = { name: "run-expo", version: "0.1.0" }
   const now = "2026-05-24T00:00:00.000Z"
 
   it("AC-045 HAR version 1.2, time = durationMs ?? 0, query+cookies emptied", () => {

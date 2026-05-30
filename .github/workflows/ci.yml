@@ -65,5 +65,5 @@ jobs:
       # Read-only end-to-end smoke of the shipped artifact (no device needed).
       - name: Smoke the bin
         run: |
-          node packages/app/cli/expo98.mjs --json doctor
-          node packages/app/cli/expo98.mjs --json version
+          node packages/app/cli/run-expo.mjs --json doctor
+          node packages/app/cli/run-expo.mjs --json version

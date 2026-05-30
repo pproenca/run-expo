@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { AppLayer, runProgram } from "expo98"
+import { AppLayer, runProgram } from "run-expo"
 
 /**
  * Integration: run the ASSEMBLED command with a synthetic argv, end-to-end,
@@ -11,7 +11,7 @@ import { AppLayer, runProgram } from "expo98"
  * argv is the FULL process form `[node, script, ...args]` (Command.run drops 2).
  */
 const NODE = "node"
-const SCRIPT = "/abs/expo98.mjs"
+const SCRIPT = "/abs/run-expo.mjs"
 const run = (...args: ReadonlyArray<string>) => runProgram([NODE, SCRIPT, ...args]).pipe(Effect.provide(AppLayer))
 
 describe("Integration — assembled program over synthetic argv", () => {

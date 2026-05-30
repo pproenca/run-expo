@@ -195,7 +195,10 @@ export const BridgeMetadata = Schema.Struct({
   schemaVersion: Schema.Literal(SCHEMA_VERSION),
   bridgeVersion: Schema.Literal(BRIDGE_VERSION),
   developmentOnly: Schema.Literal(true),
-  generatedBy: Schema.Literal("expo98"),
+  // Lenient read / strict write: the installer stamps "run-expo"; a bridge
+  // stamped "expo98" still decodes so an older install loads. Nothing branches
+  // on the value.
+  generatedBy: Schema.Literal("run-expo", "expo98"),
   domains: Schema.Array(BridgeDomain),
 })
 export type BridgeMetadata = Schema.Schema.Type<typeof BridgeMetadata>

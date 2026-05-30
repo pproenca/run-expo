@@ -17,13 +17,13 @@ import { type CommandRegistration, registerCommands, runRegistered } from "./reg
 /**
  * The CLI shell composition root (S12).
  *
- * Bin: `expo98` — the single published executable. The bundle/bin step
- * (esbuild → `cli/expo98.mjs`, declared as the package `bin`) is wired in
+ * Bin: `run-expo` — the single published executable. The bundle/bin step
+ * (esbuild → `cli/run-expo.mjs`, declared as the package `bin`) is wired in
  * `scripts/build.mjs`; the bundle is the runnable artifact (the `.ts` source
  * resolves `.js`→`.ts` specifiers only under a bundler).
  */
 
-export const CLI_NAME = "expo98"
+export const CLI_NAME = "run-expo"
 
 // The assembled registry: the core READ proof-commands + the full handler /
 // integration surface. Every verb funnels through core's dispatch (gate +
@@ -35,7 +35,7 @@ const registry = registerCommands([...coreReadCommands, ...handlerCommands])
 const asNonEmpty = <T>(arr: ReadonlyArray<T>): readonly [T, ...Array<T>] => {
   const [head, ...tail] = arr
   if (head === undefined) {
-    throw new Error("expo98: no commands registered (expected the core read set).")
+    throw new Error("run-expo: no commands registered (expected the core read set).")
   }
   return [head, ...tail]
 }
@@ -72,7 +72,7 @@ const isEntryModule = (): boolean => {
  * subcommand named by that token; the subcommand routes on the leading
  * positionals (the sub-verb) to the matching registration. This keeps the verb
  * FAMILIES (trace/inspector/navigation/lifecycle/…) addressable as
- * `expo98 <name> <sub-verb> [args]` without one `@effect/cli` subcommand per verb
+ * `run-expo <name> <sub-verb> [args]` without one `@effect/cli` subcommand per verb
  * (which would collide on the shared first token).
  */
 const groupByFirstToken = (
@@ -179,7 +179,7 @@ const subcommandsNonEmpty = asNonEmpty(subcommands)
 /** The root command: global options + every registered verb as a subcommand. */
 const rootCommand = Command.make(CLI_NAME, { globals: globalOptions }, () =>
   Console.log(`${CLI_NAME} ${CLI_VERSION} — run with --help for commands.`),
-).pipe(Command.withDescription("expo98 — local-first evidence CLI for Expo / RN iOS."), (self) =>
+).pipe(Command.withDescription("run-expo — local-first evidence CLI for Expo / RN iOS."), (self) =>
   Command.withSubcommands(self, subcommandsNonEmpty),
 )
 
@@ -286,7 +286,7 @@ const messageOf = (error: unknown): string =>
 /**
  * The real process entry: run over `process.argv`, apply the POSIX exit code via
  * a custom `NodeRuntime` teardown (NOT `defaultTeardown`, which maps every
- * failure to exit 1 — the N2 root cause). The `expo98` bin resolves here.
+ * failure to exit 1 — the N2 root cause). The `run-expo` bin resolves here.
  */
 export const main = (): void => {
   const program = runProgram(process.argv).pipe(Effect.provide(AppLayer))

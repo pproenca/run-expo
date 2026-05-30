@@ -36,7 +36,7 @@ export const bridgeMetadata = (): BridgeMetadata => ({
   schemaVersion: BRIDGE_SCHEMA_VERSION,
   bridgeVersion: EXPO98_BRIDGE_VERSION,
   developmentOnly: true,
-  generatedBy: "expo98",
+  generatedBy: "run-expo",
   domains: BRIDGE_DOMAINS,
 })
 

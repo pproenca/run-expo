@@ -1,6 +1,6 @@
 {
-  "name": "expo98",
-  "version": "0.1.0",
+  "name": "run-expo",
+  "version": "0.1.1",
   "description": "Local-first evidence CLI for Expo / React Native iOS work: inspect a running app over Hermes CDP, drive the iOS simulator, probe Metro, and capture redacted, reproducible evidence — every state-changing action behind a fail-closed policy gate.",
   "keywords": [
     "agent",
@@ -26,10 +26,10 @@
     "directory": "packages/app"
   },
   "bin": {
-    "expo98": "./cli/expo98.mjs"
+    "run-expo": "./cli/run-expo.mjs"
   },
   "files": [
-    "cli/expo98.mjs",
+    "cli/run-expo.mjs",
     "README.md",
     "LICENSE"
   ],

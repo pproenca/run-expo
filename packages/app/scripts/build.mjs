@@ -3,7 +3,7 @@ import { chmodSync, copyFileSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 /**
- * Build the publishable `expo98` bin.
+ * Build the publishable `run-expo` bin.
  *
  * WHY a bundle is the runnable artifact (not the .ts source): every workspace
  * module imports its siblings with `.js` specifiers that physically resolve to
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url"
  * fast pass and the smallest honest tool for "one ESM file, Node target".
  *
  * Emitted file:
- *   - cli/expo98.mjs — the self-contained bin (effect + @effect/cli + ws all
+ *   - cli/run-expo.mjs — the self-contained bin (effect + @effect/cli + ws all
  *                      inlined; only Node builtins stay external).
  *
  * Shebang: esbuild carries the entry file's (`src/main.ts`) own
@@ -75,9 +75,9 @@ const bundleBin = async (outfile) => {
   console.error(`built ${outfile}`)
 }
 
-// The single `expo98` bin — a full self-contained bundle that is the process
+// The single `run-expo` bin — a full self-contained bundle that is the process
 // entry → `import.meta.main` true → main() runs exactly once.
-await bundleBin(join(outDir, "expo98.mjs"))
+await bundleBin(join(outDir, "run-expo.mjs"))
 
 // Sync the LICENSE into the package so the published tarball ships it (the
 // canonical file lives at the repo root; `files` lists `LICENSE` here). Running

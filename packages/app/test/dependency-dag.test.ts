@@ -45,7 +45,7 @@ const readManifests = (): ReadonlyMap<string, PackageManifest> => {
     }
     const manifest = JSON.parse(raw) as PackageManifest
     // Foundation/handler packages keep the `@expo98/*` scope; the publishable CLI
-    // package is the bare name `expo98` (the composition root / `app`).
+    // package is the bare name `run-expo` (the composition root / `app`).
     if (typeof manifest.name === "string" && (manifest.name.startsWith(SCOPE) || manifest.name === APP)) {
       manifests.set(manifest.name, manifest)
     }
@@ -68,8 +68,8 @@ const short = (name: string): string => (name.startsWith(SCOPE) ? name.slice(SCO
 const CORE = "@expo98/core"
 const DOMAIN = "@expo98/domain"
 const PROTOCOLS = "@expo98/protocols"
-// The publishable CLI package is the bare name `expo98` (was `@expo98/app`).
-const APP = "expo98"
+// The publishable CLI package; its bin command is `run-expo`.
+const APP = "run-expo"
 const FOUNDATION: ReadonlySet<string> = new Set([CORE, DOMAIN, PROTOCOLS])
 
 describe("M4 — dependency DAG guard", () => {

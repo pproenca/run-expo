@@ -1,6 +1,6 @@
-# expo98
+# run-expo
 
-`expo98` is a local-first **evidence CLI for Expo / React Native iOS work**. It
+`run-expo` is a local-first **evidence CLI for Expo / React Native iOS work**. It
 inspects a running app over the Hermes Chrome DevTools Protocol, drives the iOS
 simulator via `xcrun`/`simctl`, probes Metro, and captures **redacted,
 reproducible evidence** — with every state-changing action behind an explicit,
@@ -20,8 +20,8 @@ accident.
 ## Install
 
 ```bash
-npx expo98 --json doctor
-# or: npm i -g expo98 && expo98 --json doctor
+npx run-expo --json doctor
+# or: npm i -g run-expo && run-expo --json doctor
 ```
 
 The package is a single self-contained bundle with **zero runtime dependencies**.
@@ -30,14 +30,14 @@ The package is a single self-contained bundle with **zero runtime dependencies**
 
 ```bash
 # Reads — always allowed, no policy needed:
-expo98 --json doctor                         # tool/capability readiness
-expo98 --json sitemap --root ./my-app        # Expo Router sitemap
-expo98 --json policy show                     # the effective policy decision
+run-expo --json doctor                         # tool/capability readiness
+run-expo --json sitemap --root ./my-app        # Expo Router sitemap
+run-expo --json policy show                     # the effective policy decision
 
 # State-changing actions — denied by default (reported as data at exit 0):
-expo98 --json boot-simulator                  # → {"ok":true,"data":{"denied":true,"code":"policy-denied"}}
-expo98 --json --action-policy ./policy.json boot-simulator
-expo98 --json --allow-runtime-eval trace start
+run-expo --json boot-simulator                  # → {"ok":true,"data":{"denied":true,"code":"policy-denied"}}
+run-expo --json --action-policy ./policy.json boot-simulator
+run-expo --json --allow-runtime-eval trace start
 ```
 
 **Output:** `--json` (machine), `--plain` (human), `--ndjson` (streaming). One

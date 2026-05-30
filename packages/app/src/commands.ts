@@ -19,7 +19,7 @@ import { type CommandContext, type CommandRegistration, registration } from "./r
 // Kept in sync with packages/app/package.json `version` (the published version);
 // bump both together on release. CI runs the built bin, so a drift surfaces as a
 // visible `version` mismatch in the smoke step.
-export const CLI_VERSION = "0.1.0"
+export const CLI_VERSION = "0.1.1"
 
 // ── policy show — render the effective PolicyDecision for an action (AC-001). ─
 const policyShow = registration({
@@ -122,7 +122,7 @@ const skillsList = registration({
 // ── version — report the CLI version (read). ─────────────────────────────────
 const version = registration({
   path: "version",
-  summary: "Report the expo98 CLI version.",
+  summary: "Report the run-expo CLI version.",
   sideEffect: "read",
   build: () =>
     command(
