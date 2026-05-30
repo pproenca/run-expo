@@ -1,0 +1,84 @@
+{
+  "include_ext": [
+    ".ts"
+  ],
+  "exclude_globs": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.git/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*.d.ts"
+  ],
+  "layers": {
+    "atomic": [
+      "packages/domain/src/value-objects.ts",
+      "packages/domain/src/ids.ts",
+      "packages/domain/src/naming.ts",
+      "packages/domain/src/paths.ts",
+      "packages/domain/src/errors.ts",
+      "packages/core/src/clock-id.ts",
+      "packages/core/src/confine-path.ts",
+      "packages/core/src/truncate.ts",
+      "packages/core/src/errors.ts",
+      "packages/protocols/src/errors.ts",
+      "packages/protocols/src/loopback.ts"
+    ],
+    "primitive": [
+      "packages/domain/src/entities.ts",
+      "packages/domain/src/decisions.ts"
+    ],
+    "seam": [
+      "packages/core/src/capabilities.ts",
+      "packages/core/src/subprocess.ts",
+      "packages/core/src/policy.ts",
+      "packages/core/src/redaction.ts",
+      "packages/domain/src/fs-port.ts",
+      "packages/domain/src/persist.ts",
+      "packages/domain/src/migration.ts",
+      "packages/protocols/src/cdp.ts",
+      "packages/protocols/src/cdp-socket.ts",
+      "packages/protocols/src/ws-adapter.ts",
+      "packages/protocols/src/metro.ts",
+      "packages/protocols/src/network-evidence.ts",
+      "packages/expo-integration/src/**/*.ts"
+    ],
+    "pipeline": [
+      "packages/core/src/dispatch.ts"
+    ],
+    "scaffold": [
+      "packages/app/src/**/*.ts",
+      "packages/overlay-server/src/**/*.ts"
+    ]
+  },
+  "feature_roots": [
+    "packages/handlers-devtools/src/**/*.ts",
+    "packages/handlers-interaction/src/**/*.ts",
+    "packages/handlers-snapshot/src/**/*.ts",
+    "packages/handlers-net-perf/src/**/*.ts",
+    "packages/handlers-artifacts/src/**/*.ts"
+  ],
+  "verify": [
+    {
+      "name": "format:check",
+      "cmd": "pnpm run format:check",
+      "must_pass": true
+    },
+    {
+      "name": "lint",
+      "cmd": "pnpm run lint",
+      "must_pass": true
+    },
+    {
+      "name": "typecheck",
+      "cmd": "pnpm run typecheck",
+      "must_pass": true
+    },
+    {
+      "name": "tests",
+      "cmd": "pnpm run test",
+      "must_pass": true
+    }
+  ]
+}

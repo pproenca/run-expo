@@ -16,6 +16,18 @@ if [[ ! -f "$FILTER_FILES" ]]; then
   exit 1
 fi
 
+# Validate boundary.config.json still resolves against the repo (config-drift
+# doctor). The harness skill scripts are local-only (gitignored), so skip
+# cleanly when absent or when python3 is unavailable — never block a commit on
+# tooling the repo does not ship.
+CONFIG_DOCTOR="$ROOT_DIR/.agents/skills/harness-setup/scripts/config_check.py"
+if [[ -f "$CONFIG_DOCTOR" ]] && command -v python3 >/dev/null 2>&1; then
+  if ! python3 "$CONFIG_DOCTOR" --repo "$ROOT_DIR"; then
+    echo "boundary.config.json failed the config doctor (see above). Commit aborted." >&2
+    exit 1
+  fi
+fi
+
 files=()
 while IFS= read -r -d '' file; do
   files+=("$file")
